@@ -18,7 +18,7 @@ INDEX_TEMPLATE = """
     <meta charset="UTF-8">
     <title>Saby & Beget CRM - Климов Евгений</title>
     <style>
-        body { font-family: sans-serif; background: #0f172a; color: #f1f5f9; padding: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #2e1065 0%, #1e1b4b 50%, #0f172a 100%); min-height: 100vh; color: #f1f5f9; padding: 25px; margin: 0; }
         .container { max-width: 1000px; margin: auto; background: #1e293b; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
         h2 { color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 10px; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
@@ -26,7 +26,7 @@ INDEX_TEMPLATE = """
         th { background: #0f172a; color: #38bdf8; }
         a { color: #38bdf8; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        .btn { background: #2563eb; color: white; padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: white; padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3); transition: all 0.2s ease; }
         .btn:hover { background: #1d4ed8; }
     </style>
 </head>
@@ -66,7 +66,7 @@ ADD_TEMPLATE = """
     <meta charset="UTF-8">
     <title>Добавление контрагента</title>
     <style>
-        body { font-family: sans-serif; background: #0f172a; color: #f1f5f9; padding: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #2e1065 0%, #1e1b4b 50%, #0f172a 100%); min-height: 100vh; color: #f1f5f9; padding: 25px; margin: 0; }
         .container { max-width: 700px; margin: auto; background: #1e293b; padding: 25px; border-radius: 8px; }
         .form-group { margin-bottom: 15px; position: relative; }
         input, select { width: 100%; padding: 10px; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 4px; }
@@ -179,7 +179,7 @@ CLIENT_CARD_TEMPLATE = """
     <meta charset="UTF-8">
     <title>Карточка: {{ client.company_name }}</title>
     <style>
-        body { font-family: sans-serif; background: #0f172a; color: #f1f5f9; padding: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #2e1065 0%, #1e1b4b 50%, #0f172a 100%); min-height: 100vh; color: #f1f5f9; padding: 25px; margin: 0; }
         .container { max-width: 950px; margin: auto; background: #1e293b; padding: 25px; border-radius: 8px; }
         h2, h3 { color: #38bdf8; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
