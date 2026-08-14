@@ -23,7 +23,8 @@ jobs:
             echo "Deploying latest changes to /opt/backup-reports..."
             cd /opt/backup-reports
             
-            # Если репозиторий уже настроен на SSH
+            mkdir -p /root/.ssh
+            ssh-keyscan -H github.com >> /root/.ssh/known_hosts 2>/dev/null || true
             if [ -d ".git" ]; then
               git fetch --all
               git reset --hard origin/main
