@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Карточка клиента</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0b132b; color: #ffffff; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        a { color: #4ea8de; text-decoration: none; }
+        .card { background: #1c2541; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        input { width: 100%; padding: 10px; margin-bottom: 15px; background: #0b132b; border: 1px solid #415a77; border-radius: 5px; color: #fff; box-sizing: border-box; }
+        button { background: #3a86ff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .alert { background: #ff5964; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
+        .success { background: #38b000; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
+        .warning { background: #ffca3a; color: #333; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-weight: bold; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <p><a href="/">&larr; Назад к списку</a></p>
+    <h2>Организация (ИНН: {{ client.inn }})</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="grid">
+        <div class="card">
+            <h3>Реквизиты и Saby</h3>
+            <p>ИНН: {{ client.inn }}</p>
+            <p>Договор: {{ client.contract or 'Не указан' }}</p>
+            <p>Сайты: {{ client.sites or 'Не указаны' }}</p>
+            <p>Email: {{ client.emails or 'Не указан' }}</p>
+        </div>
+        <div class="card">
+            <h3>Доступы Beget (Опционально)</h3>
+            <form method="POST" action="/client/{{ client.id }}/update_beget">
+                <label>Логин Beget:</label>
+                <input type="text" name="login" value="{{ client.beget_login or '' }}" placeholder="Оставьте пустым для отключения">
+                <label>Пароль Beget:</label>
+                <input type="password" name="password" value="{{ client.beget_password or '' }}" placeholder="Оставьте пустым для отключения">
+                <label>Сайты (через запятую):</label>
+                <input type="text" name="sites" value="{{ client.sites or '' }}">
+                <label>Email (через запятую):</label>
+                <input type="text" name="emails" value="{{ client.emails or '' }}">
+                <button type="submit">Сохранить настройки</button>
+            </form>
+        </div>
+    </div>
+    <div class="card">
+        <h3>Генерация отчета</h3>
+        <p>Если доступы Beget не указаны, информация о хостинге будет пропущена.</p>
+        <a href="/client/{{ client.id }}/report"><button type="button">Сформировать отчет</button></a>
+    </div>
+</div>
+</body>
+</html>
