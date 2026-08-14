@@ -12,6 +12,7 @@ env/
 .gigacode_vsc/
 .cursor/
 .cursor-server/
+.df/
 
 # SQLite databases & logs (contains sensitive client data)
 *.db

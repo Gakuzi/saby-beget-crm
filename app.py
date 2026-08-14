@@ -225,8 +225,20 @@ CLIENT_CARD_TEMPLATE = """
 
         <div style="margin-top: 25px;" class="box">
             <h3>Генерация отчета и мониторинг</h3>
-            <p>Сформируйте полный отчет со списком выполненных работ, состоянием доменов, почты и баланса хостинга.</p>
-            <a href="/client/{{ client.id }}/report" class="btn-link" target="_blank">Сформировать и просмотреть полный отчет</a>
+            <p>Выберите период для формирования отчета со списком выполненных работ, бэкапов (включая 1С-Битрикс), состоянием доменов, почты и баланса хостинга.</p>
+            <form action="/client/{{ client.id }}/report" method="GET" style="display: flex; gap: 10px; align-items: flex-end; margin-top: 10px;" target="_blank">
+                <div style="flex: 1;">
+                    <label style="font-size: 13px;">Дата с:</label>
+                    <input type="date" name="date_from" value="{{ default_date_from }}" style="margin-top:5px; padding:8px; background:#0f172a; border:1px solid #475569; color:white; border-radius:4px; width:100%;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="font-size: 13px;">Дата по:</label>
+                    <input type="date" name="date_to" value="{{ default_date_to }}" style="margin-top:5px; padding:8px; background:#0f172a; border:1px solid #475569; color:white; border-radius:4px; width:100%;">
+                </div>
+                <div>
+                    <button type="submit" class="btn-link" style="margin-top: 0; padding: 10px 14px;">Сформировать отчет</button>
+                </div>
+            </form>
         </div>
 
         <h3 style="margin-top:25px;">Учет выполненных работ и обращений</h3>
@@ -270,7 +282,7 @@ REPORT_TEMPLATE = """
 </head>
 <body>
     <div class="report-container">
-        <h2>Отчет о сопровождении ИТ-инфраструктуры</h2>
+        <h2>Отчет о сопровождении ИТ-инфраструктуры за период с {{ date_from }} по {{ date_to }}</h2>
         <p><strong>Заказчик:</strong> {{ client.company_name }} (ИНН: {{ client.inn }})</p>
         <p><strong>Основание:</strong> Договор № {{ client.saby_contract_number }}</p>
         <p><strong>Исполнитель:</strong> Самозанятый Климов Евгений Александрович</p>
@@ -278,6 +290,16 @@ REPORT_TEMPLATE = """
 
         <h3>Состояние хостинга и доменов (Beget API)</h3>
         <p>{{ beget_status }}</p>
+
+        <h3>Резервные копии (Автоматические и 1С-Битрикс)</h3>
+        <table>
+            <tr><th>Сайт / Источник</th><th>Дата бэкапа</th><th>Размер</th></tr>
+            {% for b in backups %}
+            <tr><td>{{ b.site_name }}</td><td>{{ b.backup_date }}</td><td>{{ b.size_mb }} МБ</td></tr>
+            {% else %}
+            <tr><td colspan="3" style="text-align:center;">За выбранный период бэкапов в базе не зафиксировано</td></tr>
+            {% endfor %}
+        </table>
 
         <h3>Выполненные работы, бэкапы и обращения</h3>
         <table>
@@ -359,6 +381,50 @@ def add_log(client_id):
     return redirect(url_for('client_card', client_id=client_id))
 
 @app.route('/client/<int:client_id>/report')
+def generate_report(client_id):
+    db = get_db()
+    row = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
+    client = dict(row) if row else {}
+    
+    import datetime
+    today = datetime.date.today()
+    date_from = request.args.get('date_from', today.replace(day=1).strftime('%Y-%m-%d'))
+    date_to = request.args.get('date_to', today.strftime('%Y-%m-%d'))
+
+    logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? AND work_date BETWEEN ? AND ? ORDER BY work_date DESC', (client_id, date_from, date_to)).fetchall()
+    
+    backups = []
+    try:
+        import os
+        db_path_backups = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups.db')
+        if os.path.exists(db_path_backups):
+            conn_b = sqlite3.connect(db_path_backups)
+            conn_b.row_factory = sqlite3.Row
+            cursor_b = conn_b.cursor()
+            site_name = client.get('company_name')
+            cursor_b.execute('SELECT site_name, backup_date, size_mb FROM backup_history WHERE site_name = ? AND date(backup_date) BETWEEN ? AND ? ORDER BY backup_date DESC', (site_name, date_from, date_to))
+            backups = [dict(r) for r in cursor_b.fetchall()]
+            conn_b.close()
+    except Exception as e:
+        print(f'Error loading backups: {e}')
+
+    beget_status = 'Доступы Beget не настроены в карточке.'
+    beget_data = {}
+    login = client.get('beget_login')
+    password = client.get('beget_password') or client.get('beget_pass')
+    if login and password:
+        try:
+            import beget_helper
+            beget_data = beget_helper.get_full_beget_report(login, password)
+            if not beget_data.get('error'):
+                bal = beget_data.get('account', {}).get('balance', 'Н/Д')
+                beget_status = f'Хостинг активен. Баланс аккаунта: {bal} руб. Сайтов: {len(beget_data.get("sites", []))}, доменов: {len(beget_data.get("domains", []))}, почтовых ящиков: {len(beget_data.get("mailboxes", []))}.'
+            else:
+                beget_status = f'Ошибка Beget API: {beget_data.get("error")}'
+        except Exception as e:
+            beget_status = f'Не удалось связаться с Beget API: {str(e)}'
+
+    return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from, date_to=date_to)
 def generate_report(client_id):
     db = get_db()
     row = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()

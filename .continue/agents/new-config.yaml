@@ -1,0 +1,23 @@
+name: Polza
+version: 1.0.0
+schema: v1
+
+models:
+  - name: Gemini 3.6 Flash
+    provider: openai
+    model: google/gemini-3.6-flash
+    apiBase: https://polza.ai/api/v1
+    apiKey: pza_DBTO4lC4cIt7z33KZGXWs8A9I8vMx8QD
+    roles:
+      - chat
+      - edit
+      - autocomplete
+
+  - name: Gemini 3.5 Flash-Lite
+    provider: openai
+    model: google/gemini-3.5-flash-lite
+    apiBase: https://polza.ai/api/v1
+    apiKey: pza_DBTO4lC4cIt7z33KZGXWs8A9I8vMx8QD
+    roles:
+      - chat
+      - edit
