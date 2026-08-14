@@ -3,8 +3,11 @@ import saby_helper, inn_helper, crm_core, sqlite3, requests
 
 app = Flask(__name__)
 
+import os
+
 def get_db():
-    conn = sqlite3.connect('/opt/backup-reports/crm_data.db')
+    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'crm_data.db')
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -327,7 +330,8 @@ def add_client_post():
 @app.route('/client/<int:client_id>')
 def client_card(client_id):
     db = get_db()
-    client = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
+    row = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
+    client = dict(row) if row else {}
     logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (client_id,)).fetchall()
     return render_template_string(CLIENT_CARD_TEMPLATE, client=client, logs=logs)
 
@@ -357,15 +361,18 @@ def add_log(client_id):
 @app.route('/client/<int:client_id>/report')
 def generate_report(client_id):
     db = get_db()
-    client = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
+    row = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
+    client = dict(row) if row else {}
     logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (client_id,)).fetchall()
     
     # Проверка подключения к Beget по API (если заданы доступы)
     beget_status = "Доступы Beget не настроены в карточке."
-    if client.get('beget_login') and client.get('beget_pass'): # Changed from 'beget_password' to 'beget_pass'
+    login = client.get('beget_login')
+    password = client.get('beget_password') or client.get('beget_pass')
+    if login and password:
         try:
             # Запрос к API Beget для получения информации о балансе и доменах
-            api_url = f"https://api.beget.com/api/v1/user/getInfo?login={client.get('beget_login')}&passwd={client.get('beget_pass')}&output_format=json" # Changed from 'beget_password' to 'beget_pass'
+            api_url = f"https://api.beget.com/api/v1/user/getInfo?login={login}&passwd={password}&output_format=json"
             res = requests.get(api_url, timeout=5).json()
             if res.get('status') == 'success':
                 bal = res.get('answer', {}).get('result', {}).get('balance', 'Н/Д')
