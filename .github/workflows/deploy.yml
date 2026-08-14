@@ -31,6 +31,6 @@ jobs:
             fi
             
             # Перезапуск сервиса CRM
-            pkill -f "/opt/backup-reports/app.py" || true
-            nohup /usr/bin/python3 /opt/backup-reports/app.py > /opt/backup-reports/app.log 2>&1 &
+            # Перезапуск службы CRM через systemd
+            systemctl restart crm
             echo "Deployment completed successfully!"
