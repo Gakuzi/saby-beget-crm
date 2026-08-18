@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS backup_history (
     site_name TEXT,
     site_url TEXT,
     site_domain TEXT,
+    client_id INTEGER,
     filename TEXT,
     backup_date TEXT,
     size_mb REAL,
@@ -35,10 +36,19 @@ conn.commit()
 
 # Миграция: добавляем отсутствующие колонки (если таблица была ранее более простой)
 expected_cols = {
-    'site_name': 'TEXT', 'site_url': 'TEXT', 'site_domain': 'TEXT', 'filename': 'TEXT',
+    'site_name': 'TEXT', 'site_url': 'TEXT', 'site_domain': 'TEXT', 'client_id': 'INTEGER', 'filename': 'TEXT',
     'backup_date': 'TEXT', 'size_mb': 'REAL', 'detected_at': 'TEXT', 'status': 'TEXT',
     'source': 'TEXT', 'error': 'TEXT', 'extra': 'TEXT'
 }
+
+# Создать таблицу site_mapping для сопоставления домен -> client_id
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS site_mapping (
+    site_domain TEXT PRIMARY KEY,
+    client_id INTEGER
+)
+''')
+conn.commit()
 
 cursor.execute("PRAGMA table_info('backup_history')")
 existing = {row[1] for row in cursor.fetchall()}
@@ -57,6 +67,56 @@ sites = [
     {"url": "https://uniklinika.ru/backup_check.php", "key": "klimov", "name": "Университетская клиника"},
     {"url": "https://xn--29-6kcaxawaglcjiqe8c8o.xn--p1ai/backup_check.php", "key": "klimov", "name": "Семейная клиника"}
 ]
+
+# Попытка автосопоставления доменов к клиентам на основе crm_data.db (sites поле в clients)
+try:
+    crm_db = '/opt/backup-reports/crm_data.db'
+    if os.path.exists(crm_db):
+        cconn = sqlite3.connect(crm_db)
+        ccur = cconn.cursor()
+        ccur.execute('SELECT id, sites FROM clients')
+        rows = ccur.fetchall()
+        for rid, sites_str in rows:
+            if not sites_str:
+                continue
+            parts = [s.strip().lower().replace('https://','').replace('http://','').split('/')[0] for s in sites_str.split(',') if s.strip()]
+            for d in parts:
+                # insert mapping if not exists
+                try:
+                    cursor.execute('INSERT OR IGNORE INTO site_mapping(site_domain, client_id) VALUES (?, ?)', (d, rid))
+                except Exception:
+                    pass
+        cconn.commit()
+        cconn.close()
+except Exception as e:
+    print(f'[MAPPING] failed to build site_mapping: {e}')
+
+# Также добавим существующие mapping из backup_history: если есть домен и не маппинг, попробуем сопоставить по имени
+try:
+    cursor.execute('SELECT DISTINCT site_domain FROM backup_history WHERE site_domain IS NOT NULL AND site_domain != ""')
+    domains = [r[0] for r in cursor.fetchall()]
+    crm_db = '/opt/backup-reports/crm_data.db'
+    if os.path.exists(crm_db):
+        cconn = sqlite3.connect(crm_db)
+        ccur = cconn.cursor()
+        for d in domains:
+            ccur.execute('SELECT id, sites, company_name FROM clients')
+            for rid, sites_str, cname in ccur.fetchall():
+                matched = False
+                if sites_str:
+                    parts = [s.strip().lower().replace('https://','').replace('http://','').split('/')[0] for s in sites_str.split(',') if s.strip()]
+                    if d in parts:
+                        cursor.execute('INSERT OR IGNORE INTO site_mapping(site_domain, client_id) VALUES (?, ?)', (d, rid))
+                        matched = True
+                if not matched and cname and cname.strip().lower() == d:
+                    cursor.execute('INSERT OR IGNORE INTO site_mapping(site_domain, client_id) VALUES (?, ?)', (d, rid))
+        cconn.commit()
+        cconn.close()
+except Exception as e:
+    print(f'[MAPPING] secondary mapping failed: {e}')
+
+# Refresh commit
+conn.commit()
 
 now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -86,6 +146,16 @@ for site in sites:
             b_size = data.get('size_mb')
             filename = data.get('filename') if 'filename' in data else None
 
+            # determine client_id from site_mapping if available
+            client_id = None
+            try:
+                cursor.execute('SELECT client_id FROM site_mapping WHERE site_domain = ?', (site_domain,))
+                rmap = cursor.fetchone()
+                if rmap:
+                    client_id = rmap[0]
+            except Exception:
+                client_id = None
+
             # Проверяем, есть ли уже запись с таким сайтом и датой
             cursor.execute(
                 "SELECT id FROM backup_history WHERE site_domain = ? AND backup_date = ?",
@@ -94,11 +164,11 @@ for site in sites:
             row = cursor.fetchone()
             if not row:
                 cursor.execute(
-                    "INSERT INTO backup_history (site_name, site_url, site_domain, filename, backup_date, size_mb, detected_at, status, source, extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (site_name, site_url, site_domain, filename, b_date, b_size, now_str, 'ok', 'agent', json.dumps(data, ensure_ascii=False))
+                    "INSERT INTO backup_history (site_name, site_url, site_domain, client_id, filename, backup_date, size_mb, detected_at, status, source, extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (site_name, site_url, site_domain, client_id, filename, b_date, b_size, now_str, 'ok', 'agent', json.dumps(data, ensure_ascii=False))
                 )
                 conn.commit()
-                print(f"[OK] {site_name} ({site_domain}) - saved backup {b_date} / {b_size} MB")
+                print(f"[OK] {site_name} ({site_domain}) - saved backup {b_date} / {b_size} MB client_id={client_id}")
             else:
                 print(f"[SKIP] {site_name} ({site_domain}) - already recorded {b_date}")
         else:

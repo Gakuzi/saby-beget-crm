@@ -414,18 +414,25 @@ def generate_report(client_id):
             client_sites = [s.strip().lower().replace('https://','').replace('http://','').split('/')[0] for s in client_sites_raw.split(',') if s.strip()]
             company_name = (client.get('company_name') or '').strip()
 
-            # фильтрация
+            # фильтрация по site_mapping (client_id)
             backups = []
-            for r in all_rows:
-                domain = (r.get('site_domain') or '').lower()
-                name = (r.get('site_name') or '').strip()
-                matched = False
-                if domain and domain in client_sites:
-                    matched = True
-                if not matched and company_name and company_name == name:
-                    matched = True
-                if matched:
-                    backups.append(r)
+            # если у клиента есть client_id, используем прямой запрос
+            client_id = client.get('id')
+            if client_id:
+                cursor_b.execute('SELECT site_name, site_domain, backup_date, size_mb, extra FROM backup_history WHERE client_id = ? AND date(backup_date) BETWEEN ? AND ? ORDER BY backup_date DESC', (client_id, date_from, date_to))
+                backups = [dict(r) for r in cursor_b.fetchall()]
+            else:
+                # fallback: фильтруем по доменам в поле sites
+                for r in all_rows:
+                    domain = (r.get('site_domain') or '').lower()
+                    name = (r.get('site_name') or '').strip()
+                    matched = False
+                    if domain and domain in client_sites:
+                        matched = True
+                    if not matched and company_name and company_name == name:
+                        matched = True
+                    if matched:
+                        backups.append(r)
 
             conn_b.close()
 
