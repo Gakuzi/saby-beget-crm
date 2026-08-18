@@ -1,6 +1,8 @@
 <?php
 // Поменяйте секрет на уникальный и храните в безопасном месте
-$secret = 'CHANGE_THIS_SECRET';
+// Поддерживаем настройку через переменную окружения BACKUP_SECRET для безопасного хранения.
+// По умолчанию (для совместимости) используется секрет 'Klimov' — поменяйте при деплое в продакшн.
+$secret = getenv('BACKUP_SECRET') !== false ? getenv('BACKUP_SECRET') : 'Klimov';
 
 // Поддержка передачи секрета как ?key=... или HTTP заголовка X-Backup-Key
 $provided = isset($_GET['key']) ? $_GET['key'] : (isset($_SERVER['HTTP_X_BACKUP_KEY']) ? $_SERVER['HTTP_X_BACKUP_KEY'] : null);
