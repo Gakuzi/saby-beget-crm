@@ -145,6 +145,39 @@ try:
 except Exception as e:
     print(f'[MAPPING] update existing failed: {e}')
 
+# Сбор событий с Beget для каждого client, если в карточке заданы доступы
+try:
+    import beget_helper
+    import time
+    crm_db = '/opt/backup-reports/crm_data.db'
+    if os.path.exists(crm_db):
+        cconn = sqlite3.connect(crm_db)
+        ccur = cconn.cursor()
+        # Получить всех клиентов, у которых есть доступы
+        ccur.execute('SELECT id, beget_login, beget_password FROM clients')
+        clients = ccur.fetchall()
+        now_ts = int(time.time())
+        start_ts = now_ts - 30*24*3600  # за последний месяц
+        for cid, blogin, bpass in clients:
+            if not blogin or not bpass:
+                continue
+            try:
+                events = beget_helper.get_events(blogin, bpass, start_ts, now_ts)
+                if events:
+                    for ev in events:
+                        try:
+                            cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                                           (cid, blogin, ev.get('details', {}).get('domain') or ev.get('details', {}).get('site') or ev.get('details', {}).get('domain_fqdn') or None, ev.get('event_type'), json.dumps(ev.get('details', {}), ensure_ascii=False), ev.get('event_time') or now_ts, ev.get('source')))
+                        except Exception:
+                            pass
+                    conn.commit()
+                    print(f"[BEGET] client {cid}: saved {len(events)} events")
+            except Exception as e:
+                print(f"[BEGET] error for client {cid}: {e}")
+        cconn.close()
+except Exception as e:
+    print(f'[BEGET] failed to collect events: {e}')
+
 
 now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
