@@ -2,6 +2,10 @@ from flask import Flask, render_template_string, request, redirect, url_for, jso
 import saby_helper, inn_helper, crm_core, sqlite3, requests
 
 app = Flask(__name__)
+import os as _os
+# Use environment variable FLASK_SECRET to secure session flash messages and session usage.
+# In production please set a strong secret in systemd or environment. Default is a dev placeholder.
+app.secret_key = _os.environ.get('FLASK_SECRET', 'dev-secret-change-me')
 
 import os
 
