@@ -295,6 +295,21 @@ REPORT_TEMPLATE = """
         <h3>Состояние хостинга и доменов (Beget API)</h3>
         <p>{{ beget_status }}</p>
 
+        <h3>События хостинга (Beget)</h3>
+        <table>
+            <tr><th>Дата/Время</th><th>Тип</th><th>Сайт / Аккаунт</th><th>Детали</th></tr>
+            {% for ev in host_events %}
+            <tr>
+                <td>{{ ev.human_time or '-' }}</td>
+                <td>{{ ev.event_type }}</td>
+                <td>{{ ev.site or ev.host_account }}</td>
+                <td><pre style="white-space:pre-wrap;">{{ ev.details }}</pre></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align:center;">За период событий хостинга не найдено</td></tr>
+            {% endfor %}
+        </table>
+
         <h3>Резервные копии (Автоматические и 1С-Битрикс)</h3>
         <table>
             <tr><th>Сайт / Источник</th><th>Дата бэкапа</th><th>Размер</th></tr>
@@ -462,8 +477,44 @@ def generate_report(client_id):
         except Exception as e:
             beget_status = f'Не удалось связаться с Beget API: {str(e)}'
 
-    print(f'[REPORT] client_id={client_id} backups_count={len(backups)}')
-    return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from, date_to=date_to)
+    # Получаем события хостинга из backups.db host_events за период
+    host_events = []
+    try:
+        import os
+        db_path_backups = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups.db')
+        if os.path.exists(db_path_backups):
+            conn_b = sqlite3.connect(db_path_backups)
+            conn_b.row_factory = sqlite3.Row
+            cur_b = conn_b.cursor()
+            # client_id may be null — but we filter by client.id when available
+            if client_id:
+                cur_b.execute('SELECT * FROM host_events WHERE client_id = ? AND event_time BETWEEN ? AND ? ORDER BY event_time DESC', (client_id, int(datetime.datetime.strptime(date_from, '%Y-%m-%d').timestamp()), int(datetime.datetime.strptime(date_to, '%Y-%m-%d').timestamp()) + 86400))
+            else:
+                cur_b.execute('SELECT * FROM host_events WHERE event_time BETWEEN ? AND ? ORDER BY event_time DESC', (int(datetime.datetime.strptime(date_from, '%Y-%m-%d').timestamp()), int(datetime.datetime.strptime(date_to, '%Y-%m-%d').timestamp()) + 86400))
+            rows = [dict(r) for r in cur_b.fetchall()]
+            for r in rows:
+                human = None
+                try:
+                    human = datetime.datetime.fromtimestamp(r.get('event_time')).strftime('%Y-%m-%d %H:%M:%S') if r.get('event_time') else None
+                except Exception:
+                    human = None
+                host_events.append({
+                    'id': r.get('id'),
+                    'client_id': r.get('client_id'),
+                    'host_account': r.get('host_account'),
+                    'site': r.get('site'),
+                    'event_type': r.get('event_type'),
+                    'details': r.get('details'),
+                    'event_time': r.get('event_time'),
+                    'human_time': human,
+                    'source': r.get('source')
+                })
+            conn_b.close()
+    except Exception as e:
+        print(f'Error loading host_events: {e}')
+
+    print(f'[REPORT] client_id={client_id} backups_count={len(backups)} host_events={len(host_events)}')
+    return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from, date_to=date_to, host_events=host_events)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3002)
