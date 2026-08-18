@@ -6,6 +6,14 @@ import datetime
 import sqlite3
 import os
 from urllib.parse import urlparse
+import ssl
+
+# Option to skip SSL verification for testing (set SKIP_SSL_VERIFY=1 to enable)
+skip_ssl = os.environ.get('SKIP_SSL_VERIFY', '0').lower() in ('1', 'true', 'yes')
+if skip_ssl:
+    ssl_ctx = ssl._create_unverified_context()
+else:
+    ssl_ctx = ssl.create_default_context()
 
 # Путь к базе (на сервере используется /opt/backup-reports/backups.db)
 db_path = os.environ.get('BACKUPS_DB', '/opt/backup-reports/backups.db')
@@ -333,7 +341,7 @@ for site in sites:
         if site_key:
             url = f"{site_url}?key={site_key}" if '?' not in site_url else f"{site_url}&key={site_key}"
 
-        req = urllib.request.urlopen(url, timeout=15)
+        req = urllib.request.urlopen(url, timeout=15, context=ssl_ctx)
         raw = req.read().decode('utf-8')
         try:
             data = json.loads(raw)
