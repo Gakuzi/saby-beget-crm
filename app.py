@@ -381,7 +381,16 @@ def client_card(client_id):
     row = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
     client = dict(row) if row else {}
     logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (client_id,)).fetchall()
-    return render_template_string(CLIENT_CARD_TEMPLATE, client=client, logs=logs)
+
+    # default dates: previous month
+    import datetime
+    today = datetime.date.today()
+    first_this_month = today.replace(day=1)
+    last_month_end = first_this_month - datetime.timedelta(days=1)
+    default_date_from = last_month_end.replace(day=1).strftime('%Y-%m-%d')
+    default_date_to = last_month_end.strftime('%Y-%m-%d')
+
+    return render_template_string(CLIENT_CARD_TEMPLATE, client=client, logs=logs, default_date_from=default_date_from, default_date_to=default_date_to)
 
 @app.route("/client/<int:client_id>/update_beget", methods=["POST"])
 def update_beget(client_id):
