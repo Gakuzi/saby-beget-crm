@@ -19,12 +19,20 @@ def update_client_beget(client_id, login, password, sites, emails, report_schedu
         cursor.execute("ALTER TABLE clients ADD COLUMN sites TEXT;")
     if "email_reports" not in cols:
         cursor.execute("ALTER TABLE clients ADD COLUMN email_reports TEXT;")
-    if "report_schedule" not in cols:
-        cursor.execute("ALTER TABLE clients ADD COLUMN report_schedule TEXT;")
+    # some installations have report_frequency column already (legacy). Prefer it.
+    use_freq_col = False
+    if "report_frequency" in cols:
+        use_freq_col = True
+    else:
+        if "report_schedule" not in cols:
+            cursor.execute("ALTER TABLE clients ADD COLUMN report_schedule TEXT;")
     if "last_report_sent" not in cols:
         cursor.execute("ALTER TABLE clients ADD COLUMN last_report_sent TEXT;")
-    
-    cursor.execute("UPDATE clients SET beget_login = ?, beget_password = ?, sites = ?, email_reports = ?, report_schedule = ? WHERE id = ?", (login, password, sites, emails, report_schedule, client_id))
+
+    if use_freq_col:
+        cursor.execute("UPDATE clients SET beget_login = ?, beget_password = ?, sites = ?, email_reports = ?, report_frequency = ? WHERE id = ?", (login, password, sites, emails, report_schedule, client_id))
+    else:
+        cursor.execute("UPDATE clients SET beget_login = ?, beget_password = ?, sites = ?, email_reports = ?, report_schedule = ? WHERE id = ?", (login, password, sites, emails, report_schedule, client_id))
     conn.commit()
     conn.close()
 

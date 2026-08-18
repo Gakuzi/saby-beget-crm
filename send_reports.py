@@ -77,17 +77,15 @@ def main():
         return
     conn = sqlite3.connect(CRM_DB)
     cur = conn.cursor()
-    cur.execute('SELECT id, company_name, email_reports, report_schedule FROM clients')
-    rows = cur.fetchall()
-    for cid, cname, emails, schedule in rows:
+    def process_client_row(cid, cname, emails, schedule):
         if not emails or (not schedule) or schedule == 'none':
-            continue
+            return
         d_from, d_to = period_for_schedule(schedule)
         if not d_from:
-            continue
+            return
         to_addrs = [e.strip() for e in emails.split(',') if e.strip()]
         if not to_addrs:
-            continue
+            return
         # fetch report HTML from local app
         try:
             url = f"{FLASK_URL}/client/{cid}/report?date_from={d_from}&date_to={d_to}"
@@ -95,7 +93,7 @@ def main():
             r = requests.get(url, timeout=30)
             if r.status_code != 200:
                 print(f'Failed to fetch report for client {cid}: HTTP {r.status_code}')
-                continue
+                return
             html = r.text
             subject = f'Отчет по ИТ-инфраструктуре {cname} за период {d_from} — {d_to}'
             ok = send_mail(to_addrs, subject, html)
@@ -104,7 +102,7 @@ def main():
                 # update last_report_sent
                 try:
                     cur2 = conn.cursor()
-                    cur2.execute('UPDATE clients SET last_report_sent = DATE('"'"'now'"'"') WHERE id = ?', (cid,))
+                    cur2.execute("UPDATE clients SET last_report_sent = DATE('now') WHERE id = ?", (cid,))
                     conn.commit()
                 except Exception:
                     pass
@@ -112,6 +110,19 @@ def main():
                 print('Failed to send mail for client', cid)
         except Exception as e:
             print('Error preparing report for client', cid, e)
+
+    cols = [c[1] for c in cur.execute("PRAGMA table_info(clients)").fetchall()]
+    if 'report_frequency' in cols:
+        cur.execute('SELECT id, company_name, email_reports, report_frequency FROM clients')
+        rows = cur.fetchall()
+        for cid, cname, emails, schedule in rows:
+            process_client_row(cid, cname, emails, schedule)
+    else:
+        cur.execute('SELECT id, company_name, email_reports, report_schedule FROM clients')
+        rows = cur.fetchall()
+        for cid, cname, emails, schedule in rows:
+            process_client_row(cid, cname, emails, schedule)
+
     conn.close()
 
 
