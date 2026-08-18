@@ -97,6 +97,8 @@ def get_events(login, passwd, start_ts=None, end_ts=None):
                     'details': d,
                     'event_time': None,
                     'source': 'beget_domain_getList',
+                    'method': 'domain/getList',
+                    'confidence': 'presence_only'  # присутствие домена в списке, не действие
                 })
         # sites
         site_resp = requests.get(f"{base_url}/site/getList?login={login}&passwd={passwd}&input_format=json&output_format=json", timeout=10).json()
@@ -107,6 +109,8 @@ def get_events(login, passwd, start_ts=None, end_ts=None):
                     'details': s,
                     'event_time': None,
                     'source': 'beget_site_getList',
+                    'method': 'site/getList',
+                    'confidence': 'presence_only'  # присутствие сайта в списке — не прямое действие
                 })
         # databases
         db_resp = requests.get(f"{base_url}/mysql/getList?login={login}&passwd={passwd}&input_format=json&output_format=json", timeout=10).json()
@@ -117,6 +121,8 @@ def get_events(login, passwd, start_ts=None, end_ts=None):
                     'details': db,
                     'event_time': None,
                     'source': 'beget_mysql_getList',
+                    'method': 'mysql/getList',
+                    'confidence': 'presence_only'  # присутствие БД в списке — не прямое действие
                 })
         # mailboxes per domain
         doms = []
@@ -140,6 +146,8 @@ def get_events(login, passwd, start_ts=None, end_ts=None):
                                 'details': {'domain': fqdn, 'mailbox': b},
                                 'event_time': None,
                                 'source': 'beget_mail_getMailboxList',
+                                'method': 'mail/getMailboxList',
+                                'confidence': 'presence_only'  # присутствие почтового ящика в списке
                             })
                     elif isinstance(boxes, dict):
                         for b_name, b_info in boxes.items():
@@ -148,6 +156,8 @@ def get_events(login, passwd, start_ts=None, end_ts=None):
                                 'details': {'domain': fqdn, 'mailbox': b_name, 'info': b_info},
                                 'event_time': None,
                                 'source': 'beget_mail_getMailboxList',
+                                'method': 'mail/getMailboxList',
+                                'confidence': 'presence_only'  # присутствие почтового ящика в списке
                             })
             except Exception:
                 continue
