@@ -168,11 +168,24 @@ try:
         cconn = sqlite3.connect(crm_db)
         ccur = cconn.cursor()
         # Получить всех клиентов, у которых есть доступы
-        ccur.execute('SELECT id, beget_login, beget_password, beget_api_key FROM clients')
+        # Ensure compatibility if beget_api_key column is not present
+        cols = [c[1] for c in ccur.execute("PRAGMA table_info(clients)").fetchall()]
+        select_fields = ['id', 'beget_login', 'beget_password']
+        has_api = False
+        if 'beget_api_key' in cols:
+            select_fields.append('beget_api_key')
+            has_api = True
+        q = 'SELECT ' + ','.join(select_fields) + ' FROM clients'
+        ccur.execute(q)
         clients = ccur.fetchall()
         now_ts = int(time.time())
         start_ts = now_ts - 30*24*3600  # за последний месяц
-        for cid, blogin, bpass, bapi in clients:
+        for row in clients:
+            if has_api:
+                cid, blogin, bpass, bapi = row
+            else:
+                cid, blogin, bpass = row
+                bapi = None
             if not blogin and not bapi:
                 continue
             try:
