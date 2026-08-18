@@ -22,16 +22,16 @@ INDEX_TEMPLATE = """
     <meta charset="UTF-8">
     <title>Saby & Beget CRM - Климов Евгений</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7fafc; min-height: 100vh; color: #0f172a; padding: 25px; margin: 0; }
-        .container { max-width: 1000px; margin: auto; background: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 6px 18px rgba(15,23,42,0.06); }
-        h2 { color: #0f172a; border-bottom: 1px solid #e6eef6; padding-bottom: 10px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg,#fffaf0 0%, #ffffff 100%); min-height: 100vh; color: #2b2f2f; padding: 25px; margin: 0; }
+        .container { max-width: 1000px; margin: auto; background: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 6px 18px rgba(43,45,48,0.04); }
+        h2 { color: #6b5a57; border-bottom: 1px solid #f0e9e6; padding-bottom: 10px; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { padding: 10px; border: 1px solid #e6eef6; text-align: left; font-size: 14px; }
-        th { background: #f1f5f9; color: #334155; }
-        a { color: #334155; text-decoration: none; }
+        th, td { padding: 10px; border: 1px solid #f0e9e6; text-align: left; font-size: 14px; }
+        th { background: #f8f4f3; color: #6b5a57; }
+        a { color: #6b5a57; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        .btn { background: #64748b; color: white; padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.15s ease; }
-        .btn:hover { background: #4b5563; }
+        .btn { background: linear-gradient(135deg,#ffd6c2 0%, #ffb4a2 100%); color: #2b2f2f; padding: 10px 18px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; transition: all 0.15s ease; box-shadow: 0 6px 12px rgba(255,180,162,0.12); }
+        .btn:hover { filter: brightness(0.97); }
     </style>
 </head>
 <body>
@@ -70,14 +70,14 @@ ADD_TEMPLATE = """
     <meta charset="UTF-8">
     <title>Добавление контрагента</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7fafc; min-height: 100vh; color: #0f172a; padding: 25px; margin: 0; }
-        .container { max-width: 700px; margin: auto; background: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 6px 18px rgba(15,23,42,0.06); }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg,#fffaf0 0%, #ffffff 100%); min-height: 100vh; color: #2b2f2f; padding: 25px; margin: 0; }
+        .container { max-width: 700px; margin: auto; background: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 6px 18px rgba(43,45,48,0.04); }
         .form-group { margin-bottom: 15px; position: relative; }
-        input, select { width: 100%; padding: 10px; box-sizing: border-box; background: #fff; border: 1px solid #e6eef6; color: #0f172a; border-radius: 4px; }
-        button { background: #64748b; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }
-        a { color: #334155; }
-        .suggest-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #e6eef6; background: #fff; }
-        .suggest-item:hover { background: #f1f5f9; }
+        input, select { width: 100%; padding: 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #f0e9e6; color: #2b2f2f; border-radius: 6px; }
+        button { background: linear-gradient(135deg,#ffd6c2 0%, #ffb4a2 100%); color: #2b2f2f; padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; box-shadow: 0 6px 12px rgba(255,180,162,0.08); }
+        a { color: #6b5a57; }
+        .suggest-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #f0e9e6; background: #fff; }
+        .suggest-item:hover { background: #fff6f3; }
     </style>
     <script>
         let searchTimer = null;
@@ -183,18 +183,18 @@ CLIENT_CARD_TEMPLATE = """
     <meta charset="UTF-8">
     <title>Карточка: {{ client.company_name }}</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7fafc; min-height: 100vh; color: #0f172a; padding: 25px; margin: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg,#fffaf0 0%, #ffffff 100%); min-height: 100vh; color: #2b2f2f; padding: 25px; margin: 0; }
         .container { max-width: 950px; margin: auto; background: #ffffff; padding: 25px; border-radius: 8px; }
-        h2, h3 { color: #0f172a; }
+        h2, h3 { color: #6b5a57; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .box { background: #fff; padding: 15px; border-radius: 6px; border: 1px solid #e6eef6; }
+        .box { background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #f0e9e6; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 8px; border: 1px solid #e6eef6; text-align: left; font-size: 13px; }
-        th { background: #f1f5f9; color: #334155; }
-        input, textarea { width: 100%; padding: 8px; box-sizing: border-box; background: #fff; border: 1px solid #e6eef6; color: #0f172a; border-radius: 4px; margin-top: 5px; }
-        button, .btn-link { background: #64748b; color: white; padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 10px; text-decoration:none; display:inline-block; }
-        button:hover, .btn-link:hover { background: #4b5563; }
-        a { color: #334155; }
+        th, td { padding: 8px; border: 1px solid #f0e9e6; text-align: left; font-size: 13px; }
+        th { background: #f8f4f3; color: #6b5a57; }
+        input, textarea { width: 100%; padding: 8px; box-sizing: border-box; background: #fff; border: 1px solid #f0e9e6; color: #2b2f2f; border-radius: 6px; margin-top: 5px; }
+        button, .btn-link { background: linear-gradient(135deg,#ffd6c2 0%, #ffb4a2 100%); color: #2b2f2f; padding: 8px 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; margin-top: 10px; text-decoration:none; display:inline-block; box-shadow: 0 6px 12px rgba(255,180,162,0.08); }
+        button:hover, .btn-link:hover { filter: brightness(0.98); }
+        a { color: #6b5a57; }
     </style>
 </head>
 <body>
@@ -252,11 +252,11 @@ CLIENT_CARD_TEMPLATE = """
             <form action="/client/{{ client.id }}/report" method="GET" style="display: flex; gap: 10px; align-items: flex-end; margin-top: 10px;" target="_blank">
                 <div style="flex: 1;">
                     <label style="font-size: 13px;">Дата с:</label>
-                    <input type="date" name="date_from" value="{{ default_date_from }}" style="margin-top:5px; padding:8px; background:#0f172a; border:1px solid #475569; color:white; border-radius:4px; width:100%;">
+                    <input type="date" name="date_from" value="{{ default_date_from }}" style="margin-top:5px; padding:8px; background:#ffffff; border:1px solid #f0e9e6; color:#2b2f2f; border-radius:4px; width:100%;">
                 </div>
                 <div style="flex: 1;">
                     <label style="font-size: 13px;">Дата по:</label>
-                    <input type="date" name="date_to" value="{{ default_date_to }}" style="margin-top:5px; padding:8px; background:#0f172a; border:1px solid #475569; color:white; border-radius:4px; width:100%;">
+                    <input type="date" name="date_to" value="{{ default_date_to }}" style="margin-top:5px; padding:8px; background:#ffffff; border:1px solid #f0e9e6; color:#2b2f2f; border-radius:4px; width:100%;">
                 </div>
                 <div>
                     <button type="submit" class="btn-link" style="margin-top: 0; padding: 10px 14px;">Сформировать отчет</button>
