@@ -425,30 +425,6 @@ def generate_report(client_id):
             beget_status = f'Не удалось связаться с Beget API: {str(e)}'
 
     return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from, date_to=date_to)
-def generate_report(client_id):
-    db = get_db()
-    row = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
-    client = dict(row) if row else {}
-    logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (client_id,)).fetchall()
-    
-    # Проверка подключения к Beget по API (если заданы доступы)
-    beget_status = "Доступы Beget не настроены в карточке."
-    login = client.get('beget_login')
-    password = client.get('beget_password') or client.get('beget_pass')
-    if login and password:
-        try:
-            # Запрос к API Beget для получения информации о балансе и доменах
-            api_url = f"https://api.beget.com/api/v1/user/getInfo?login={login}&passwd={password}&output_format=json"
-            res = requests.get(api_url, timeout=5).json()
-            if res.get('status') == 'success':
-                bal = res.get('answer', {}).get('result', {}).get('balance', 'Н/Д')
-                beget_status = f"Хостинг активен. Баланс аккаунта: {bal} руб. Домены и почтовые ящики функционируют штатно."
-            else:
-                beget_status = "Ошибка авторизации в Beget API. Проверьте логин и пароль."
-        except Exception as e:
-            beget_status = f"Не удалось связаться с Beget API: {str(e)}"
-
-    return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, beget_status=beget_status)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3002)
