@@ -221,7 +221,14 @@ CLIENT_CARD_TEMPLATE = """
                     <label>Сайты:</label>
                     <input type="text" name="sites" value="{{ client.sites or '' }}">
                     <label>Email (через запятую):</label>
-                    <input type="text" name="emails" value="{{ client.emails or '' }}">
+                    <input type="text" name="emails" value="{{ client.email_reports or client.emails or '' }}">
+                    <label>Периодичность рассылки отчёта:</label>
+                    <select name="report_schedule">
+                        <option value="none" {% if (client.report_schedule or '') == 'none' %}selected{% endif %}>Не рассылать</option>
+                        <option value="daily" {% if (client.report_schedule or '') == 'daily' %}selected{% endif %}>Ежедневно (за вчера)</option>
+                        <option value="weekly" {% if (client.report_schedule or '') == 'weekly' %}selected{% endif %}>Еженедельно (по понедельникам — за прошлую неделю)</option>
+                        <option value="monthly" {% if (client.report_schedule or '') == 'monthly' %}selected{% endif %}>Ежемесячно (1 раз в месяц — за предыдущий месяц)</option>
+                    </select>
                     <button type="submit">Сохранить доступы</button>
                 </form>
             </div>
@@ -382,9 +389,10 @@ def update_beget(client_id):
     password = request.form.get("beget_pass", "").strip() # Changed from "password" to "beget_pass"
     sites = request.form.get("sites", "").strip()
     emails = request.form.get("emails", "").strip()
+    schedule = request.form.get("report_schedule", "none").strip()
     try:
         import crm_core
-        crm_core.update_client_beget(client_id, login, password, sites, emails)
+        crm_core.update_client_beget(client_id, login, password, sites, emails, schedule)
         if not login or not password:
             flash("Настройки сохранены. Интеграция с хостингом ОТКЛЮЧЕНА (доступы пусты).", "warning")
         else:

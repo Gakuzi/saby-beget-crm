@@ -7,7 +7,7 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-def update_client_beget(client_id, login, password, sites, emails):
+def update_client_beget(client_id, login, password, sites, emails, report_schedule=None):
     conn = get_db_connection()
     cursor = conn.cursor()
     cols = [col[1] for col in cursor.execute("PRAGMA table_info(clients)").fetchall()]
@@ -19,8 +19,12 @@ def update_client_beget(client_id, login, password, sites, emails):
         cursor.execute("ALTER TABLE clients ADD COLUMN sites TEXT;")
     if "email_reports" not in cols:
         cursor.execute("ALTER TABLE clients ADD COLUMN email_reports TEXT;")
+    if "report_schedule" not in cols:
+        cursor.execute("ALTER TABLE clients ADD COLUMN report_schedule TEXT;")
+    if "last_report_sent" not in cols:
+        cursor.execute("ALTER TABLE clients ADD COLUMN last_report_sent TEXT;")
     
-    cursor.execute("UPDATE clients SET beget_login = ?, beget_password = ?, sites = ?, email_reports = ? WHERE id = ?", (login, password, sites, emails, client_id))
+    cursor.execute("UPDATE clients SET beget_login = ?, beget_password = ?, sites = ?, email_reports = ?, report_schedule = ? WHERE id = ?", (login, password, sites, emails, report_schedule, client_id))
     conn.commit()
     conn.close()
 
