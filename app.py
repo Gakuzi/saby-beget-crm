@@ -22,16 +22,16 @@ INDEX_TEMPLATE = """
     <meta charset="UTF-8">
     <title>Saby & Beget CRM - Климов Евгений</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #2e1065 0%, #1e1b4b 50%, #0f172a 100%); min-height: 100vh; color: #f1f5f9; padding: 25px; margin: 0; }
-        .container { max-width: 1000px; margin: auto; background: #1e293b; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
-        h2 { color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7fafc; min-height: 100vh; color: #0f172a; padding: 25px; margin: 0; }
+        .container { max-width: 1000px; margin: auto; background: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 6px 18px rgba(15,23,42,0.06); }
+        h2 { color: #0f172a; border-bottom: 1px solid #e6eef6; padding-bottom: 10px; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { padding: 10px; border: 1px solid #334155; text-align: left; font-size: 14px; }
-        th { background: #0f172a; color: #38bdf8; }
-        a { color: #38bdf8; text-decoration: none; }
+        th, td { padding: 10px; border: 1px solid #e6eef6; text-align: left; font-size: 14px; }
+        th { background: #f1f5f9; color: #334155; }
+        a { color: #334155; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        .btn { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: white; padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3); transition: all 0.2s ease; }
-        .btn:hover { background: #1d4ed8; }
+        .btn { background: #64748b; color: white; padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.15s ease; }
+        .btn:hover { background: #4b5563; }
     </style>
 </head>
 <body>
@@ -70,14 +70,14 @@ ADD_TEMPLATE = """
     <meta charset="UTF-8">
     <title>Добавление контрагента</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #2e1065 0%, #1e1b4b 50%, #0f172a 100%); min-height: 100vh; color: #f1f5f9; padding: 25px; margin: 0; }
-        .container { max-width: 700px; margin: auto; background: #1e293b; padding: 25px; border-radius: 8px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7fafc; min-height: 100vh; color: #0f172a; padding: 25px; margin: 0; }
+        .container { max-width: 700px; margin: auto; background: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 6px 18px rgba(15,23,42,0.06); }
         .form-group { margin-bottom: 15px; position: relative; }
-        input, select { width: 100%; padding: 10px; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 4px; }
-        button { background: #2563eb; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        a { color: #38bdf8; }
-        .suggest-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #334155; background: #0f172a; }
-        .suggest-item:hover { background: #334155; }
+        input, select { width: 100%; padding: 10px; box-sizing: border-box; background: #fff; border: 1px solid #e6eef6; color: #0f172a; border-radius: 4px; }
+        button { background: #64748b; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }
+        a { color: #334155; }
+        .suggest-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #e6eef6; background: #fff; }
+        .suggest-item:hover { background: #f1f5f9; }
     </style>
     <script>
         let searchTimer = null;
@@ -183,18 +183,18 @@ CLIENT_CARD_TEMPLATE = """
     <meta charset="UTF-8">
     <title>Карточка: {{ client.company_name }}</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #2e1065 0%, #1e1b4b 50%, #0f172a 100%); min-height: 100vh; color: #f1f5f9; padding: 25px; margin: 0; }
-        .container { max-width: 950px; margin: auto; background: #1e293b; padding: 25px; border-radius: 8px; }
-        h2, h3 { color: #38bdf8; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7fafc; min-height: 100vh; color: #0f172a; padding: 25px; margin: 0; }
+        .container { max-width: 950px; margin: auto; background: #ffffff; padding: 25px; border-radius: 8px; }
+        h2, h3 { color: #0f172a; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .box { background: #0f172a; padding: 15px; border-radius: 6px; border: 1px solid #334155; }
+        .box { background: #fff; padding: 15px; border-radius: 6px; border: 1px solid #e6eef6; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 8px; border: 1px solid #334155; text-align: left; font-size: 13px; }
-        th { background: #0f172a; color: #38bdf8; }
-        input, textarea { width: 100%; padding: 8px; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 4px; margin-top: 5px; }
-        button, .btn-link { background: #2563eb; color: white; padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; text-decoration:none; display:inline-block; }
-        button:hover, .btn-link:hover { background: #1d4ed8; }
-        a { color: #38bdf8; }
+        th, td { padding: 8px; border: 1px solid #e6eef6; text-align: left; font-size: 13px; }
+        th { background: #f1f5f9; color: #334155; }
+        input, textarea { width: 100%; padding: 8px; box-sizing: border-box; background: #fff; border: 1px solid #e6eef6; color: #0f172a; border-radius: 4px; margin-top: 5px; }
+        button, .btn-link { background: #64748b; color: white; padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 10px; text-decoration:none; display:inline-block; }
+        button:hover, .btn-link:hover { background: #4b5563; }
+        a { color: #334155; }
     </style>
 </head>
 <body>
