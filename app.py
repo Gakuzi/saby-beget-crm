@@ -218,6 +218,8 @@ CLIENT_CARD_TEMPLATE = """
                     <input type="text" name="beget_login" value="{{ client.beget_login or '' }}">
                     <label>Пароль Beget:</label>
                     <input type="password" name="beget_pass" value="{{ client.beget_pass or '' }}">
+                    <label>API-ключ Beget (если есть):</label>
+                    <input type="text" name="beget_api_key" value="{{ client.beget_api_key or '' }}">
                     <label>Сайты:</label>
                     <input type="text" name="sites" value="{{ client.sites or '' }}">
                     <label>Email (через запятую):</label>
@@ -316,6 +318,34 @@ CLIENT_CARD_TEMPLATE = """
             <input type="number" step="0.5" name="hours" value="1.0" required style="width: 100px;">
             <button type="submit">Добавить запись</button>
         </form>
+
+        <h3 style="margin-top:25px;">Непрерывная лента (работы / бэкапы / события хостинга)</h3>
+        <div class="box">
+        {% if timeline and timeline|length > 0 %}
+            <table>
+                <tr><th>Время</th><th>Тип</th><th>Описание</th></tr>
+                {% for e in timeline %}
+                    <tr>
+                        <td>{{ e.human or '' }}</td>
+                        <td>{{ e.type }}</td>
+                        <td>
+                            {% if e.type == 'work_log' %}
+                                {{ e.description }} ({{ e.hours }} ч.)
+                            {% elif e.type == 'backup' %}
+                                Бэкап: {{ e.site_name or e.site_domain }} — {{ e.status }} — {{ e.size_mb or 'N/A' }} МБ
+                            {% elif e.type == 'host_event' %}
+                                {{ e.event_type }} — {{ e.details }}
+                            {% else %}
+                                {{ e }}
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </table>
+        {% else %}
+            <p style="color:#94a3b8;">Лента пуста.</p>
+        {% endif %}
+        </div>
     </div>
 </body>
 </html>
@@ -470,12 +500,75 @@ def client_card(client_id):
     default_date_from = last_month_end.replace(day=1).strftime('%Y-%m-%d')
     default_date_to = last_month_end.strftime('%Y-%m-%d')
 
-    return render_template_string(CLIENT_CARD_TEMPLATE, client=client, logs=logs, default_date_from=default_date_from, default_date_to=default_date_to)
+    # Build continuous timeline: combine work_logs, host_events and backup_history for the client (last 90 days)
+    timeline = []
+    try:
+        import os, json as _json, time as _time
+        db_path_backups = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups.db')
+        if os.path.exists(db_path_backups):
+            conn_b = sqlite3.connect(db_path_backups)
+            conn_b.row_factory = sqlite3.Row
+            cur_b = conn_b.cursor()
+            # host_events
+            cur_b.execute('SELECT * FROM host_events WHERE client_id = ? ORDER BY event_time DESC LIMIT 500', (client_id,))
+            for r in cur_b.fetchall():
+                try:
+                    details = _json.loads(r['details']) if r['details'] else None
+                except Exception:
+                    details = r['details']
+                ts = r['event_time'] or int(_time.time())
+                human = None
+                try:
+                    human = datetime.datetime.fromtimestamp(ts).strftime('%d.%m.%Y %H:%M:%S')
+                except Exception:
+                    human = None
+                timeline.append({'type': 'host_event', 'ts': ts, 'human': human, 'source': r['source'], 'event_type': r['event_type'], 'details': details})
+            # backups
+            cur_b.execute('SELECT site_name, site_domain, backup_date, size_mb, status, extra FROM backup_history WHERE client_id = ? ORDER BY backup_date DESC LIMIT 500', (client_id,))
+            for r in cur_b.fetchall():
+                bd = r['backup_date']
+                ts = None
+                try:
+                    # parse date string to timestamp if possible
+                    ts = int(datetime.datetime.fromisoformat(bd).timestamp()) if bd else None
+                except Exception:
+                    try:
+                        ts = int(datetime.datetime.strptime(bd[:19], '%Y-%m-%d %H:%M:%S').timestamp())
+                    except Exception:
+                        ts = None
+                if not ts:
+                    ts = int(_time.time())
+                human = None
+                try:
+                    human = datetime.datetime.fromtimestamp(ts).strftime('%d.%m.%Y %H:%M:%S')
+                except Exception:
+                    human = bd
+                timeline.append({'type': 'backup', 'ts': ts, 'human': human, 'site_name': r['site_name'], 'site_domain': r['site_domain'], 'size_mb': r['size_mb'], 'status': r['status'], 'extra': r['extra']})
+            conn_b.close()
+        # include work_logs already in logs list
+        for w in logs:
+            # work_date is string; try parse to timestamp
+            ts = None
+            try:
+                ts = int(datetime.datetime.fromisoformat(w.get('work_date')).timestamp())
+            except Exception:
+                try:
+                    ts = int(datetime.datetime.strptime(w.get('work_date')[:19], '%Y-%m-%d %H:%M:%S').timestamp())
+                except Exception:
+                    ts = int(_time.time())
+            timeline.append({'type': 'work_log', 'ts': ts, 'human': w.get('work_date_rus'), 'description': w.get('description'), 'hours': w.get('hours')})
+        # sort timeline by timestamp desc
+        timeline = sorted(timeline, key=lambda x: x.get('ts', 0), reverse=True)
+    except Exception as e:
+        print('Error building timeline:', e)
+
+    return render_template_string(CLIENT_CARD_TEMPLATE, client=client, logs=logs, default_date_from=default_date_from, default_date_to=default_date_to, timeline=timeline)
 
 @app.route("/client/<int:client_id>/update_beget", methods=["POST"])
 def update_beget(client_id):
     login = request.form.get("beget_login", "").strip() # Changed from "login" to "beget_login"
     password = request.form.get("beget_pass", "").strip() # Changed from "password" to "beget_pass"
+    api_key = request.form.get("beget_api_key", "").strip()
     sites = request.form.get("sites", "").strip()
     emails = request.form.get("emails", "").strip()
     schedule = request.form.get("report_schedule", "none").strip()
@@ -494,14 +587,14 @@ def update_beget(client_id):
 
     try:
         import crm_core
-        crm_core.update_client_beget(client_id, login, password, sites, emails, schedule, sections_val, rsd)
-        if not login or not password:
+        crm_core.update_client_beget(client_id, login, password, sites, emails, schedule, sections_val, rsd, api_key)
+        if not login and not api_key:
             flash("Настройки сохранены. Интеграция с хостингом ОТКЛЮЧЕНА (доступы пусты).", "warning")
         else:
             flash("Доступы Beget успешно сохранены и активированы!", "success")
     except Exception as e:
         flash(f"Ошибка при сохранении: {e}", "alert")
-        
+    
     return redirect(f"/client/{client_id}")
 
 @app.route('/client/<int:client_id>/add_log', methods=['POST'])

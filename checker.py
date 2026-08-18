@@ -77,11 +77,25 @@ CREATE TABLE IF NOT EXISTS host_events (
 ''')
 conn.commit()
 
+# Создаем таблицу для ежедневных снимков баланса
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS balance_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER,
+    balance REAL,
+    currency TEXT,
+    snapshot_ts INTEGER,
+    details TEXT,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))
+)
+''')
+conn.commit()
+
 # Список сайтов и агент-URL/ключей — при необходимости расширите
 sites = [
-    {"url": "https://lens29.ru/backup_check.php", "key": "klimov", "name": "Клиника ЛЕНС"},
-    {"url": "https://uniklinika.ru/backup_check.php", "key": "klimov", "name": "Университетская клиника"},
-    {"url": "https://xn--29-6kcaxawaglcjiqe8c8o.xn--p1ai/backup_check.php", "key": "klimov", "name": "Семейная клиника"}
+    {"url": "https://lens29.ru/backup_check.php", "key": "Klimov", "name": "Клиника ЛЕНС"},
+    {"url": "https://uniklinika.ru/backup_check.php", "key": "Klimov", "name": "Университетская клиника"},
+    {"url": "https://xn--29-6kcaxawaglcjiqe8c8o.xn--p1ai/backup_check.php", "key": "Klimov", "name": "Семейная клиника"}
 ]
 
 # Попытка автосопоставления доменов к клиентам на основе crm_data.db (sites поле в clients)
@@ -154,22 +168,36 @@ try:
         cconn = sqlite3.connect(crm_db)
         ccur = cconn.cursor()
         # Получить всех клиентов, у которых есть доступы
-        ccur.execute('SELECT id, beget_login, beget_password FROM clients')
+        ccur.execute('SELECT id, beget_login, beget_password, beget_api_key FROM clients')
         clients = ccur.fetchall()
         now_ts = int(time.time())
         start_ts = now_ts - 30*24*3600  # за последний месяц
-        for cid, blogin, bpass in clients:
-            if not blogin or not bpass:
+        for cid, blogin, bpass, bapi in clients:
+            if not blogin and not bapi:
                 continue
             try:
                 # получим подробный снимок состояния от Beget (domains/sites/databases/mailboxes)
-                snapshot = beget_helper.get_full_beget_report(blogin, bpass)
+                snapshot = beget_helper.get_full_beget_report(blogin, bpass, api_key=bapi)
                 # всегда сохраняем snapshot как запись
                 try:
                     sdata = {'timestamp': now_ts, 'snapshot': snapshot}
                     cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                                   (cid, blogin, None, 'beget_snapshot', json.dumps(sdata, ensure_ascii=False), now_ts, 'beget_snapshot'))
+                                   (cid, blogin or bapi, None, 'beget_snapshot', json.dumps(sdata, ensure_ascii=False), now_ts, 'beget_snapshot'))
                     conn.commit()
+                except Exception:
+                    pass
+
+                # сохранение ежедневного снимка баланса
+                try:
+                    bal = beget_helper.get_account_balance(blogin, bpass, api_key=bapi)
+                    balance_val = bal.get('balance')
+                    currency = bal.get('currency')
+                    # вставляем только один снимок в день для клиента
+                    cursor.execute("SELECT id FROM balance_snapshots WHERE client_id = ? AND date(created_at) = date('now')", (cid,))
+                    if not cursor.fetchone():
+                        cursor.execute('INSERT INTO balance_snapshots (client_id, balance, currency, snapshot_ts, details) VALUES (?, ?, ?, ?, ?)',
+                                       (cid, balance_val, currency, now_ts, json.dumps(bal, ensure_ascii=False)))
+                        conn.commit()
                 except Exception:
                     pass
 

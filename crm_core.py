@@ -7,7 +7,7 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-def update_client_beget(client_id, login, password, sites, emails, report_schedule=None, report_sections=None, report_start_day=None):
+def update_client_beget(client_id, login, password, sites, emails, report_schedule=None, report_sections=None, report_start_day=None, api_key=None):
     conn = get_db_connection()
     cursor = conn.cursor()
     cols = [col[1] for col in cursor.execute("PRAGMA table_info(clients)").fetchall()]
@@ -15,6 +15,8 @@ def update_client_beget(client_id, login, password, sites, emails, report_schedu
         cursor.execute("ALTER TABLE clients ADD COLUMN beget_login TEXT;")
     if "beget_password" not in cols:
         cursor.execute("ALTER TABLE clients ADD COLUMN beget_password TEXT;")
+    if "beget_api_key" not in cols:
+        cursor.execute("ALTER TABLE clients ADD COLUMN beget_api_key TEXT;")
     if "sites" not in cols:
         cursor.execute("ALTER TABLE clients ADD COLUMN sites TEXT;")
     if "email_reports" not in cols:
@@ -41,9 +43,9 @@ def update_client_beget(client_id, login, password, sites, emails, report_schedu
         enc_password = password
 
     if use_freq_col:
-        cursor.execute("UPDATE clients SET beget_login = ?, beget_password = ?, sites = ?, email_reports = ?, report_frequency = ?, report_sections = ?, report_start_day = ? WHERE id = ?", (login, enc_password, sites, emails, report_schedule, report_sections, report_start_day, client_id))
+        cursor.execute("UPDATE clients SET beget_login = ?, beget_password = ?, beget_api_key = ?, sites = ?, email_reports = ?, report_frequency = ?, report_sections = ?, report_start_day = ? WHERE id = ?", (login, enc_password, api_key, sites, emails, report_schedule, report_sections, report_start_day, client_id))
     else:
-        cursor.execute("UPDATE clients SET beget_login = ?, beget_password = ?, sites = ?, email_reports = ?, report_schedule = ?, report_sections = ?, report_start_day = ? WHERE id = ?", (login, enc_password, sites, emails, report_schedule, report_sections, report_start_day, client_id))
+        cursor.execute("UPDATE clients SET beget_login = ?, beget_password = ?, beget_api_key = ?, sites = ?, email_reports = ?, report_schedule = ?, report_sections = ?, report_start_day = ? WHERE id = ?", (login, enc_password, api_key, sites, emails, report_schedule, report_sections, report_start_day, client_id))
     conn.commit()
     conn.close()
 
