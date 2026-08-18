@@ -33,6 +33,24 @@ CREATE TABLE IF NOT EXISTS backup_history (
 ''')
 conn.commit()
 
+# Миграция: добавляем отсутствующие колонки (если таблица была ранее более простой)
+expected_cols = {
+    'site_name': 'TEXT', 'site_url': 'TEXT', 'site_domain': 'TEXT', 'filename': 'TEXT',
+    'backup_date': 'TEXT', 'size_mb': 'REAL', 'detected_at': 'TEXT', 'status': 'TEXT',
+    'source': 'TEXT', 'error': 'TEXT', 'extra': 'TEXT'
+}
+
+cursor.execute("PRAGMA table_info('backup_history')")
+existing = {row[1] for row in cursor.fetchall()}
+for col, coltype in expected_cols.items():
+    if col not in existing:
+        try:
+            cursor.execute(f"ALTER TABLE backup_history ADD COLUMN {col} {coltype}")
+            print(f"[MIGRATE] Added missing column: {col}")
+        except Exception as e:
+            print(f"[MIGRATE] Can't add column {col}: {e}")
+conn.commit()
+
 # Список сайтов и агент-URL/ключей — при необходимости расширите
 sites = [
     {"url": "https://lens29.ru/backup_check.php", "key": "klimov", "name": "Клиника ЛЕНС"},
