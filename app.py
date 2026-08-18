@@ -425,6 +425,13 @@ def generate_report(client_id):
 
             conn_b.close()
 
+            # Если ничего не найдено для клиента, покажем все бэкапы за период (для отладки)
+            if not backups:
+                backups = all_rows
+                backups_note = 'Показаны все бэкапы за период, сопоставление с сайтом клиента не обнаружило совпадений.'
+            else:
+                backups_note = ''
+
     except Exception as e:
         print(f'Error loading backups: {e}')
 
