@@ -258,19 +258,33 @@ CLIENT_CARD_TEMPLATE = """
                 </div>
                 <div>
                     <button type="submit" class="btn-link" style="margin-top: 0; padding: 10px 14px;">Сформировать отчет</button>
-                    <button type="button" onclick="openPrevMonth()" style="margin-top:0; margin-left:8px; padding:10px 12px;" class="btn-link">Прошлый месяц</button>
+                    <button type="button" onclick="setPrevMonth()" class="btn-link" style="margin-left:8px; padding:10px 12px;">Прошлый месяц</button>
+                    <button type="button" onclick="setThisMonth()" class="btn-link" style="margin-left:8px; padding:10px 12px;">Текущий месяц</button>
+                    <button type="button" onclick="setLast7Days()" class="btn-link" style="margin-left:8px; padding:10px 12px;">Последние 7 дней</button>
                 </div>
             </form>
             <script>
-                function openPrevMonth(){
+                function fmtY(d){ return d.toISOString().slice(0,10); }
+                function setPrevMonth(){
                     const now = new Date();
                     const firstThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
                     const lastMonthEnd = new Date(firstThisMonth.getTime() - 1);
                     const from = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1);
                     const to = lastMonthEnd;
-                    const fmt = (d)=> d.toISOString().slice(0,10);
-                    const url = `/client/{{ client.id }}/report?date_from=${fmt(from)}&date_to=${fmt(to)}`;
-                    window.open(url, '_blank');
+                    document.querySelector('input[name="date_from"]').value = fmtY(from);
+                    document.querySelector('input[name="date_to"]').value = fmtY(to);
+                }
+                function setThisMonth(){
+                    const now = new Date();
+                    const from = new Date(now.getFullYear(), now.getMonth(), 1);
+                    document.querySelector('input[name="date_from"]').value = fmtY(from);
+                    document.querySelector('input[name="date_to"]').value = fmtY(new Date());
+                }
+                function setLast7Days(){
+                    const now = new Date();
+                    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate()-6);
+                    document.querySelector('input[name="date_from"]').value = fmtY(from);
+                    document.querySelector('input[name="date_to"]').value = fmtY(new Date());
                 }
             </script>
         </div>
@@ -367,7 +381,7 @@ REPORT_TEMPLATE = """
         <table>
             <tr><th>Сайт / Источник</th><th>Дата бэкапа</th><th>Размер</th></tr>
             {% for b in backups %}
-            <tr><td>{{ b.site_name }}</td><td>{{ b.backup_date }}</td><td>{{ b.size_mb }} МБ</td></tr>
+            <tr><td>{{ b.site_name }}</td><td>{{ b.backup_date_rus or b.backup_date }}</td><td>{% if b.size_mb %}{{ b.size_mb }} МБ{% else %}-{% endif %}</td></tr>
             {% else %}
             <tr><td colspan="3" style="text-align:center;">За выбранный период бэкапов в базе не зафиксировано</td></tr>
             {% endfor %}
@@ -650,7 +664,7 @@ def generate_report(client_id):
             for r in rows:
                 human = None
                 try:
-                    human = datetime.datetime.fromtimestamp(r.get('event_time')).strftime('%Y-%m-%d %H:%M:%S') if r.get('event_time') else None
+                    human = datetime.datetime.fromtimestamp(r.get('event_time')).strftime('%d.%m.%Y %H:%M:%S') if r.get('event_time') else None
                 except Exception:
                     human = None
                 details_raw = r.get('details')
@@ -747,8 +761,42 @@ def generate_report(client_id):
     except Exception:
         pass
 
+    # format backups dates into Russian readable form
+    import datetime as _dt
+    for b in backups:
+        bd = b.get('backup_date')
+        bd_rus = bd
+        try:
+            if bd:
+                try:
+                    dt = _dt.datetime.fromisoformat(bd)
+                except Exception:
+                    try:
+                        dt = _dt.datetime.strptime(bd[:19], '%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        dt = None
+                if dt:
+                    bd_rus = dt.strftime('%d.%m.%Y %H:%M:%S')
+        except Exception:
+            bd_rus = bd
+        b['backup_date_rus'] = bd_rus
+
+    # format report header dates
+    date_from_rus = date_from
+    date_to_rus = date_to
+    try:
+        df = _dt.datetime.strptime(date_from, '%Y-%m-%d')
+        date_from_rus = df.strftime('%d.%m.%Y')
+    except Exception:
+        pass
+    try:
+        dtv = _dt.datetime.strptime(date_to, '%Y-%m-%d')
+        date_to_rus = dtv.strftime('%d.%m.%Y')
+    except Exception:
+        pass
+
     print(f'[REPORT] client_id={client_id} backups_count={len(backups)} host_events={len(host_events)}')
-    return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from, date_to=date_to, host_events=host_events, grouped_events=grouped_events, domain_alerts=domain_alerts)
+    return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from_rus, date_to=date_to_rus, host_events=host_events, grouped_events=grouped_events, domain_alerts=domain_alerts)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3002)
