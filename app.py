@@ -402,23 +402,29 @@ def generate_report(client_id):
             conn_b.row_factory = sqlite3.Row
             cursor_b = conn_b.cursor()
 
-            # Попытаемся сопоставить сайты клиента с записью в backup_history
+            # Получаем все бэкапы за период, затем фильтруем по списку сайтов клиента
+            cursor_b.execute('SELECT site_name, site_domain, backup_date, size_mb, extra FROM backup_history WHERE date(backup_date) BETWEEN ? AND ? ORDER BY backup_date DESC', (date_from, date_to))
+            all_rows = [dict(r) for r in cursor_b.fetchall()]
+
             client_sites_raw = client.get('sites') or ''
             client_sites = [s.strip().lower().replace('https://','').replace('http://','').split('/')[0] for s in client_sites_raw.split(',') if s.strip()]
-            company_name = client.get('company_name')
+            company_name = (client.get('company_name') or '').strip()
 
-            if client_sites:
-                # Динамический IN для доменов
-                placeholders = ','.join(['?']*len(client_sites))
-                sql = f"SELECT site_name, site_domain, backup_date, size_mb FROM backup_history WHERE site_domain IN ({placeholders}) AND date(backup_date) BETWEEN ? AND ? ORDER BY backup_date DESC"
-                params = client_sites + [date_from, date_to]
-                cursor_b.execute(sql, params)
-            else:
-                # Подача по имени организации (устаревший метод)
-                cursor_b.execute('SELECT site_name, site_domain, backup_date, size_mb FROM backup_history WHERE site_name = ? AND date(backup_date) BETWEEN ? AND ? ORDER BY backup_date DESC', (company_name, date_from, date_to))
+            # фильтрация
+            backups = []
+            for r in all_rows:
+                domain = (r.get('site_domain') or '').lower()
+                name = (r.get('site_name') or '').strip()
+                matched = False
+                if domain and domain in client_sites:
+                    matched = True
+                if not matched and company_name and company_name == name:
+                    matched = True
+                if matched:
+                    backups.append(r)
 
-            backups = [dict(r) for r in cursor_b.fetchall()]
             conn_b.close()
+
     except Exception as e:
         print(f'Error loading backups: {e}')
 
