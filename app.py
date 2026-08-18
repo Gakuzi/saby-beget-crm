@@ -180,8 +180,8 @@ CLIENT_CARD_TEMPLATE = """
     <title>Карточка: {{ client.company_name }}</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #2e1065 0%, #1e1b4b 50%, #0f172a 100%); min-height: 100vh; color: #f1f5f9; padding: 25px; margin: 0; }
-        .container { max-width: 950px; margin: auto; background: #1e293b; padding: 25px; border-radius: 8px; }
-        h2, h3 { color: #38bdf8; }
+        .container { max-width: 1200px; margin: auto; background: #1e293b; padding: 25px; border-radius: 8px; }
+        h2, h3, h4 { color: #38bdf8; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .box { background: #0f172a; padding: 15px; border-radius: 6px; border: 1px solid #334155; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
@@ -190,8 +190,45 @@ CLIENT_CARD_TEMPLATE = """
         input, textarea { width: 100%; padding: 8px; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 4px; margin-top: 5px; }
         button, .btn-link { background: #2563eb; color: white; padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; text-decoration:none; display:inline-block; }
         button:hover, .btn-link:hover { background: #1d4ed8; }
+        .btn-success { background: #10b981; }
+        .btn-success:hover { background: #059669; }
         a { color: #38bdf8; }
+        .tab-container { margin-top: 20px; }
+        .tab-buttons { display: flex; gap: 10px; border-bottom: 2px solid #334155; padding-bottom: 10px; }
+        .tab-btn { background: transparent; border: 1px solid #475569; color: #94a3b8; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .tab-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
+        .tab-content { display: none; padding: 15px 0; }
+        .tab-content.active { display: block; }
+        .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .status-done { background: #10b981; color: white; }
+        .status-pending { background: #f59e0b; color: white; }
+        .status-cancelled { background: #ef4444; color: white; }
     </style>
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+        function syncSaby(clientId) {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Синхронизация...';
+            fetch('/api/saby/sync/' + clientId, {method: 'POST'})
+                .then(r => r.json())
+                .then(data => {
+                    btn.disabled = false;
+                    btn.textContent = '✓ Синхронизировано';
+                    setTimeout(() => { location.reload(); }, 1500);
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    btn.textContent = 'Ошибка синхронизации';
+                    alert('Ошибка: ' + err);
+                });
+        }
+    </script>
 </head>
 <body>
     <div class="container">
@@ -241,23 +278,92 @@ CLIENT_CARD_TEMPLATE = """
             </form>
         </div>
 
-        <h3 style="margin-top:25px;">Учет выполненных работ и обращений</h3>
-        <table>
-            <tr><th>Дата</th><th>Описание работ / бэкапов / инцидентов</th><th>Часы</th></tr>
-            {% for log in logs %}
-            <tr><td>{{ log.work_date }}</td><td>{{ log.description }}</td><td>{{ log.hours }} ч.</td></tr>
-            {% else %}
-            <tr><td colspan="3" style="text-align:center; color:#94a3b8;">Нет записей</td></tr>
-            {% endfor %}
-        </table>
+        <!-- Вкладки с данными из Saby -->
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="switchTab('tab-works')">📋 Работы из Saby</button>
+                <button class="tab-btn" onclick="switchTab('tab-requests')">📞 Обращения</button>
+                <button class="tab-btn" onclick="switchTab('tab-documents')">📄 Документы (Акты/Счета)</button>
+                <button class="tab-btn" onclick="switchTab('tab-local')">✏️ Локальные записи</button>
+            </div>
 
-        <form action="/client/{{ client.id }}/add_log" method="POST" style="margin-top:15px;" class="box">
-            <h4>Добавить запись о работах</h4>
-            <textarea name="description" rows="2" placeholder="Например: Штатный бэкап, создание почтового ящика info@site.ru..." required></textarea>
-            <label style="margin-top:10px; display:block;">Часы:</label>
-            <input type="number" step="0.5" name="hours" value="1.0" required style="width: 100px;">
-            <button type="submit">Добавить запись</button>
-        </form>
+            <div id="tab-works" class="tab-content active">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h4>Выполненные работы из СБИС</h4>
+                    <button class="btn-success" onclick="syncSaby({{ client.id }})">🔄 Синхронизировать с Saby</button>
+                </div>
+                <table>
+                    <tr><th>Дата</th><th>Наименование работы</th><th>Количество</th><th>Ед. изм.</th><th>Цена</th><th>Сумма</th></tr>
+                    {% for work in saby_works %}
+                    <tr>
+                        <td>{{ work.work_date }}</td>
+                        <td>{{ work.name }}</td>
+                        <td>{{ work.quantity }}</td>
+                        <td>{{ work.unit }}</td>
+                        <td>{{ work.price }} ₽</td>
+                        <td>{{ work.total }} ₽</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" style="text-align:center; color:#94a3b8;">Нет данных. Нажмите "Синхронизировать с Saby"</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+
+            <div id="tab-requests" class="tab-content">
+                <h4>Обращения клиентов из СБИС</h4>
+                <table>
+                    <tr><th>Дата создания</th><th>Тема</th><th>Статус</th><th>Ответственный</th></tr>
+                    {% for req in saby_requests %}
+                    <tr>
+                        <td>{{ req.created_date }}</td>
+                        <td>{{ req.subject }}</td>
+                        <td><span class="status-badge {% if req.status == 'Завершено' %}status-done{% elif req.status == 'В работе' %}status-pending{% else %}status-cancelled{% endif %}">{{ req.status }}</span></td>
+                        <td>{{ req.responsible or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" style="text-align:center; color:#94a3b8;">Нет обращений</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+
+            <div id="tab-documents" class="tab-content">
+                <h4>Документы из СБИС (Акты, Счета)</h4>
+                <table>
+                    <tr><th>Тип</th><th>Номер</th><th>Дата</th><th>Сумма</th><th>Статус</th></tr>
+                    {% for doc in saby_documents %}
+                    <tr>
+                        <td>{{ doc.doc_type }}</td>
+                        <td>{{ doc.number }}</td>
+                        <td>{{ doc.date }}</td>
+                        <td>{{ doc.amount }} ₽</td>
+                        <td><span class="status-badge {% if doc.status == 'Подписан' %}status-done{% elif doc.status == 'На подписании' %}status-pending{% else %}status-cancelled{% endif %}">{{ doc.status }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" style="text-align:center; color:#94a3b8;">Нет документов</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+
+            <div id="tab-local" class="tab-content">
+                <h4>Локальные записи о работах</h4>
+                <table>
+                    <tr><th>Дата</th><th>Описание работ / бэкапов / инцидентов</th><th>Часы</th></tr>
+                    {% for log in logs %}
+                    <tr><td>{{ log.work_date }}</td><td>{{ log.description }}</td><td>{{ log.hours }} ч.</td></tr>
+                    {% else %}
+                    <tr><td colspan="3" style="text-align:center; color:#94a3b8;">Нет записей</td></tr>
+                    {% endfor %}
+                </table>
+
+                <form action="/client/{{ client.id }}/add_log" method="POST" style="margin-top:15px;" class="box">
+                    <h4>Добавить запись о работах</h4>
+                    <textarea name="description" rows="2" placeholder="Например: Штатный бэкап, создание почтового ящика info@site.ru..." required></textarea>
+                    <label style="margin-top:10px; display:block;">Часы:</label>
+                    <input type="number" step="0.5" name="hours" value="1.0" required style="width: 100px;">
+                    <button type="submit">Добавить запись</button>
+                </form>
+            </div>
+        </div>
     </div>
 </body>
 </html>
@@ -355,7 +461,43 @@ def client_card(client_id):
     row = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
     client = dict(row) if row else {}
     logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (client_id,)).fetchall()
-    return render_template_string(CLIENT_CARD_TEMPLATE, client=client, logs=logs)
+    
+    # Загружаем данные из Saby для этого клиента
+    saby_works = []
+    saby_requests = []
+    saby_documents = []
+    
+    if client.get('inn'):
+        try:
+            # Получаем работы из БД
+            saby_works = db.execute(
+                'SELECT * FROM saby_works WHERE inn = ? ORDER BY work_date DESC', 
+                (client['inn'],)
+            ).fetchall()
+            saby_works = [dict(w) for w in saby_works]
+            
+            # Получаем обращения
+            saby_requests = db.execute(
+                'SELECT * FROM saby_requests WHERE inn = ? ORDER BY created_date DESC',
+                (client['inn'],)
+            ).fetchall()
+            saby_requests = [dict(r) for r in saby_requests]
+            
+            # Получаем документы
+            saby_documents = db.execute(
+                'SELECT * FROM saby_documents WHERE inn = ? ORDER BY date DESC',
+                (client['inn'],)
+            ).fetchall()
+            saby_documents = [dict(d) for d in saby_documents]
+        except Exception as e:
+            print(f'Error loading Saby data: {e}')
+    
+    return render_template_string(CLIENT_CARD_TEMPLATE, 
+                                  client=client, 
+                                  logs=logs,
+                                  saby_works=saby_works,
+                                  saby_requests=saby_requests,
+                                  saby_documents=saby_documents)
 
 @app.route("/client/<int:client_id>/update_beget", methods=["POST"])
 def update_beget(client_id):
@@ -379,6 +521,28 @@ def update_beget(client_id):
 def add_log(client_id):
     crm_core.add_work_log(client_id, request.form.get('description'), request.form.get('hours', 1.0))
     return redirect(url_for('client_card', client_id=client_id))
+
+@app.route('/api/saby/sync/<int:client_id>', methods=['POST'])
+def api_saby_sync(client_id):
+    """API endpoint для ручной синхронизации с Saby"""
+    try:
+        from saby_integration import run_daily_sync
+        db = get_db()
+        client = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
+        
+        if not client:
+            return jsonify({'error': 'Клиент не найден'}), 404
+        
+        # Запускаем синхронизацию для конкретного клиента
+        result = run_daily_sync(client_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Синхронизация завершена',
+            'details': result
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/client/<int:client_id>/report')
 def generate_report(client_id):
