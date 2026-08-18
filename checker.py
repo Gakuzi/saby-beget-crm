@@ -162,97 +162,103 @@ try:
             if not blogin or not bpass:
                 continue
             try:
-                events = beget_helper.get_events(blogin, bpass, start_ts, now_ts)
-                if events:
-                    # сохранение полного snapshot (как один запись) и по-элементные дифы
-                    try:
-                        snapshot = {'timestamp': now_ts, 'events': events}
-                        cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                                       (cid, blogin, None, 'beget_snapshot', json.dumps(snapshot, ensure_ascii=False), now_ts, 'beget_snapshot'))
-                    except Exception:
-                        pass
+                # получим подробный снимок состояния от Beget (domains/sites/databases/mailboxes)
+                snapshot = beget_helper.get_full_beget_report(blogin, bpass)
+                # всегда сохраняем snapshot как запись
+                try:
+                    sdata = {'timestamp': now_ts, 'snapshot': snapshot}
+                    cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                                   (cid, blogin, None, 'beget_snapshot', json.dumps(sdata, ensure_ascii=False), now_ts, 'beget_snapshot'))
+                    conn.commit()
+                except Exception:
+                    pass
 
-                    # попытка детекции изменений: сравним предыдущий snapshot (если есть)
-                    try:
-                        cur = conn.cursor()
-                        cur.execute('SELECT id, details, event_time FROM host_events WHERE client_id = ? AND source = ? ORDER BY event_time DESC LIMIT 2', (cid, 'beget_snapshot'))
-                        rows = cur.fetchall()
-                        if len(rows) >= 2:
-                            # rows[0] is current (inserted), rows[1] previous
-                            prev = json.loads(rows[1][1]) if rows[1][1] else {}
-                            curr = snapshot
-                            # domains
-                            prev_domains = set([d.get('fqdn') or d.get('domain') for d in prev.get('events', []) if d.get('event_type') == 'domain_presence'])
-                            curr_domains = set([d.get('details', {}).get('fqdn') or d.get('details', {}).get('domain') for d in curr.get('events', []) if d.get('event_type') == 'domain_presence'])
-                            created = curr_domains - prev_domains
-                            removed = prev_domains - curr_domains
-                            for dom in created:
-                                try:
-                                    cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, dom, 'domain_created', json.dumps({'domain': dom}, ensure_ascii=False), now_ts, 'beget_diff'))
-                                except Exception:
-                                    pass
-                            for dom in removed:
-                                try:
-                                    cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, dom, 'domain_removed', json.dumps({'domain': dom}, ensure_ascii=False), now_ts, 'beget_diff'))
-                                except Exception:
-                                    pass
-                            # аналогично для сайтов
-                            prev_sites = set([s.get('name') or s.get('site') or s.get('path') for s in prev.get('events', []) if s.get('event_type') == 'site_presence'])
-                            curr_sites = set([s.get('details', {}).get('name') or s.get('details', {}).get('site') or s.get('details', {}).get('path') for s in curr.get('events', []) if s.get('event_type') == 'site_presence'])
-                            created = set([x for x in curr_sites if x and x not in prev_sites])
-                            removed = set([x for x in prev_sites if x and x not in curr_sites])
-                            for s in created:
-                                try:
-                                    cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, s, 'site_created', json.dumps({'site': s}, ensure_ascii=False), now_ts, 'beget_diff'))
-                                except Exception:
-                                    pass
-                            for s in removed:
-                                try:
-                                    cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, s, 'site_removed', json.dumps({'site': s}, ensure_ascii=False), now_ts, 'beget_diff'))
-                                except Exception:
-                                    pass
-                            # БД
-                            prev_dbs = set([db.get('name') for db in prev.get('events', []) if db.get('event_type') == 'db_presence' and db.get('details')])
-                            curr_dbs = set([db.get('details', {}).get('name') for db in curr.get('events', []) if db.get('event_type') == 'db_presence' and db.get('details')])
-                            for dbn in (curr_dbs - prev_dbs):
-                                try:
-                                    cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, None, 'db_created', json.dumps({'db': dbn}, ensure_ascii=False), now_ts, 'beget_diff'))
-                                except Exception:
-                                    pass
-                            for dbn in (prev_dbs - curr_dbs):
-                                try:
-                                    cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, None, 'db_removed', json.dumps({'db': dbn}, ensure_ascii=False), now_ts, 'beget_diff'))
-                                except Exception:
-                                    pass
-                            # Почта: собираем mailbox addresses
-                            prev_m = set()
-                            curr_m = set()
-                            for e in prev.get('events', []):
-                                if e.get('event_type') == 'mailbox_presence':
-                                    d = e.get('details', {})
-                                    if isinstance(d, dict):
-                                        prev_m.add(f"{d.get('mailbox')}@{d.get('domain')}" if d.get('mailbox') and d.get('domain') else None)
-                            for e in curr.get('events', []):
-                                if e.get('event_type') == 'mailbox_presence':
-                                    d = e.get('details', {})
-                                    if isinstance(d, dict):
-                                        curr_m.add(f"{d.get('mailbox')}@{d.get('domain')}" if d.get('mailbox') and d.get('domain') else None)
-                            prev_m = set([x for x in prev_m if x])
-                            curr_m = set([x for x in curr_m if x])
-                            for m in (curr_m - prev_m):
-                                try:
-                                    cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, None, 'mailbox_created', json.dumps({'mailbox': m}, ensure_ascii=False), now_ts, 'beget_diff'))
-                                except Exception:
-                                    pass
-                            for m in (prev_m - curr_m):
-                                try:
-                                    cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, None, 'mailbox_removed', json.dumps({'mailbox': m}, ensure_ascii=False), now_ts, 'beget_diff'))
-                                except Exception:
-                                    pass
-                            conn.commit()
-                    except Exception:
-                        pass
-                    print(f"[BEGET] client {cid}: saved {len(events)} events")
+                # попытаемся сделать простую дифф-детекцию: если есть предыдущий snapshot
+                try:
+                    cur = conn.cursor()
+                    cur.execute("SELECT details, event_time FROM host_events WHERE client_id = ? AND source = 'beget_snapshot' ORDER BY event_time DESC LIMIT 2", (cid,))
+                    rows = cur.fetchall()
+                    if len(rows) >= 2:
+                        curr = json.loads(rows[0][0]) if rows[0][0] else {}
+                        prev = json.loads(rows[1][0]) if rows[1][0] else {}
+                        prev_snap = prev.get('snapshot', {})
+                        curr_snap = curr.get('snapshot', {})
+                        # domains
+                        prev_domains = set([d.get('fqdn') or d.get('domain') for d in prev_snap.get('domains', []) if d])
+                        curr_domains = set([d.get('fqdn') or d.get('domain') for d in curr_snap.get('domains', []) if d])
+                        for dom in (curr_domains - prev_domains):
+                            try:
+                                cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, dom, 'domain_created', json.dumps({'domain': dom}, ensure_ascii=False), now_ts, 'beget_diff'))
+                            except Exception:
+                                pass
+                        for dom in (prev_domains - curr_domains):
+                            try:
+                                cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, dom, 'domain_removed', json.dumps({'domain': dom}, ensure_ascii=False), now_ts, 'beget_diff'))
+                            except Exception:
+                                pass
+                        # sites
+                        prev_sites = set([s.get('name') or s.get('site') or s.get('path') for s in prev_snap.get('sites', []) if s])
+                        curr_sites = set([s.get('name') or s.get('site') or s.get('path') for s in curr_snap.get('sites', []) if s])
+                        for s in (curr_sites - prev_sites):
+                            try:
+                                cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, s, 'site_created', json.dumps({'site': s}, ensure_ascii=False), now_ts, 'beget_diff'))
+                            except Exception:
+                                pass
+                        for s in (prev_sites - curr_sites):
+                            try:
+                                cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, s, 'site_removed', json.dumps({'site': s}, ensure_ascii=False), now_ts, 'beget_diff'))
+                            except Exception:
+                                pass
+                        # databases
+                        prev_dbs = set([d.get('name') for d in prev_snap.get('databases', []) if d and d.get('name')])
+                        curr_dbs = set([d.get('name') for d in curr_snap.get('databases', []) if d and d.get('name')])
+                        for dbn in (curr_dbs - prev_dbs):
+                            try:
+                                cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, None, 'db_created', json.dumps({'db': dbn}, ensure_ascii=False), now_ts, 'beget_diff'))
+                            except Exception:
+                                pass
+                        for dbn in (prev_dbs - curr_dbs):
+                            try:
+                                cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, None, 'db_removed', json.dumps({'db': dbn}, ensure_ascii=False), now_ts, 'beget_diff'))
+                            except Exception:
+                                pass
+                        # mailboxes
+                        prev_mb = set()
+                        curr_mb = set()
+                        for b in prev_snap.get('mailboxes', []):
+                            if isinstance(b, dict):
+                                m = b.get('mailbox') or b.get('address') or None
+                                fq = b.get('domain_fqdn') or b.get('domain') or None
+                                if m and fq:
+                                    prev_mb.add(f"{m}@{fq}")
+                        for b in curr_snap.get('mailboxes', []):
+                            if isinstance(b, dict):
+                                m = b.get('mailbox') or b.get('address') or None
+                                fq = b.get('domain_fqdn') or b.get('domain') or None
+                                if m and fq:
+                                    curr_mb.add(f"{m}@{fq}")
+                        for m in (curr_mb - prev_mb):
+                            try:
+                                cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, None, 'mailbox_created', json.dumps({'mailbox': m}, ensure_ascii=False), now_ts, 'beget_diff'))
+                            except Exception:
+                                pass
+                        for m in (prev_mb - curr_mb):
+                            try:
+                                cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)', (cid, blogin, None, 'mailbox_removed', json.dumps({'mailbox': m}, ensure_ascii=False), now_ts, 'beget_diff'))
+                            except Exception:
+                                pass
+                        conn.commit()
+                except Exception:
+                    pass
+                print(f"[BEGET] client {cid}: snapshot saved and diffs applied")
+            except Exception as e:
+                print(f"[BEGET] error for client {cid}: {e}")
+                try:
+                    cursor.execute('INSERT INTO host_events (client_id, host_account, site, event_type, details, event_time, source) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                                   (cid, blogin, None, 'beget_error', json.dumps({'error': str(e)}, ensure_ascii=False), now_ts, 'beget_error'))
+                    conn.commit()
+                except Exception:
+                    pass
             except Exception as e:
                 print(f"[BEGET] error for client {cid}: {e}")
         cconn.close()
