@@ -61,6 +61,22 @@ for col, coltype in expected_cols.items():
             print(f"[MIGRATE] Can't add column {col}: {e}")
 conn.commit()
 
+# Создаем таблицу host_events для хранения событий хостинга
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS host_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER,
+    host_account TEXT,
+    site TEXT,
+    event_type TEXT,
+    details TEXT,
+    event_time INTEGER,
+    source TEXT,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now'))
+)
+''')
+conn.commit()
+
 # Список сайтов и агент-URL/ключей — при необходимости расширите
 sites = [
     {"url": "https://lens29.ru/backup_check.php", "key": "klimov", "name": "Клиника ЛЕНС"},
@@ -117,6 +133,18 @@ except Exception as e:
 
 # Refresh commit
 conn.commit()
+
+# Обновим существующие записи backup_history, установив client_id по site_mapping где возможно
+try:
+    cursor.execute('SELECT site_domain, client_id FROM site_mapping')
+    for sd, cid in cursor.fetchall():
+        if sd:
+            cursor.execute('UPDATE backup_history SET client_id = ? WHERE site_domain = ? AND (client_id IS NULL OR client_id = "")', (cid, sd))
+    conn.commit()
+    print('[MAPPING] updated existing backup_history with client_id where possible')
+except Exception as e:
+    print(f'[MAPPING] update existing failed: {e}')
+
 
 now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
