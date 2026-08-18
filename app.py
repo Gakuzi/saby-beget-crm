@@ -229,7 +229,17 @@ CLIENT_CARD_TEMPLATE = """
                         <option value="weekly" {% if (client.report_schedule or '') == 'weekly' %}selected{% endif %}>Еженедельно (по понедельникам — за прошлую неделю)</option>
                         <option value="monthly" {% if (client.report_schedule or '') == 'monthly' %}selected{% endif %}>Ежемесячно (1 раз в месяц — за предыдущий месяц)</option>
                     </select>
-                    <button type="submit">Сохранить доступы</button>
+                    <label style="display:block; margin-top:8px;">День старта отчётов (1-28):</label>
+                    <input type="number" min="1" max="28" name="report_start_day" value="{{ client.report_start_day or '' }}">
+                    <div style="margin-top:8px;">
+                        <label style="font-weight:bold; display:block;">Выбор данных для включения в автоматический отчет:</label>
+                        <label><input type="checkbox" name="report_sections" value="backups" {% if 'backups' in (client.report_sections or '') %}checked{% endif %}> Резервные копии (включая 1С-Битрикс)</label><br>
+                        <label><input type="checkbox" name="report_sections" value="host_events" {% if 'host_events' in (client.report_sections or '') %}checked{% endif %}> События хостинга (домены, сайты, БД)</label><br>
+                        <label><input type="checkbox" name="report_sections" value="mailboxes" {% if 'mailboxes' in (client.report_sections or '') %}checked{% endif %}> Почтовые ящики (создание/удаление)</label><br>
+                        <label><input type="checkbox" name="report_sections" value="account" {% if 'account' in (client.report_sections or '') %}checked{% endif %}> Информация об аккаунте / баланс</label><br>
+                        <label><input type="checkbox" name="report_sections" value="certs" {% if 'certs' in (client.report_sections or '') %}checked{% endif %}> Состояние сертификатов / продления</label>
+                    </div>
+                    <button type="submit" style="margin-top:10px;">Сохранить доступы</button>
                 </form>
             </div>
         </div>
@@ -316,18 +326,31 @@ REPORT_TEMPLATE = """
         <p>{{ beget_status }}</p>
 
         <h3>События хостинга (Beget)</h3>
+        <p style="color:#b91c1c;">Алерты доменов: {% if domain_alerts %}{% for a in domain_alerts %}<strong>{{ a.domain }}</strong> истекает {{ a.expires }} (через {{ a.days_left }} дней) — {{ a.severity }}{% if not loop.last %}; {% endif %}{% endfor %}{% else %}критичных доменов не обнаружено{% endif %}</p>
+
+        <h4>Краткая сводка по событиям</h4>
+        {% if grouped_events.snapshots %}
+            <p>Последние снимки аккаунта: {{ grouped_events.snapshots|length }}</p>
+        {% endif %}
+
         <table>
-            <tr><th>Дата/Время</th><th>Тип</th><th>Сайт / Аккаунт</th><th>Детали</th></tr>
-            {% for ev in host_events %}
-            <tr>
-                <td>{{ ev.human_time or '-' }}</td>
-                <td>{{ ev.event_type }}</td>
-                <td>{{ ev.site or ev.host_account }}</td>
-                <td><pre style="white-space:pre-wrap;">{{ ev.details }}</pre></td>
-            </tr>
-            {% else %}
-            <tr><td colspan="4" style="text-align:center;">За период событий хостинга не найдено</td></tr>
+            <tr><th>Дата/Время</th><th>Категория</th><th>Объект</th><th>Описание</th><th>Влияние</th></tr>
+            {% set any = false %}
+            {% for cat, items in grouped_events.items() %}
+                {% for ev in items %}
+                    {% set any = true %}
+                    <tr>
+                        <td>{{ ev.human_time or '-' }}</td>
+                        <td>{{ cat }}</td>
+                        <td>{{ (ev.details.domain if ev.details is mapping and ev.details.domain) or (ev.site) or (ev.host_account) or '-' }}</td>
+                        <td>{{ ev.description }}</td>
+                        <td>{{ ev.impact }}{% if ev.impact_note %}: {{ ev.impact_note }}{% endif %}</td>
+                    </tr>
+                {% endfor %}
             {% endfor %}
+            {% if not any %}
+            <tr><td colspan="5" style="text-align:center;">За период событий хостинга не найдено</td></tr>
+            {% endif %}
         </table>
 
         <h3>Резервные копии (Автоматические и 1С-Битрикс)</h3>
@@ -412,9 +435,22 @@ def update_beget(client_id):
     sites = request.form.get("sites", "").strip()
     emails = request.form.get("emails", "").strip()
     schedule = request.form.get("report_schedule", "none").strip()
+    sections = request.form.getlist('report_sections') if request.form.getlist('report_sections') else request.form.get('report_sections')
+    if isinstance(sections, list):
+        sections_val = ','.join(sections)
+    else:
+        sections_val = sections
+    # report_start_day from form
+    try:
+        rsd = int(request.form.get('report_start_day'))
+        if rsd < 1 or rsd > 28:
+            rsd = None
+    except Exception:
+        rsd = None
+
     try:
         import crm_core
-        crm_core.update_client_beget(client_id, login, password, sites, emails, schedule)
+        crm_core.update_client_beget(client_id, login, password, sites, emails, schedule, sections_val, rsd)
         if not login or not password:
             flash("Настройки сохранены. Интеграция с хостингом ОТКЛЮЧЕНА (доступы пусты).", "warning")
         else:
@@ -509,18 +545,21 @@ def generate_report(client_id):
 
     # Получаем события хостинга из backups.db host_events за период
     host_events = []
+    grouped_events = {'domains': [], 'sites': [], 'databases': [], 'mailboxes': [], 'snapshots': [], 'diffs': [], 'others': []}
     try:
-        import os
+        import os, json as _json
         db_path_backups = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups.db')
         if os.path.exists(db_path_backups):
             conn_b = sqlite3.connect(db_path_backups)
             conn_b.row_factory = sqlite3.Row
             cur_b = conn_b.cursor()
+            start_ts = int(datetime.datetime.strptime(date_from, '%Y-%m-%d').timestamp())
+            end_ts = int(datetime.datetime.strptime(date_to, '%Y-%m-%d').timestamp()) + 86400
             # client_id may be null — but we filter by client.id when available
             if client_id:
-                cur_b.execute('SELECT * FROM host_events WHERE client_id = ? AND event_time BETWEEN ? AND ? ORDER BY event_time DESC', (client_id, int(datetime.datetime.strptime(date_from, '%Y-%m-%d').timestamp()), int(datetime.datetime.strptime(date_to, '%Y-%m-%d').timestamp()) + 86400))
+                cur_b.execute('SELECT * FROM host_events WHERE client_id = ? AND event_time BETWEEN ? AND ? ORDER BY event_time DESC', (client_id, start_ts, end_ts))
             else:
-                cur_b.execute('SELECT * FROM host_events WHERE event_time BETWEEN ? AND ? ORDER BY event_time DESC', (int(datetime.datetime.strptime(date_from, '%Y-%m-%d').timestamp()), int(datetime.datetime.strptime(date_to, '%Y-%m-%d').timestamp()) + 86400))
+                cur_b.execute('SELECT * FROM host_events WHERE event_time BETWEEN ? AND ? ORDER BY event_time DESC', (start_ts, end_ts))
             rows = [dict(r) for r in cur_b.fetchall()]
             for r in rows:
                 human = None
@@ -528,23 +567,102 @@ def generate_report(client_id):
                     human = datetime.datetime.fromtimestamp(r.get('event_time')).strftime('%Y-%m-%d %H:%M:%S') if r.get('event_time') else None
                 except Exception:
                     human = None
-                host_events.append({
+                details_raw = r.get('details')
+                details = None
+                try:
+                    details = _json.loads(details_raw) if details_raw else None
+                except Exception:
+                    details = details_raw
+
+                ev = {
                     'id': r.get('id'),
                     'client_id': r.get('client_id'),
                     'host_account': r.get('host_account'),
                     'site': r.get('site'),
                     'event_type': r.get('event_type'),
-                    'details': r.get('details'),
+                    'details': details,
                     'event_time': r.get('event_time'),
                     'human_time': human,
                     'source': r.get('source')
-                })
+                }
+
+                host_events.append(ev)
+
+                # categorize and create human-friendly description + impact
+                desc = ''
+                impact = 'Low'
+                impact_note = ''
+                et = ev['event_type'] or ''
+                if et == 'beget_snapshot':
+                    grouped_events['snapshots'].append(ev)
+                    desc = 'Полный снимок состояния аккаунта Beget'
+                elif et in ('domain_created', 'domain_removed'):
+                    grouped_events['domains'].append(ev)
+                    d = ev.get('details')
+                    dom = d.get('domain') if isinstance(d, dict) else d
+                    desc = f"Домен: {dom} — {'создан' if 'created' in et else 'удален'}"
+                    # impact: удаление домена — высокий
+                    impact = 'High' if 'removed' in et else 'Medium'
+                    if 'removed' in et:
+                        impact_note = 'Домен удалён — возможна потеря почты и доступности сайта.'
+                elif et in ('site_created', 'site_removed'):
+                    grouped_events['sites'].append(ev)
+                    s = ev.get('details')
+                    desc = f"Сайт: {s} — {'создан' if 'created' in et else 'удален'}"
+                    impact = 'Medium' if 'removed' in et else 'Low'
+                elif et in ('db_created', 'db_removed'):
+                    grouped_events['databases'].append(ev)
+                    d = ev.get('details')
+                    dbn = d.get('db') if isinstance(d, dict) else d
+                    desc = f"БД: {dbn} — {'создана' if 'created' in et else 'удалена'}"
+                    impact = 'High' if 'removed' in et else 'Medium'
+                elif et in ('mailbox_created', 'mailbox_removed'):
+                    grouped_events['mailboxes'].append(ev)
+                    d = ev.get('details')
+                    mb = d.get('mailbox') if isinstance(d, dict) else d
+                    desc = f"Почтовый ящик: {mb} — {'создан' if 'created' in et else 'удален'}"
+                    impact = 'Medium' if 'removed' in et else 'Low'
+                elif ev['source'] == 'beget_diff':
+                    grouped_events['diffs'].append(ev)
+                    desc = 'Изменение: ' + (str(ev.get('details'))[:200])
+                else:
+                    grouped_events['others'].append(ev)
+                    desc = str(ev.get('details'))[:200]
+
+                ev['description'] = desc
+                ev['impact'] = impact
+                ev['impact_note'] = impact_note
+
             conn_b.close()
     except Exception as e:
         print(f'Error loading host_events: {e}')
 
+    # Simple additional checks: domain expirations from latest snapshot
+    domain_alerts = []
+    try:
+        # find latest snapshot for client
+        latest_snapshot = None
+        for s in grouped_events.get('snapshots', []):
+            if not latest_snapshot or (s.get('event_time') or 0) > (latest_snapshot.get('event_time') or 0):
+                latest_snapshot = s
+        if latest_snapshot and isinstance(latest_snapshot.get('details'), dict):
+            snap = latest_snapshot.get('details', {}).get('snapshot', {})
+            for d in snap.get('domains', []) or []:
+                exp = d.get('date_expire')
+                fqdn = d.get('fqdn') or d.get('domain')
+                if exp:
+                    try:
+                        exp_dt = datetime.datetime.strptime(exp.split(' ')[0], '%Y-%m-%d').date()
+                        days_left = (exp_dt - datetime.date.today()).days
+                        if days_left <= 30:
+                            domain_alerts.append({'domain': fqdn, 'expires': exp, 'days_left': days_left, 'severity': 'High' if days_left <=7 else 'Medium'})
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
     print(f'[REPORT] client_id={client_id} backups_count={len(backups)} host_events={len(host_events)}')
-    return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from, date_to=date_to, host_events=host_events)
+    return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from, date_to=date_to, host_events=host_events, grouped_events=grouped_events, domain_alerts=domain_alerts)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3002)
