@@ -277,16 +277,26 @@ CLIENT_CARD_TEMPLATE = """
 
         <h3 style="margin-top:25px;">Учет выполненных работ и обращений</h3>
         <table>
-            <tr><th>Дата</th><th>Описание работ / бэкапов / инцидентов</th><th>Часы</th></tr>
+            <tr><th>Дата / время</th><th>Описание работ / бэкапов / инцидентов</th><th>Часы</th><th>Действия</th></tr>
             {% for log in logs %}
-            <tr><td>{{ log.work_date }}</td><td>{{ log.description }}</td><td>{{ log.hours }} ч.</td></tr>
+            <tr>
+                <td>{{ log.work_date_rus or log.work_date }}</td>
+                <td>{{ log.description }}</td>
+                <td>{{ log.hours }} ч.</td>
+                <td>
+                    <a href="/client/{{ client.id }}/edit_log/{{ log.id }}" style="color:#38bdf8;">Редактировать</a> |
+                    <a href="/client/{{ client.id }}/delete_log/{{ log.id }}" style="color:#f97316;" onclick="return confirm('Удалить запись?');">Удалить</a>
+                </td>
+            </tr>
             {% else %}
-            <tr><td colspan="3" style="text-align:center; color:#94a3b8;">Нет записей</td></tr>
+            <tr><td colspan="4" style="text-align:center; color:#94a3b8;">Нет записей</td></tr>
             {% endfor %}
         </table>
 
         <form action="/client/{{ client.id }}/add_log" method="POST" style="margin-top:15px;" class="box">
             <h4>Добавить запись о работах</h4>
+            <label>Дата и время (оставьте пустым для текущей даты):</label>
+            <input type="datetime-local" name="work_date_local" value="">
             <textarea name="description" rows="2" placeholder="Например: Штатный бэкап, создание почтового ящика info@site.ru..." required></textarea>
             <label style="margin-top:10px; display:block;">Часы:</label>
             <input type="number" step="0.5" name="hours" value="1.0" required style="width: 100px;">
@@ -416,7 +426,27 @@ def client_card(client_id):
     db = get_db()
     row = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
     client = dict(row) if row else {}
-    logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (client_id,)).fetchall()
+    raw_logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (client_id,)).fetchall()
+    # format logs with russian-friendly date
+    logs = []
+    import datetime as _dt
+    for r in raw_logs:
+        row = dict(r)
+        wd = row.get('work_date')
+        wd_rus = wd
+        try:
+            if wd and len(wd) >= 10:
+                # try parse possible ISO or YYYY-MM-DD
+                try:
+                    dt = _dt.datetime.fromisoformat(wd)
+                except Exception:
+                    # fallback to date only
+                    dt = _dt.datetime.strptime(wd[:10], '%Y-%m-%d')
+                wd_rus = dt.strftime('%d.%m.%Y %H:%M')
+        except Exception:
+            wd_rus = wd
+        row['work_date_rus'] = wd_rus
+        logs.append(row)
 
     # default dates: previous month
     import datetime
@@ -462,7 +492,63 @@ def update_beget(client_id):
 
 @app.route('/client/<int:client_id>/add_log', methods=['POST'])
 def add_log(client_id):
-    crm_core.add_work_log(client_id, request.form.get('description'), request.form.get('hours', 1.0))
+    # allow specifying datetime-local field
+    wd_local = request.form.get('work_date_local', '').strip()
+    desc = request.form.get('description')
+    hours = request.form.get('hours', 1.0)
+    try:
+        hours_val = float(hours)
+    except Exception:
+        hours_val = 1.0
+    if wd_local:
+        # wd_local is like '2026-08-18T14:10'
+        wd = wd_local.replace('T', ' ')
+        crm_core.add_work_log_with_date(client_id, desc, hours_val, wd)
+    else:
+        crm_core.add_work_log(client_id, desc, hours_val)
+    return redirect(url_for('client_card', client_id=client_id))
+
+
+@app.route('/client/<int:client_id>/edit_log/<int:log_id>', methods=['GET', 'POST'])
+def edit_log(client_id, log_id):
+    db = get_db()
+    if request.method == 'GET':
+        row = db.execute('SELECT * FROM work_logs WHERE id = ? AND client_id = ?', (log_id, client_id)).fetchone()
+        if not row:
+            return 'Not found', 404
+        r = dict(row)
+        # prepare simple edit form
+        form = f"""
+        <html><body>
+        <h3>Редактировать запись</h3>
+        <form method='POST'>
+        Дата и время: <input type='datetime-local' name='work_date_local' value='{(r.get('work_date') or '').replace(' ', 'T')}'><br>
+        Описание:<br><textarea name='description' rows='4'>{r.get('description') or ''}</textarea><br>
+        Часы: <input type='number' step='0.5' name='hours' value='{r.get('hours') or 1.0}'><br>
+        <button type='submit'>Сохранить</button>
+        </form>
+        </body></html>
+        """
+        return form
+    else:
+        wd_local = request.form.get('work_date_local', '').strip()
+        desc = request.form.get('description')
+        hours = request.form.get('hours', 1.0)
+        try:
+            hours_val = float(hours)
+        except Exception:
+            hours_val = 1.0
+        wd = wd_local.replace('T', ' ') if wd_local else None
+        if not wd:
+            import datetime
+            wd = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        crm_core.update_work_log(log_id, desc, hours_val, wd)
+        return redirect(url_for('client_card', client_id=client_id))
+
+
+@app.route('/client/<int:client_id>/delete_log/<int:log_id>')
+def delete_log(client_id, log_id):
+    crm_core.delete_work_log(log_id)
     return redirect(url_for('client_card', client_id=client_id))
 
 @app.route('/client/<int:client_id>/report')

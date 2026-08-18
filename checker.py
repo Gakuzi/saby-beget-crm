@@ -290,11 +290,8 @@ for site in sites:
             data = {"status": "error", "message": f"Invalid JSON response: {raw[:200]}"}
 
         if data.get('status') == 'ok':
-            b_date = data.get('date')
-            b_size = data.get('size_mb')
-            filename = data.get('filename') if 'filename' in data else None
-
-            # determine client_id from site_mapping if available
+            # Поддерживаем два варианта: старый — одиночный бэкап (date/filename/size_mb),
+            # и новый — полный список файлов в поле 'files' или 'backups'.
             client_id = None
             try:
                 cursor.execute('SELECT client_id FROM site_mapping WHERE site_domain = ?', (site_domain,))
@@ -304,21 +301,124 @@ for site in sites:
             except Exception:
                 client_id = None
 
-            # Проверяем, есть ли уже запись с таким сайтом и датой
-            cursor.execute(
-                "SELECT id FROM backup_history WHERE site_domain = ? AND backup_date = ?",
-                (site_domain, b_date)
-            )
-            row = cursor.fetchone()
-            if not row:
-                cursor.execute(
-                    "INSERT INTO backup_history (site_name, site_url, site_domain, client_id, filename, backup_date, size_mb, detected_at, status, source, extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (site_name, site_url, site_domain, client_id, filename, b_date, b_size, now_str, 'ok', 'agent', json.dumps(data, ensure_ascii=False))
-                )
-                conn.commit()
-                print(f"[OK] {site_name} ({site_domain}) - saved backup {b_date} / {b_size} MB client_id={client_id}")
+            # Helper to insert a backup record if not exists
+            def insert_backup_record(site_name, site_url, site_domain, client_id, filename, backup_date, size_mb, detected_at, status, source, extra_json):
+                try:
+                    cursor.execute(
+                        "SELECT id FROM backup_history WHERE site_domain = ? AND filename = ? AND backup_date = ?",
+                        (site_domain, filename, backup_date)
+                    )
+                    exists = cursor.fetchone()
+                    if not exists:
+                        cursor.execute(
+                            "INSERT INTO backup_history (site_name, site_url, site_domain, client_id, filename, backup_date, size_mb, detected_at, status, source, extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (site_name, site_url, site_domain, client_id, filename, backup_date, size_mb, detected_at, status, source, extra_json)
+                        )
+                        conn.commit()
+                        print(f"[OK] {site_name} ({site_domain}) - saved backup {backup_date} / {size_mb} MB client_id={client_id} filename={filename}")
+                    else:
+                        # already recorded
+                        pass
+                except Exception as e:
+                    print(f"[ERR] can't insert backup record: {e}")
+
+            # If agent returned array of files/backups
+            files_list = None
+            if isinstance(data.get('files'), list):
+                files_list = data.get('files')
+            elif isinstance(data.get('backups'), list):
+                files_list = data.get('backups')
+
+            if files_list is not None:
+                # Normalize current filenames set
+                curr_filenames = set()
+                for f in files_list:
+                    try:
+                        # support both dicts and simple strings
+                        if isinstance(f, dict):
+                            fname = f.get('filename') or f.get('name') or f.get('file')
+                            # backup date: try mtime (unix) or date string
+                            b_date_raw = f.get('mtime') or f.get('date') or f.get('backup_date')
+                            # size
+                            size_mb = f.get('size_mb') or (f.get('size') and round(float(f.get('size'))/1024/1024,2)) or None
+                            checksum = f.get('checksum') or f.get('md5') or None
+                        else:
+                            fname = str(f)
+                            b_date_raw = None
+                            size_mb = None
+                            checksum = None
+
+                        if not fname:
+                            continue
+
+                        # normalize backup_date to string YYYY-MM-DD HH:MM:SS where possible
+                        b_date = None
+                        if b_date_raw:
+                            try:
+                                # if numeric — assume unix timestamp
+                                if isinstance(b_date_raw, (int, float)) or (isinstance(b_date_raw, str) and b_date_raw.isdigit()):
+                                    ts = int(b_date_raw)
+                                    b_date = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+                                else:
+                                    # try parsing ISO-like
+                                    b_date = str(b_date_raw)
+                            except Exception:
+                                b_date = str(b_date_raw)
+
+                        curr_filenames.add(fname)
+                        extra = {'checksum': checksum} if checksum else {}
+                        if b_date is None:
+                            # use now as backup_date if unknown
+                            b_date = now_str
+
+                        insert_backup_record(site_name, site_url, site_domain, client_id, fname, b_date, size_mb, now_str, 'ok', 'agent', json.dumps({'source_files_list_item': f}, ensure_ascii=False))
+                    except Exception as e:
+                        print(f"[WARN] processing file entry failed: {e}")
+
+                # detect deletions: find previously known filenames for this site and mark removed if missing now
+                try:
+                    cursor.execute('SELECT DISTINCT filename FROM backup_history WHERE site_domain = ? AND filename IS NOT NULL AND filename != ""', (site_domain,))
+                    prev = set([r[0] for r in cursor.fetchall()])
+                    removed = prev - curr_filenames
+                    for rf in removed:
+                        try:
+                            # get last seen date for that filename
+                            cursor.execute('SELECT MAX(backup_date) FROM backup_history WHERE site_domain = ? AND filename = ?', (site_domain, rf))
+                            last = cursor.fetchone()
+                            last_date = last[0] if last and last[0] else None
+                            # insert removed event
+                            cursor.execute(
+                                "INSERT INTO backup_history (site_name, site_url, site_domain, client_id, filename, backup_date, size_mb, detected_at, status, source, extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                (site_name, site_url, site_domain, client_id, rf, last_date, None, now_str, 'removed', 'agent', json.dumps({'removed_detected': True}, ensure_ascii=False))
+                            )
+                            conn.commit()
+                            print(f"[REMOVED] {site_name} ({site_domain}) - detected removed backup file: {rf}")
+                        except Exception:
+                            pass
+                except Exception as e:
+                    print(f"[WARN] failed to detect removed files: {e}")
+
             else:
-                print(f"[SKIP] {site_name} ({site_domain}) - already recorded {b_date}")
+                # Old single-backup agent behavior
+                b_date = data.get('date')
+                b_size = data.get('size_mb')
+                filename = data.get('filename') if 'filename' in data else None
+
+                # Проверяем, есть ли уже запись с таким сайтом и датой
+                cursor.execute(
+                    "SELECT id FROM backup_history WHERE site_domain = ? AND backup_date = ?",
+                    (site_domain, b_date)
+                )
+                row = cursor.fetchone()
+                if not row:
+                    cursor.execute(
+                        "INSERT INTO backup_history (site_name, site_url, site_domain, client_id, filename, backup_date, size_mb, detected_at, status, source, extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (site_name, site_url, site_domain, client_id, filename, b_date, b_size, now_str, 'ok', 'agent', json.dumps(data, ensure_ascii=False))
+                    )
+                    conn.commit()
+                    print(f"[OK] {site_name} ({site_domain}) - saved backup {b_date} / {b_size} MB client_id={client_id}")
+                else:
+                    print(f"[SKIP] {site_name} ({site_domain}) - already recorded {b_date}")
         else:
             err = data.get('message') or data.get('error') or 'Unknown error from agent'
             cursor.execute(
