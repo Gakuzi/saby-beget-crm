@@ -444,6 +444,7 @@ def generate_report(client_id):
         except Exception as e:
             beget_status = f'Не удалось связаться с Beget API: {str(e)}'
 
+    print(f'[REPORT] client_id={client_id} backups_count={len(backups)}')
     return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from, date_to=date_to)
 
 if __name__ == '__main__':
