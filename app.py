@@ -401,8 +401,22 @@ def generate_report(client_id):
             conn_b = sqlite3.connect(db_path_backups)
             conn_b.row_factory = sqlite3.Row
             cursor_b = conn_b.cursor()
-            site_name = client.get('company_name')
-            cursor_b.execute('SELECT site_name, backup_date, size_mb FROM backup_history WHERE site_name = ? AND date(backup_date) BETWEEN ? AND ? ORDER BY backup_date DESC', (site_name, date_from, date_to))
+
+            # Попытаемся сопоставить сайты клиента с записью в backup_history
+            client_sites_raw = client.get('sites') or ''
+            client_sites = [s.strip().lower().replace('https://','').replace('http://','').split('/')[0] for s in client_sites_raw.split(',') if s.strip()]
+            company_name = client.get('company_name')
+
+            if client_sites:
+                # Динамический IN для доменов
+                placeholders = ','.join(['?']*len(client_sites))
+                sql = f"SELECT site_name, site_domain, backup_date, size_mb FROM backup_history WHERE site_domain IN ({placeholders}) AND date(backup_date) BETWEEN ? AND ? ORDER BY backup_date DESC"
+                params = client_sites + [date_from, date_to]
+                cursor_b.execute(sql, params)
+            else:
+                # Подача по имени организации (устаревший метод)
+                cursor_b.execute('SELECT site_name, site_domain, backup_date, size_mb FROM backup_history WHERE site_name = ? AND date(backup_date) BETWEEN ? AND ? ORDER BY backup_date DESC', (company_name, date_from, date_to))
+
             backups = [dict(r) for r in cursor_b.fetchall()]
             conn_b.close()
     except Exception as e:
