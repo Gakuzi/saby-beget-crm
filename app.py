@@ -248,8 +248,21 @@ CLIENT_CARD_TEMPLATE = """
                 </div>
                 <div>
                     <button type="submit" class="btn-link" style="margin-top: 0; padding: 10px 14px;">Сформировать отчет</button>
+                    <button type="button" onclick="openPrevMonth()" style="margin-top:0; margin-left:8px; padding:10px 12px;" class="btn-link">Прошлый месяц</button>
                 </div>
             </form>
+            <script>
+                function openPrevMonth(){
+                    const now = new Date();
+                    const firstThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                    const lastMonthEnd = new Date(firstThisMonth.getTime() - 1);
+                    const from = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1);
+                    const to = lastMonthEnd;
+                    const fmt = (d)=> d.toISOString().slice(0,10);
+                    const url = `/client/{{ client.id }}/report?date_from=${fmt(from)}&date_to=${fmt(to)}`;
+                    window.open(url, '_blank');
+                }
+            </script>
         </div>
 
         <h3 style="margin-top:25px;">Учет выполненных работ и обращений</h3>
