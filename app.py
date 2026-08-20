@@ -359,6 +359,36 @@ CLIENT_CARD_TEMPLATE = """
                     alert('Ошибка: ' + err);
                 });
         }
+        function testSabyConnection(clientId) {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Тестирование...';
+            fetch('/api/saby/test/' + clientId)
+                .then(r => r.json())
+                .then(data => {
+                    btn.disabled = false;
+                    if (data.success) {
+                        btn.textContent = '✓ Соединение OK';
+                        showTestResult(data);
+                    } else {
+                        btn.textContent = '✗ Ошибка теста';
+                        alert('Ошибка тестирования: ' + (data.error || 'Неизвестная ошибка'));
+                    }
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    btn.textContent = '✗ Ошибка теста';
+                    alert('Ошибка: ' + err);
+                });
+        }
+        function showTestResult(data) {
+            let msg = 'Результаты тестирования:\\n\\n';
+            data.steps.forEach(step => {
+                const icon = step.status === 'success' ? '✓' : (step.status === 'error' ? '✗' : '⚠');
+                msg += icon + ' ' + step.step + ': ' + step.message + '\\n';
+            });
+            alert(msg);
+        }
     </script>
 </head>
 <body>
@@ -473,7 +503,10 @@ CLIENT_CARD_TEMPLATE = """
             <div id="tab-works" class="tab-content active">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <h4>Выполненные работы из СБИС</h4>
-                    <button class="btn-success" onclick="syncSaby({{ client.id }})">🔄 Синхронизировать с Saby</button>
+                    <div>
+                        <button class="btn-success" onclick="testSabyConnection({{ client.id }})" style="background:#0891b2;margin-right:8px;">🔌 Тест соединения</button>
+                        <button class="btn-success" onclick="syncSaby({{ client.id }})">🔄 Синхронизировать с Saby</button>
+                    </div>
                 </div>
                 <table>
                     <tr><th>Дата</th><th>Наименование работы</th><th>Количество</th><th>Ед. изм.</th><th>Цена</th><th>Сумма</th></tr>
@@ -977,6 +1010,24 @@ def api_saby_sync(client_id):
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/saby/test/<int:client_id>', methods=['GET'])
+def api_saby_test(client_id):
+    """API endpoint для тестирования соединения с Saby по клиенту"""
+    try:
+        from saby_integration import test_saby_connection
+        db = get_db()
+        client = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
+        
+        if not client:
+            return jsonify({'error': 'Клиент не найден'}), 404
+        
+        # Запускаем тестирование соединения
+        result = test_saby_connection(client_id)
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/client/<int:client_id>/report')
 def generate_report(client_id):
