@@ -4,15 +4,15 @@
     <meta charset="UTF-8">
     <title>Карточка клиента</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0b132b; color: #ffffff; padding: 20px; }
-        .container { max-width: 900px; margin: 0 auto; }
-        a { color: #4ea8de; text-decoration: none; }
-        .card { background: #1c2541; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        input { width: 100%; padding: 10px; margin-bottom: 15px; background: #0b132b; border: 1px solid #415a77; border-radius: 5px; color: #fff; box-sizing: border-box; }
-        button { background: #3a86ff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .alert { background: #ff5964; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
-        .success { background: #38b000; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
-        .warning { background: #ffca3a; color: #333; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-weight: bold; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: linear-gradient(135deg,#fffaf0 0%, #ffffff 100%); color: #2b2f2f; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0 8px 20px rgba(43,45,48,0.04); }
+        a { color: #6b5a57; text-decoration: none; }
+        .card { background: #ffffff; padding: 18px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #f0e9e6; box-shadow: 0 6px 14px rgba(43,45,48,0.04); }
+        input { width: 100%; padding: 10px; margin-bottom: 12px; background: #fff; border: 1px solid #f0e9e6; border-radius: 6px; color: #2b2f2f; box-sizing: border-box; }
+        button { background: linear-gradient(135deg,#ffd6c2 0%, #ffb4a2 100%); color: #2b2f2f; border: none; padding: 10px 18px; border-radius: 8px; cursor: pointer; font-weight: 700; }
+        .alert { background: #ffefef; color: #b00020; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
+        .success { background: #e9fff0; color: #236b3d; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
+        .warning { background: #fff7e6; color: #6b4b00; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-weight: bold; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     </style>
 </head>
@@ -41,13 +41,13 @@
             <h3>Доступы Beget (Опционально)</h3>
             <form method="POST" action="/client/{{ client.id }}/update_beget">
                 <label>Логин Beget:</label>
-                <input type="text" name="login" value="{{ client.beget_login or '' }}" placeholder="Оставьте пустым для отключения">
+                <input type="text" name="beget_login" value="{{ client.beget_login or '' }}" placeholder="Оставьте пустым для отключения">
                 <label>Пароль Beget:</label>
-                <input type="password" name="password" value="{{ client.beget_password or '' }}" placeholder="Оставьте пустым для отключения">
+                <input type="password" name="beget_pass" value="{{ client.beget_password or '' }}" placeholder="Оставьте пустым для отключения">
                 <label>Сайты (через запятую):</label>
                 <input type="text" name="sites" value="{{ client.sites or '' }}">
-                <label>Email (через запятую):</label>
-                <input type="text" name="emails" value="{{ client.emails or '' }}">
+                <label>Email для отчетов (через запятую):</label>
+                <input type="text" name="emails" value="{{ client.email_reports or '' }}">
                 <button type="submit">Сохранить настройки</button>
             </form>
         </div>

@@ -22,41 +22,86 @@ def suggest_company(query: str):
     query = query.strip()
     if not query or len(query) < 2:
         return []
-    
+
     results = []
 
-    # 1. Поиск через открытый сервис Rusprofile / API ФНС (Egrip/Egrul)
-    try:
-        url = f"https://www.rusprofile.ru/ajax.php?query={requests.utils.quote(query)}&action=search"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "application/json"
-        }
-        r = requests.get(url, headers=headers, timeout=3)
-        if r.status_code == 200:
-            data = r.json()
-            items = data.get("ul", []) + data.get("ip", [])
-            for item in items[:6]:
-                name = item.get("name", "") or item.get("raw_name", "")
-                inn = item.get("inn", "")
-                address = item.get("address", "")
-                if name and inn:
-                    results.append({
-                        "name": name,
-                        "inn": inn,
-                        "address": address
-                    })
-    except Exception:
-        pass
-
-    # 2. Если сервис недоступен, проверяем ИНН на валидность и возвращаем локальную подсказку
-    if not results and query.isdigit():
+    # 1. Если ИНН валиден, сразу возвращаем подсказку (Rusprofile заблокирован)
+    if query.isdigit():
         is_valid = check_inn_checksum(query)
         if is_valid:
-            results.append({
-                "name": "Организация (ИНН валиден)",
-                "inn": query,
-                "address": "Контрольная сумма верна"
-            })
+            # Пытаемся получить название из Saby
+            try:
+                from saby_helper import get_saby_token
+                logs = []
+                token = get_saby_token(logs)
+                if token:
+                    api_url = "https://online.sbis.ru/service/sbis-rpc.service"
+                    headers = {
+                        "Content-Type": "application/json; charset=utf-8",
+                        "X-SBISAccessToken": token
+                    }
+                    contractor_obj = {"СвЮЛ": {"ИНН": query}} if len(query) == 10 else {"СвФЛ": {"ИНН": query}}
+                    payload = {
+                        "jsonrpc": "2.0",
+                        "method": "СБИС.Контрагенты.ПолучитьИнформациюОКонтрагенте",
+                        "params": {"Контрагент": contractor_obj},
+                        "id": 1
+                    }
+                    r = requests.post(api_url, json=payload, headers=headers, timeout=5)
+                    res = r.json()
+                    if "result" in res:
+                        company_info = res["result"]
+                        name = company_info.get("НаименованиеПолное") or company_info.get("НаименованиеСокращенное") or company_info.get("ФИОПолное")
+                        if name:
+                            results.append({
+                                "name": name,
+                                "inn": query,
+                                "address": company_info.get("Адрес", "")
+                            })
+            except Exception:
+                pass
+            
+            # Если не получили из Saby, возвращаем заглушку
+            if not results:
+                results.append({
+                    "name": "Организация (ИНН валиден)",
+                    "inn": query,
+                    "address": "Контрольная сумма верна"
+                })
+        return results
+
+    # 2. Поиск по названию через Saby (если не ИНН)
+    if not query.isdigit():
+        try:
+            from saby_helper import get_saby_token
+            logs = []
+            token = get_saby_token(logs)
+            if token:
+                api_url = "https://online.sbis.ru/service/sbis-rpc.service"
+                headers = {
+                    "Content-Type": "application/json; charset=utf-8",
+                    "X-SBISAccessToken": token
+                }
+                payload = {
+                    "jsonrpc": "2.0",
+                    "method": "СБИС.Контрагенты.НайтиКонтрагентов",
+                    "params": {"Поиск": query, "РазмерСтраницы": 6},
+                    "id": 1
+                }
+                r = requests.post(api_url, json=payload, headers=headers, timeout=5)
+                res = r.json()
+                if "result" in res:
+                    companies = res["result"].get("Контрагенты", [])
+                    for comp in companies[:6]:
+                        name = comp.get("НаименованиеПолное") or comp.get("НаименованиеСокращенное") or comp.get("ФИОПолное")
+                        inn = comp.get("ИНН", "")
+                        if name and inn:
+                            results.append({
+                                "name": name,
+                                "inn": inn,
+                                "address": comp.get("Адрес", "")
+                            })
+        except Exception:
+            pass
 
     return results
