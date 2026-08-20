@@ -21,16 +21,30 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "Deploying latest changes to /opt/backup-reports..."
+            
+            # Переходим в системную директорию проекта
             cd /opt/backup-reports
             
-            mkdir -p /root/.ssh
-            ssh-keyscan -H github.com >> /root/.ssh/known_hosts 2>/dev/null || true
+            # Проверяем наличие репозитория
             if [ -d ".git" ]; then
+              echo "Updating existing repository..."
               git fetch --all
               git reset --hard origin/main
+            else
+              echo "Cloning fresh repository..."
+              # Очищаем папку если она не пуста, но нет .git
+              rm -rf * 
+              git clone https://github.com/${{ github.repository }} .
             fi
             
-            # Перезапуск сервиса CRM
-            # Перезапуск службы CRM через systemd
-            systemctl restart crm
+            # Установка зависимостей
+            if [ -f "requirements.txt" ]; then
+              echo "Installing Python dependencies..."
+              pip3 install -r requirements.txt --user
+            fi
+            
+            # Перезапуск сервиса
+            echo "Restarting CRM service..."
+            sudo systemctl restart crm
+            
             echo "Deployment completed successfully!"
