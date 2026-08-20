@@ -1,11 +1,15 @@
 from flask import Flask, render_template_string, request, redirect, url_for, jsonify, flash
 import saby_helper, inn_helper, crm_core, sqlite3, requests
+from settings_routes import register_settings_routes
 
 app = Flask(__name__)
 import os as _os
 # Use environment variable FLASK_SECRET to secure session flash messages and session usage.
 # In production please set a strong secret in systemd or environment. Default is a dev placeholder.
 app.secret_key = _os.environ.get('FLASK_SECRET', 'dev-secret-change-me')
+
+# Регистрируем маршруты настроек
+register_settings_routes(app)
 
 import os
 
@@ -32,9 +36,24 @@ INDEX_TEMPLATE = """
         a:hover { text-decoration: underline; }
         .btn { background: linear-gradient(135deg,#ffd6c2 0%, #ffb4a2 100%); color: #2b2f2f; padding: 10px 18px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; transition: all 0.15s ease; box-shadow: 0 6px 12px rgba(255,180,162,0.12); }
         .btn:hover { filter: brightness(0.97); }
+        .settings-btn { position: fixed; top: 20px; right: 20px; background: linear-gradient(135deg,#ffd6c2 0%, #ffb4a2 100%); border: none; border-radius: 50%; width: 50px; height: 50px; cursor: pointer; font-size: 24px; box-shadow: 0 6px 12px rgba(255,180,162,0.12); display: flex; align-items: center; justify-content: center; }
+        .settings-btn:hover { filter: brightness(0.97); transform: rotate(30deg); }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
+        .modal-content { background: #fff; margin: 5% auto; padding: 25px; border-radius: 8px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto; }
+        .close { float: right; font-size: 28px; cursor: pointer; color: #6b5a57; }
+        .tab { overflow: hidden; border-bottom: 1px solid #f0e9e6; margin-bottom: 15px; }
+        .tab button { background: transparent; border: none; padding: 10px 20px; cursor: pointer; font-size: 14px; color: #6b5a57; border-bottom: 2px solid transparent; }
+        .tab button.active { border-bottom: 2px solid #ffb4a2; font-weight: 700; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; color: #6b5a57; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #f0e9e6; border-radius: 6px; box-sizing: border-box; }
+        .form-group small { color: #94a3b8; font-size: 12px; }
     </style>
 </head>
 <body>
+    <button class="settings-btn" onclick="openSettings()">⚙️</button>
     <div class="container">
         <h2>CRM-система управления инфраструктурой сайтов и договоров</h2>
         <div style="margin-bottom: 20px;">

@@ -1,27 +1,55 @@
-# Python / Virtual Environment
+```
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
 venv/
 .venv/
-env/
+.ENV
+.ENV.local
 
-# IDE & Editor
+# Logs
+*.log
+
+# IDE
 .vscode/
 .idea/
-.gigacode_vsc/
-.cursor/
-.cursor-server/
-.df/
+*.swp
+*.swo
 
-# SQLite databases & logs (contains sensitive client data)
-*.db
-*.sqlite
-*.log
-.saby_config
-report_*.txt
+# OS
+.DS_Store
+Thumbs.db
 
-# Raw backups / server mirror
-saby-beget-crm/
-root_archive.tar.gz
-mediamtx.tar.gz
+# Coverage
+.coverage
+htmlcov/
+coverage/
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Cache
+.mypy_cache/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.ENV.local
+```
