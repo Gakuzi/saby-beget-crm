@@ -28,10 +28,38 @@ INDEX_TEMPLATE = """
         a:hover { text-decoration: underline; }
         .btn { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: white; padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3); transition: all 0.2s ease; }
         .btn:hover { background: #1d4ed8; }
+        .settings-icon { position: fixed; top: 20px; right: 20px; font-size: 24px; cursor: pointer; z-index: 1000; }
+        .settings-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1001; }
+        .settings-content { background: #1e293b; max-width: 800px; margin: 50px auto; padding: 25px; border-radius: 8px; }
+        .tab-buttons { display: flex; gap: 10px; border-bottom: 2px solid #334155; padding-bottom: 10px; margin-bottom: 20px; }
+        .tab-btn { background: transparent; border: 1px solid #475569; color: #94a3b8; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .tab-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; color: #38bdf8; }
+        .form-group input, .form-group textarea { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 4px; box-sizing: border-box; }
+        .close-btn { float: right; font-size: 24px; cursor: pointer; color: #94a3b8; }
+        .close-btn:hover { color: white; }
     </style>
+    <script>
+        function openSettings() { document.getElementById('settingsModal').style.display = 'block'; }
+        function closeSettings() { document.getElementById('settingsModal').style.display = 'none'; }
+        function switchSettingsTab(tabId) {
+            document.querySelectorAll('.settings-content .tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.settings-content .tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+        window.onclick = function(event) {
+            const modal = document.getElementById('settingsModal');
+            if (event.target == modal) { modal.style.display = 'none'; }
+        }
+    </script>
 </head>
 <body>
     <div class="container">
+        <span class="settings-icon" onclick="openSettings()" title="Настройки">⚙️</span>
         <h2>CRM-система управления инфраструктурой сайтов и договоров</h2>
         <div style="margin-bottom: 20px;">
             <a href="/add_page" class="btn" style="display:inline-block;">+ Добавить контрагента из Saby</a>
@@ -54,6 +82,94 @@ INDEX_TEMPLATE = """
             </tr>
             {% endfor %}
         </table>
+    </div>
+
+    <!-- Модальное окно настроек -->
+    <div id="settingsModal" class="settings-modal">
+        <div class="settings-content">
+            <span class="close-btn" onclick="closeSettings()">&times;</span>
+            <h2>⚙️ Настройки CRM</h2>
+            
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="switchSettingsTab('tab-email')">📧 Настройки почты</button>
+                <button class="tab-btn" onclick="switchSettingsTab('tab-beget')">🌐 Beget API</button>
+                <button class="tab-btn" onclick="switchSettingsTab('tab-saby')">📄 Saby интеграция</button>
+                <button class="tab-btn" onclick="switchSettingsTab('tab-system')">🔧 Системные</button>
+            </div>
+
+            <div id="tab-email" class="tab-content active">
+                <h3>Настройки электронной почты</h3>
+                <form action="/settings/email" method="POST">
+                    <div class="form-group">
+                        <label>SMTP сервер:</label>
+                        <input type="text" name="smtp_server" placeholder="smtp.example.com" value="{{ settings.smtp_server or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>SMTP порт:</label>
+                        <input type="number" name="smtp_port" placeholder="587" value="{{ settings.smtp_port or '587' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Email отправителя:</label>
+                        <input type="email" name="sender_email" placeholder="reports@example.com" value="{{ settings.sender_email or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Пароль приложения:</label>
+                        <input type="password" name="sender_password" value="{{ settings.sender_password or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Email для отчетов по умолчанию:</label>
+                        <input type="email" name="default_report_email" placeholder="admin@example.com" value="{{ settings.default_report_email or '' }}">
+                    </div>
+                    <button type="submit" class="btn">Сохранить настройки почты</button>
+                </form>
+            </div>
+
+            <div id="tab-beget" class="tab-content">
+                <h3>Настройки Beget API</h3>
+                <p style="color: #94a3b8; margin-bottom: 15px;">Beget API использует логин и пароль от панели управления. Отдельный API-ключ не требуется.</p>
+                <form action="/settings/beget" method="POST">
+                    <div class="form-group">
+                        <label>Логин Beget (по умолчанию):</label>
+                        <input type="text" name="beget_login" value="{{ settings.beget_login or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Пароль Beget (по умолчанию):</label>
+                        <input type="password" name="beget_password" value="{{ settings.beget_password or '' }}">
+                    </div>
+                    <button type="submit" class="btn">Сохранить настройки Beget</button>
+                </form>
+            </div>
+
+            <div id="tab-saby" class="tab-content">
+                <h3>Настройки Saby (СБИС)</h3>
+                <form action="/settings/saby" method="POST">
+                    <div class="form-group">
+                        <label>API ключ Saby:</label>
+                        <input type="text" name="saby_api_key" value="{{ settings.saby_api_key or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Организация Saby (ID):</label>
+                        <input type="text" name="saby_org_id" value="{{ settings.saby_org_id or '' }}">
+                    </div>
+                    <button type="submit" class="btn">Сохранить настройки Saby</button>
+                </form>
+            </div>
+
+            <div id="tab-system" class="tab-content">
+                <h3>Системные настройки</h3>
+                <form action="/settings/system" method="POST">
+                    <div class="form-group">
+                        <label>Название компании:</label>
+                        <input type="text" name="company_name" value="{{ settings.company_name or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Интервал автоотчетов (часы):</label>
+                        <input type="number" name="auto_report_interval" value="{{ settings.auto_report_interval or '24' }}">
+                    </div>
+                    <button type="submit" class="btn">Сохранить системные настройки</button>
+                </form>
+            </div>
+        </div>
     </div>
 </body>
 </html>
@@ -250,11 +366,11 @@ CLIENT_CARD_TEMPLATE = """
                     <label>Логин Beget:</label>
                     <input type="text" name="beget_login" value="{{ client.beget_login or '' }}">
                     <label>Пароль Beget:</label>
-                    <input type="password" name="beget_pass" value="{{ client.beget_pass or '' }}">
+                    <input type="password" name="beget_pass" value="{{ client.beget_password or '' }}">
                     <label>Сайты:</label>
                     <input type="text" name="sites" value="{{ client.sites or '' }}">
-                    <label>Email (через запятую):</label>
-                    <input type="text" name="emails" value="{{ client.emails or '' }}">
+                    <label>Email для отчетов (через запятую):</label>
+                    <input type="text" name="emails" value="{{ client.email_reports or '' }}">
                     <button type="submit">Сохранить доступы</button>
                 </form>
             </div>
@@ -427,7 +543,12 @@ REPORT_TEMPLATE = """
 def index():
     db = get_db()
     clients = db.execute('SELECT * FROM clients').fetchall()
-    return render_template_string(INDEX_TEMPLATE, clients=clients)
+    
+    # Загружаем настройки из таблицы settings
+    settings_row = db.execute('SELECT * FROM settings LIMIT 1').fetchone()
+    settings = dict(settings_row) if settings_row else {}
+    
+    return render_template_string(INDEX_TEMPLATE, clients=clients, settings=settings)
 
 @app.route('/add_page')
 def add_page():
@@ -589,30 +710,109 @@ def generate_report(client_id):
             beget_status = f'Не удалось связаться с Beget API: {str(e)}'
 
     return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from, date_to=date_to)
-def generate_report(client_id):
-    db = get_db()
-    row = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
-    client = dict(row) if row else {}
-    logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (client_id,)).fetchall()
-    
-    # Проверка подключения к Beget по API (если заданы доступы)
-    beget_status = "Доступы Beget не настроены в карточке."
-    login = client.get('beget_login')
-    password = client.get('beget_password') or client.get('beget_pass')
-    if login and password:
-        try:
-            # Запрос к API Beget для получения информации о балансе и доменах
-            api_url = f"https://api.beget.com/api/v1/user/getInfo?login={login}&passwd={password}&output_format=json"
-            res = requests.get(api_url, timeout=5).json()
-            if res.get('status') == 'success':
-                bal = res.get('answer', {}).get('result', {}).get('balance', 'Н/Д')
-                beget_status = f"Хостинг активен. Баланс аккаунта: {bal} руб. Домены и почтовые ящики функционируют штатно."
-            else:
-                beget_status = "Ошибка авторизации в Beget API. Проверьте логин и пароль."
-        except Exception as e:
-            beget_status = f"Не удалось связаться с Beget API: {str(e)}"
 
-    return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, beget_status=beget_status)
+# Маршруты для настроек CRM
+@app.route('/settings/email', methods=['POST'])
+def save_email_settings():
+    db = get_db()
+    # Создаем таблицу settings если не существует
+    db.execute('''CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        smtp_server TEXT,
+        smtp_port TEXT,
+        sender_email TEXT,
+        sender_password TEXT,
+        default_report_email TEXT,
+        beget_login TEXT,
+        beget_password TEXT,
+        saby_api_key TEXT,
+        saby_org_id TEXT,
+        company_name TEXT,
+        auto_report_interval TEXT
+    )''')
+    
+    # Проверяем есть ли запись
+    existing = db.execute('SELECT id FROM settings LIMIT 1').fetchone()
+    if existing:
+        db.execute('''UPDATE settings SET 
+            smtp_server=?, smtp_port=?, sender_email=?, sender_password=?, default_report_email=?
+            WHERE id=?''', 
+            (request.form.get('smtp_server'), request.form.get('smtp_port'), 
+             request.form.get('sender_email'), request.form.get('sender_password'),
+             request.form.get('default_report_email'), existing['id']))
+    else:
+        db.execute('''INSERT INTO settings (smtp_server, smtp_port, sender_email, sender_password, default_report_email)
+            VALUES (?, ?, ?, ?, ?)''',
+            (request.form.get('smtp_server'), request.form.get('smtp_port'),
+             request.form.get('sender_email'), request.form.get('sender_password'),
+             request.form.get('default_report_email')))
+    db.commit()
+    flash('Настройки почты сохранены', 'success')
+    return redirect(url_for('index'))
+
+@app.route('/settings/beget', methods=['POST'])
+def save_beget_settings():
+    db = get_db()
+    db.execute('''CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        smtp_server TEXT, smtp_port TEXT, sender_email TEXT, sender_password TEXT,
+        default_report_email TEXT, beget_login TEXT, beget_password TEXT,
+        saby_api_key TEXT, saby_org_id TEXT, company_name TEXT, auto_report_interval TEXT
+    )''')
+    
+    existing = db.execute('SELECT id FROM settings LIMIT 1').fetchone()
+    if existing:
+        db.execute('UPDATE settings SET beget_login=?, beget_password=? WHERE id=?',
+            (request.form.get('beget_login'), request.form.get('beget_password'), existing['id']))
+    else:
+        db.execute('INSERT INTO settings (beget_login, beget_password) VALUES (?, ?)',
+            (request.form.get('beget_login'), request.form.get('beget_password')))
+    db.commit()
+    flash('Настройки Beget сохранены', 'success')
+    return redirect(url_for('index'))
+
+@app.route('/settings/saby', methods=['POST'])
+def save_saby_settings():
+    db = get_db()
+    db.execute('''CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        smtp_server TEXT, smtp_port TEXT, sender_email TEXT, sender_password TEXT,
+        default_report_email TEXT, beget_login TEXT, beget_password TEXT,
+        saby_api_key TEXT, saby_org_id TEXT, company_name TEXT, auto_report_interval TEXT
+    )''')
+    
+    existing = db.execute('SELECT id FROM settings LIMIT 1').fetchone()
+    if existing:
+        db.execute('UPDATE settings SET saby_api_key=?, saby_org_id=? WHERE id=?',
+            (request.form.get('saby_api_key'), request.form.get('saby_org_id'), existing['id']))
+    else:
+        db.execute('INSERT INTO settings (saby_api_key, saby_org_id) VALUES (?, ?)',
+            (request.form.get('saby_api_key'), request.form.get('saby_org_id')))
+    db.commit()
+    flash('Настройки Saby сохранены', 'success')
+    return redirect(url_for('index'))
+
+@app.route('/settings/system', methods=['POST'])
+def save_system_settings():
+    db = get_db()
+    db.execute('''CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        smtp_server TEXT, smtp_port TEXT, sender_email TEXT, sender_password TEXT,
+        default_report_email TEXT, beget_login TEXT, beget_password TEXT,
+        saby_api_key TEXT, saby_org_id TEXT, company_name TEXT, auto_report_interval TEXT
+    )''')
+    
+    existing = db.execute('SELECT id FROM settings LIMIT 1').fetchone()
+    if existing:
+        db.execute('UPDATE settings SET company_name=?, auto_report_interval=? WHERE id=?',
+            (request.form.get('company_name'), request.form.get('auto_report_interval'), existing['id']))
+    else:
+        db.execute('INSERT INTO settings (company_name, auto_report_interval) VALUES (?, ?)',
+            (request.form.get('company_name'), request.form.get('auto_report_interval')))
+    db.commit()
+    flash('Системные настройки сохранены', 'success')
+    return redirect(url_for('index'))
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3002)
