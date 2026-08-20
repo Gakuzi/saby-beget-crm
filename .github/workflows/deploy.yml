@@ -17,28 +17,20 @@ jobs:
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }} # Должно быть 'deploy'
-          key: ${{ secrets.SSH_PRIVATE_KEY }}  # Приватный ключ для пользователя deploy
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo "Deploying latest changes to VPS as user 'deploy'..."
+            echo "Deploying latest changes to /opt/backup-reports..."
+            cd /opt/backup-reports
             
-            # Переходим в директорию проекта
-            # Проверьте, что путь верный. Обычно это /home/deploy/backup-reports
-            cd /home/deploy/backup-reports || { echo "Directory not found"; exit 1; }
-            
-            # Обновляем код из репозитория
-            git fetch --all
-            git reset --hard origin/main
-            
-            # Установка зависимостей (если requirements.txt изменился)
-            if [ -f "requirements.txt" ]; then
-              echo "Installing Python dependencies..."
-              pip3 install -r requirements.txt --user
+            mkdir -p /root/.ssh
+            ssh-keyscan -H github.com >> /root/.ssh/known_hosts 2>/dev/null || true
+            if [ -d ".git" ]; then
+              git fetch --all
+              git reset --hard origin/main
             fi
             
             # Перезапуск сервиса CRM
-            # Используем sudo, так как restart обычно требует прав root
-            echo "Restarting CRM service..."
-            sudo systemctl restart crm
-            
+            # Перезапуск службы CRM через systemd
+            systemctl restart crm
             echo "Deployment completed successfully!"
