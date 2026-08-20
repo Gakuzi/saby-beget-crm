@@ -231,7 +231,7 @@ def get_saby_contracts_by_inn(inn: str, token: str, logs: List[str]) -> List[Dic
     return found_docs
 
 def get_saby_acts_by_contract(contract_id: str, token: str, logs: List[str]) -> List[Dict]:
-    """Получение актов выполненных работ по договору"""
+    """Получение актов выполненных работ по договору с полными статусами"""
     acts = []
     
     payload = {
@@ -248,12 +248,27 @@ def get_saby_acts_by_contract(contract_id: str, token: str, logs: List[str]) -> 
         if isinstance(docs, dict):
             docs = [docs]
         for d in docs:
+            state = d.get("Состояние", {})
+            # Определяем статус подписания
+            sign_status = "Не подписан"
+            if isinstance(state, dict):
+                status_name = state.get("Наименование", "")
+                if "Подписан" in status_name or "Завершен" in status_name:
+                    sign_status = "Подписан"
+                elif "Отправлен" in status_name:
+                    sign_status = "Отправлен, ожидает подписания"
+                elif "Черновик" in status_name or "Чернов" in status_name:
+                    sign_status = "Черновик"
+            
             acts.append({
                 "id": d.get("Идентификатор", ""),
                 "number": d.get("Номер", ""),
                 "date": d.get("Дата", ""),
                 "sum": d.get("Сумма", "0"),
-                "status": d.get("Состояние", {})
+                "status_code": d.get("Состояние", {}),
+                "status_name": state.get("Наименование", "") if isinstance(state, dict) else "",
+                "sign_status": sign_status,
+                "is_signed": "Подписан" in sign_status
             })
     
     logs.append(f"✓ Найдено актов: {len(acts)}")
@@ -426,14 +441,39 @@ def save_saby_requests(client_id: int, inn: str, token: str, logs: List[str]) ->
     logs.append(f"✓ Сохранено обращений: {saved_count}")
     return saved_count
 
-def save_saby_documents(client_id: int, inn: str, token: str, logs: List[str]) -> int:
-    """Сохранение документов (счета) в базу"""
+def save_saby_documents(client_id: int, contract_id: str, inn: str, token: str, logs: List[str]) -> int:
+    """Сохранение документов (акты и счета) в базу с полными статусами"""
     saved_count = 0
-    invoices = get_saby_invoices(inn, token, logs)
     
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    # Сохраняем акты по договору
+    if contract_id:
+        acts = get_saby_acts_by_contract(contract_id, token, logs)
+        for act in acts:
+            try:
+                cursor.execute("""
+                    INSERT OR REPLACE INTO saby_documents 
+                    (client_id, document_id, document_type, document_number, 
+                     document_date, document_sum, document_status, document_url)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    client_id,
+                    act["id"],
+                    "Акт",
+                    act["number"],
+                    act["date"],
+                    float(act["sum"]) if act["sum"] else 0,
+                    act.get("sign_status", "Не подписан"),
+                    f"https://online.sbis.ru/document/{act['id']}"
+                ))
+                saved_count += 1
+            except Exception as e:
+                logs.append(f"⚠ Ошибка сохранения акта: {str(e)}")
+    
+    # Сохраняем счета по ИНН
+    invoices = get_saby_invoices(inn, token, logs)
     for inv in invoices:
         try:
             cursor.execute("""
@@ -526,8 +566,8 @@ def run_daily_sync(client_id: int = None) -> Dict:
         req_count = save_saby_requests(cid, inn, token, logs)
         total_records += req_count
         
-        # Синхронизация документов
-        doc_count = save_saby_documents(cid, inn, token, logs)
+        # Синхронизация документов (акты и счета)
+        doc_count = save_saby_documents(cid, contract_id, inn, token, logs)
         total_records += doc_count
     
     end_time = datetime.now()
@@ -608,12 +648,120 @@ def get_saby_report(client_id: int, date_from: str, date_to: str) -> Dict:
         GROUP BY request_status
     """, (client_id, date_from, date_to)).fetchall()
     
+    documents = cursor.execute("""
+        SELECT document_type, document_status, COUNT(*) as count, SUM(document_sum) as total_sum
+        FROM saby_documents 
+        WHERE client_id = ? AND document_date BETWEEN ? AND ?
+        GROUP BY document_type, document_status
+    """, (client_id, date_from, date_to)).fetchall()
+    
     conn.close()
     
     return {
         "works": [dict(w) for w in works],
-        "requests_stats": [dict(r) for r in requests]
+        "requests_stats": [dict(r) for r in requests],
+        "documents_stats": [dict(d) for d in documents]
     }
+
+def test_saby_connection(client_id: int) -> Dict:
+    """
+    Тестирование соединения с Saby API для конкретного клиента
+    Проверяет доступность API, получение токена и возможность получения данных по клиенту
+    """
+    logs = []
+    result = {"success": False, "steps": [], "error": None}
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    client = cursor.execute("SELECT id, inn, saby_inn, saby_contract_id, company_name FROM clients WHERE id = ?", (client_id,)).fetchone()
+    conn.close()
+    
+    if not client:
+        return {"success": False, "error": "Клиент не найден", "logs": ["Клиент не найден в базе"]}
+    
+    inn = client["saby_inn"] or client["inn"]
+    contract_id = client["saby_contract_id"]
+    
+    logs.append(f"Тестирование соединения для клиента: {client['company_name']} (ИНН: {inn})")
+    
+    # Шаг 1: Проверка конфигурации
+    if not os.path.exists(CONFIG_PATH):
+        logs.append(f"✗ Файл конфигурации {CONFIG_PATH} не найден")
+        result["steps"].append({"step": "Конфигурация", "status": "error", "message": f"Файл {CONFIG_PATH} не найден"})
+        result["logs"] = logs
+        return result
+    
+    logs.append("✓ Файл конфигурации найден")
+    result["steps"].append({"step": "Конфигурация", "status": "success", "message": "Файл конфигурации найден"})
+    
+    # Шаг 2: Получение токена
+    token = get_saby_token(logs)
+    if not token:
+        result["steps"].append({"step": "Авторизация", "status": "error", "message": "Не удалось получить токен"})
+        result["logs"] = logs
+        result["error"] = "Не удалось получить токен Saby"
+        return result
+    
+    logs.append("✓ Токен получен успешно")
+    result["steps"].append({"step": "Авторизация", "status": "success", "message": "Токен получен успешно"})
+    
+    # Шаг 3: Проверка данных по ИНН (договоры)
+    contracts = get_saby_contracts_by_inn(inn, token, logs)
+    if contracts:
+        logs.append(f"✓ Найдено договоров: {len(contracts)}")
+        result["steps"].append({
+            "step": "Поиск договоров", 
+            "status": "success", 
+            "message": f"Найдено договоров: {len(contracts)}",
+            "data": contracts[:3]  # Первые 3 договора
+        })
+    else:
+        logs.append("⚠ Договоры не найдены")
+        result["steps"].append({"step": "Поиск договоров", "status": "warning", "message": "Договоры не найдены"})
+    
+    # Шаг 4: Проверка актов по договору (если есть contract_id)
+    if contract_id:
+        acts = get_saby_acts_by_contract(contract_id, token, logs)
+        if acts:
+            logs.append(f"✓ Найдено актов: {len(acts)}")
+            signed_count = sum(1 for a in acts if a.get("is_signed", False))
+            result["steps"].append({
+                "step": "Проверка актов", 
+                "status": "success", 
+                "message": f"Найдено актов: {len(acts)}, подписано: {signed_count}",
+                "data": [{"number": a["number"], "date": a["date"], "sign_status": a["sign_status"]} for a in acts[:5]]
+            })
+        else:
+            logs.append("⚠ Акты не найдены")
+            result["steps"].append({"step": "Проверка актов", "status": "warning", "message": "Акты не найдены"})
+    else:
+        logs.append("⚠ ID договора не указан у клиента")
+        result["steps"].append({"step": "Проверка актов", "status": "info", "message": "ID договора не указан"})
+    
+    # Шаг 5: Проверка обращений
+    requests_list = get_saby_requests(inn, token, logs, days_back=30)
+    if requests_list:
+        logs.append(f"✓ Найдено обращений за 30 дней: {len(requests_list)}")
+        result["steps"].append({
+            "step": "Проверка обращений", 
+            "status": "success", 
+            "message": f"Найдено обращений: {len(requests_list)}"
+        })
+    else:
+        logs.append("ℹ Обращений за 30 дней не найдено")
+        result["steps"].append({"step": "Проверка обращений", "status": "info", "message": "Обращений не найдено"})
+    
+    result["success"] = True
+    result["logs"] = logs
+    result["client_info"] = {
+        "id": client["id"],
+        "company_name": client["company_name"],
+        "inn": inn,
+        "contract_id": contract_id
+    }
+    
+    return result
+
 
 if __name__ == "__main__":
     # Тестовый запуск синхронизации
