@@ -30,12 +30,42 @@ INDEX_TEMPLATE = """
         th { background: #f8f4f3; color: #6b5a57; }
         a { color: #6b5a57; text-decoration: none; }
         a:hover { text-decoration: underline; }
+        .btn { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: white; padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3); transition: all 0.2s ease; }
+        .btn:hover { background: #1d4ed8; }
+        .settings-icon { position: fixed; top: 20px; right: 20px; font-size: 24px; cursor: pointer; z-index: 1000; }
+        .settings-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1001; }
+        .settings-content { background: #1e293b; max-width: 800px; margin: 50px auto; padding: 25px; border-radius: 8px; }
+        .tab-buttons { display: flex; gap: 10px; border-bottom: 2px solid #334155; padding-bottom: 10px; margin-bottom: 20px; }
+        .tab-btn { background: transparent; border: 1px solid #475569; color: #94a3b8; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .tab-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; color: #38bdf8; }
+        .form-group input, .form-group textarea { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 4px; box-sizing: border-box; }
+        .close-btn { float: right; font-size: 24px; cursor: pointer; color: #94a3b8; }
+        .close-btn:hover { color: white; }
         .btn { background: linear-gradient(135deg,#ffd6c2 0%, #ffb4a2 100%); color: #2b2f2f; padding: 10px 18px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; transition: all 0.15s ease; box-shadow: 0 6px 12px rgba(255,180,162,0.12); }
         .btn:hover { filter: brightness(0.97); }
     </style>
+    <script>
+        function openSettings() { document.getElementById('settingsModal').style.display = 'block'; }
+        function closeSettings() { document.getElementById('settingsModal').style.display = 'none'; }
+        function switchSettingsTab(tabId) {
+            document.querySelectorAll('.settings-content .tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.settings-content .tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+        window.onclick = function(event) {
+            const modal = document.getElementById('settingsModal');
+            if (event.target == modal) { modal.style.display = 'none'; }
+        }
+    </script>
 </head>
 <body>
     <div class="container">
+        <span class="settings-icon" onclick="openSettings()" title="Настройки">⚙️</span>
         <h2>CRM-система управления инфраструктурой сайтов и договоров</h2>
         <div style="margin-bottom: 20px;">
             <a href="/add_page" class="btn" style="display:inline-block;">+ Добавить контрагента из Saby</a>
@@ -58,6 +88,94 @@ INDEX_TEMPLATE = """
             </tr>
             {% endfor %}
         </table>
+    </div>
+
+    <!-- Модальное окно настроек -->
+    <div id="settingsModal" class="settings-modal">
+        <div class="settings-content">
+            <span class="close-btn" onclick="closeSettings()">&times;</span>
+            <h2>⚙️ Настройки CRM</h2>
+            
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="switchSettingsTab('tab-email')">📧 Настройки почты</button>
+                <button class="tab-btn" onclick="switchSettingsTab('tab-beget')">🌐 Beget API</button>
+                <button class="tab-btn" onclick="switchSettingsTab('tab-saby')">📄 Saby интеграция</button>
+                <button class="tab-btn" onclick="switchSettingsTab('tab-system')">🔧 Системные</button>
+            </div>
+
+            <div id="tab-email" class="tab-content active">
+                <h3>Настройки электронной почты</h3>
+                <form action="/settings/email" method="POST">
+                    <div class="form-group">
+                        <label>SMTP сервер:</label>
+                        <input type="text" name="smtp_server" placeholder="smtp.example.com" value="{{ settings.smtp_server or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>SMTP порт:</label>
+                        <input type="number" name="smtp_port" placeholder="587" value="{{ settings.smtp_port or '587' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Email отправителя:</label>
+                        <input type="email" name="sender_email" placeholder="reports@example.com" value="{{ settings.sender_email or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Пароль приложения:</label>
+                        <input type="password" name="sender_password" value="{{ settings.sender_password or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Email для отчетов по умолчанию:</label>
+                        <input type="email" name="default_report_email" placeholder="admin@example.com" value="{{ settings.default_report_email or '' }}">
+                    </div>
+                    <button type="submit" class="btn">Сохранить настройки почты</button>
+                </form>
+            </div>
+
+            <div id="tab-beget" class="tab-content">
+                <h3>Настройки Beget API</h3>
+                <p style="color: #94a3b8; margin-bottom: 15px;">Beget API использует логин и пароль от панели управления. Отдельный API-ключ не требуется.</p>
+                <form action="/settings/beget" method="POST">
+                    <div class="form-group">
+                        <label>Логин Beget (по умолчанию):</label>
+                        <input type="text" name="beget_login" value="{{ settings.beget_login or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Пароль Beget (по умолчанию):</label>
+                        <input type="password" name="beget_password" value="{{ settings.beget_password or '' }}">
+                    </div>
+                    <button type="submit" class="btn">Сохранить настройки Beget</button>
+                </form>
+            </div>
+
+            <div id="tab-saby" class="tab-content">
+                <h3>Настройки Saby (СБИС)</h3>
+                <form action="/settings/saby" method="POST">
+                    <div class="form-group">
+                        <label>API ключ Saby:</label>
+                        <input type="text" name="saby_api_key" value="{{ settings.saby_api_key or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Организация Saby (ID):</label>
+                        <input type="text" name="saby_org_id" value="{{ settings.saby_org_id or '' }}">
+                    </div>
+                    <button type="submit" class="btn">Сохранить настройки Saby</button>
+                </form>
+            </div>
+
+            <div id="tab-system" class="tab-content">
+                <h3>Системные настройки</h3>
+                <form action="/settings/system" method="POST">
+                    <div class="form-group">
+                        <label>Название компании:</label>
+                        <input type="text" name="company_name" value="{{ settings.company_name or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Интервал автоотчетов (часы):</label>
+                        <input type="number" name="auto_report_interval" value="{{ settings.auto_report_interval or '24' }}">
+                    </div>
+                    <button type="submit" class="btn">Сохранить системные настройки</button>
+                </form>
+            </div>
+        </div>
     </div>
 </body>
 </html>
@@ -183,12 +301,33 @@ CLIENT_CARD_TEMPLATE = """
     <meta charset="UTF-8">
     <title>Карточка: {{ client.company_name }}</title>
     <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #2e1065 0%, #1e1b4b 50%, #0f172a 100%); min-height: 100vh; color: #f1f5f9; padding: 25px; margin: 0; }
+        .container { max-width: 1200px; margin: auto; background: #1e293b; padding: 25px; border-radius: 8px; }
+        h2, h3, h4 { color: #38bdf8; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg,#fffaf0 0%, #ffffff 100%); min-height: 100vh; color: #2b2f2f; padding: 25px; margin: 0; }
         .container { max-width: 950px; margin: auto; background: #ffffff; padding: 25px; border-radius: 8px; }
         h2, h3 { color: #6b5a57; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .box { background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #f0e9e6; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 8px; border: 1px solid #334155; text-align: left; font-size: 13px; }
+        th { background: #0f172a; color: #38bdf8; }
+        input, textarea { width: 100%; padding: 8px; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 4px; margin-top: 5px; }
+        button, .btn-link { background: #2563eb; color: white; padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; text-decoration:none; display:inline-block; }
+        button:hover, .btn-link:hover { background: #1d4ed8; }
+        .btn-success { background: #10b981; }
+        .btn-success:hover { background: #059669; }
+        a { color: #38bdf8; }
+        .tab-container { margin-top: 20px; }
+        .tab-buttons { display: flex; gap: 10px; border-bottom: 2px solid #334155; padding-bottom: 10px; }
+        .tab-btn { background: transparent; border: 1px solid #475569; color: #94a3b8; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .tab-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
+        .tab-content { display: none; padding: 15px 0; }
+        .tab-content.active { display: block; }
+        .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .status-done { background: #10b981; color: white; }
+        .status-pending { background: #f59e0b; color: white; }
+        .status-cancelled { background: #ef4444; color: white; }
         th, td { padding: 8px; border: 1px solid #f0e9e6; text-align: left; font-size: 13px; }
         th { background: #f8f4f3; color: #6b5a57; }
         input, textarea { width: 100%; padding: 8px; box-sizing: border-box; background: #fff; border: 1px solid #f0e9e6; color: #2b2f2f; border-radius: 6px; margin-top: 5px; }
@@ -196,6 +335,31 @@ CLIENT_CARD_TEMPLATE = """
         button:hover, .btn-link:hover { filter: brightness(0.98); }
         a { color: #6b5a57; }
     </style>
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+        function syncSaby(clientId) {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Синхронизация...';
+            fetch('/api/saby/sync/' + clientId, {method: 'POST'})
+                .then(r => r.json())
+                .then(data => {
+                    btn.disabled = false;
+                    btn.textContent = '✓ Синхронизировано';
+                    setTimeout(() => { location.reload(); }, 1500);
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    btn.textContent = 'Ошибка синхронизации';
+                    alert('Ошибка: ' + err);
+                });
+        }
+    </script>
 </head>
 <body>
     <div class="container">
@@ -217,6 +381,12 @@ CLIENT_CARD_TEMPLATE = """
                     <label>Логин Beget:</label>
                     <input type="text" name="beget_login" value="{{ client.beget_login or '' }}">
                     <label>Пароль Beget:</label>
+                    <input type="password" name="beget_pass" value="{{ client.beget_password or '' }}">
+                    <label>Сайты:</label>
+                    <input type="text" name="sites" value="{{ client.sites or '' }}">
+                    <label>Email для отчетов (через запятую):</label>
+                    <input type="text" name="emails" value="{{ client.email_reports or '' }}">
+                    <button type="submit">Сохранить доступы</button>
                     <input type="password" name="beget_pass" value="{{ client.beget_pass or '' }}">
                     <label>API-ключ Beget (если есть):</label>
                     <input type="text" name="beget_api_key" value="{{ client.beget_api_key or '' }}">
@@ -291,6 +461,91 @@ CLIENT_CARD_TEMPLATE = """
             </script>
         </div>
 
+        <!-- Вкладки с данными из Saby -->
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="switchTab('tab-works')">📋 Работы из Saby</button>
+                <button class="tab-btn" onclick="switchTab('tab-requests')">📞 Обращения</button>
+                <button class="tab-btn" onclick="switchTab('tab-documents')">📄 Документы (Акты/Счета)</button>
+                <button class="tab-btn" onclick="switchTab('tab-local')">✏️ Локальные записи</button>
+            </div>
+
+            <div id="tab-works" class="tab-content active">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h4>Выполненные работы из СБИС</h4>
+                    <button class="btn-success" onclick="syncSaby({{ client.id }})">🔄 Синхронизировать с Saby</button>
+                </div>
+                <table>
+                    <tr><th>Дата</th><th>Наименование работы</th><th>Количество</th><th>Ед. изм.</th><th>Цена</th><th>Сумма</th></tr>
+                    {% for work in saby_works %}
+                    <tr>
+                        <td>{{ work.work_date }}</td>
+                        <td>{{ work.name }}</td>
+                        <td>{{ work.quantity }}</td>
+                        <td>{{ work.unit }}</td>
+                        <td>{{ work.price }} ₽</td>
+                        <td>{{ work.total }} ₽</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" style="text-align:center; color:#94a3b8;">Нет данных. Нажмите "Синхронизировать с Saby"</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+
+            <div id="tab-requests" class="tab-content">
+                <h4>Обращения клиентов из СБИС</h4>
+                <table>
+                    <tr><th>Дата создания</th><th>Тема</th><th>Статус</th><th>Ответственный</th></tr>
+                    {% for req in saby_requests %}
+                    <tr>
+                        <td>{{ req.created_date }}</td>
+                        <td>{{ req.subject }}</td>
+                        <td><span class="status-badge {% if req.status == 'Завершено' %}status-done{% elif req.status == 'В работе' %}status-pending{% else %}status-cancelled{% endif %}">{{ req.status }}</span></td>
+                        <td>{{ req.responsible or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" style="text-align:center; color:#94a3b8;">Нет обращений</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+
+            <div id="tab-documents" class="tab-content">
+                <h4>Документы из СБИС (Акты, Счета)</h4>
+                <table>
+                    <tr><th>Тип</th><th>Номер</th><th>Дата</th><th>Сумма</th><th>Статус</th></tr>
+                    {% for doc in saby_documents %}
+                    <tr>
+                        <td>{{ doc.doc_type }}</td>
+                        <td>{{ doc.number }}</td>
+                        <td>{{ doc.date }}</td>
+                        <td>{{ doc.amount }} ₽</td>
+                        <td><span class="status-badge {% if doc.status == 'Подписан' %}status-done{% elif doc.status == 'На подписании' %}status-pending{% else %}status-cancelled{% endif %}">{{ doc.status }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" style="text-align:center; color:#94a3b8;">Нет документов</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+
+            <div id="tab-local" class="tab-content">
+                <h4>Локальные записи о работах</h4>
+                <table>
+                    <tr><th>Дата</th><th>Описание работ / бэкапов / инцидентов</th><th>Часы</th></tr>
+                    {% for log in logs %}
+                    <tr><td>{{ log.work_date }}</td><td>{{ log.description }}</td><td>{{ log.hours }} ч.</td></tr>
+                    {% else %}
+                    <tr><td colspan="3" style="text-align:center; color:#94a3b8;">Нет записей</td></tr>
+                    {% endfor %}
+                </table>
+
+                <form action="/client/{{ client.id }}/add_log" method="POST" style="margin-top:15px;" class="box">
+                    <h4>Добавить запись о работах</h4>
+                    <textarea name="description" rows="2" placeholder="Например: Штатный бэкап, создание почтового ящика info@site.ru..." required></textarea>
+                    <label style="margin-top:10px; display:block;">Часы:</label>
+                    <input type="number" step="0.5" name="hours" value="1.0" required style="width: 100px;">
+                    <button type="submit">Добавить запись</button>
+                </form>
+            </div>
         <h3 style="margin-top:25px;">Учет выполненных работ и обращений</h3>
         <table>
             <tr><th>Дата / время</th><th>Описание работ / бэкапов / инцидентов</th><th>Часы</th><th>Действия</th></tr>
@@ -437,7 +692,12 @@ REPORT_TEMPLATE = """
 def index():
     db = get_db()
     clients = db.execute('SELECT * FROM clients').fetchall()
-    return render_template_string(INDEX_TEMPLATE, clients=clients)
+    
+    # Загружаем настройки из таблицы settings
+    settings_row = db.execute('SELECT * FROM settings LIMIT 1').fetchone()
+    settings = dict(settings_row) if settings_row else {}
+    
+    return render_template_string(INDEX_TEMPLATE, clients=clients, settings=settings)
 
 @app.route('/add_page')
 def add_page():
@@ -470,6 +730,44 @@ def client_card(client_id):
     db = get_db()
     row = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
     client = dict(row) if row else {}
+    logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (client_id,)).fetchall()
+    
+    # Загружаем данные из Saby для этого клиента
+    saby_works = []
+    saby_requests = []
+    saby_documents = []
+    
+    if client.get('inn'):
+        try:
+            # Получаем работы из БД
+            saby_works = db.execute(
+                'SELECT * FROM saby_works WHERE inn = ? ORDER BY work_date DESC', 
+                (client['inn'],)
+            ).fetchall()
+            saby_works = [dict(w) for w in saby_works]
+            
+            # Получаем обращения
+            saby_requests = db.execute(
+                'SELECT * FROM saby_requests WHERE inn = ? ORDER BY created_date DESC',
+                (client['inn'],)
+            ).fetchall()
+            saby_requests = [dict(r) for r in saby_requests]
+            
+            # Получаем документы
+            saby_documents = db.execute(
+                'SELECT * FROM saby_documents WHERE inn = ? ORDER BY date DESC',
+                (client['inn'],)
+            ).fetchall()
+            saby_documents = [dict(d) for d in saby_documents]
+        except Exception as e:
+            print(f'Error loading Saby data: {e}')
+    
+    return render_template_string(CLIENT_CARD_TEMPLATE, 
+                                  client=client, 
+                                  logs=logs,
+                                  saby_works=saby_works,
+                                  saby_requests=saby_requests,
+                                  saby_documents=saby_documents)
     raw_logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (client_id,)).fetchall()
     # format logs with russian-friendly date
     logs = []
@@ -658,6 +956,28 @@ def delete_log(client_id, log_id):
     crm_core.delete_work_log(log_id)
     return redirect(url_for('client_card', client_id=client_id))
 
+@app.route('/api/saby/sync/<int:client_id>', methods=['POST'])
+def api_saby_sync(client_id):
+    """API endpoint для ручной синхронизации с Saby"""
+    try:
+        from saby_integration import run_daily_sync
+        db = get_db()
+        client = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
+        
+        if not client:
+            return jsonify({'error': 'Клиент не найден'}), 404
+        
+        # Запускаем синхронизацию для конкретного клиента
+        result = run_daily_sync(client_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Синхронизация завершена',
+            'details': result
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/client/<int:client_id>/report')
 def generate_report(client_id):
     db = get_db()
@@ -735,6 +1055,110 @@ def generate_report(client_id):
                 beget_status = f'Ошибка Beget API: {beget_data.get("error")}'
         except Exception as e:
             beget_status = f'Не удалось связаться с Beget API: {str(e)}'
+
+    return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from, date_to=date_to)
+
+# Маршруты для настроек CRM
+@app.route('/settings/email', methods=['POST'])
+def save_email_settings():
+    db = get_db()
+    # Создаем таблицу settings если не существует
+    db.execute('''CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        smtp_server TEXT,
+        smtp_port TEXT,
+        sender_email TEXT,
+        sender_password TEXT,
+        default_report_email TEXT,
+        beget_login TEXT,
+        beget_password TEXT,
+        saby_api_key TEXT,
+        saby_org_id TEXT,
+        company_name TEXT,
+        auto_report_interval TEXT
+    )''')
+    
+    # Проверяем есть ли запись
+    existing = db.execute('SELECT id FROM settings LIMIT 1').fetchone()
+    if existing:
+        db.execute('''UPDATE settings SET 
+            smtp_server=?, smtp_port=?, sender_email=?, sender_password=?, default_report_email=?
+            WHERE id=?''', 
+            (request.form.get('smtp_server'), request.form.get('smtp_port'), 
+             request.form.get('sender_email'), request.form.get('sender_password'),
+             request.form.get('default_report_email'), existing['id']))
+    else:
+        db.execute('''INSERT INTO settings (smtp_server, smtp_port, sender_email, sender_password, default_report_email)
+            VALUES (?, ?, ?, ?, ?)''',
+            (request.form.get('smtp_server'), request.form.get('smtp_port'),
+             request.form.get('sender_email'), request.form.get('sender_password'),
+             request.form.get('default_report_email')))
+    db.commit()
+    flash('Настройки почты сохранены', 'success')
+    return redirect(url_for('index'))
+
+@app.route('/settings/beget', methods=['POST'])
+def save_beget_settings():
+    db = get_db()
+    db.execute('''CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        smtp_server TEXT, smtp_port TEXT, sender_email TEXT, sender_password TEXT,
+        default_report_email TEXT, beget_login TEXT, beget_password TEXT,
+        saby_api_key TEXT, saby_org_id TEXT, company_name TEXT, auto_report_interval TEXT
+    )''')
+    
+    existing = db.execute('SELECT id FROM settings LIMIT 1').fetchone()
+    if existing:
+        db.execute('UPDATE settings SET beget_login=?, beget_password=? WHERE id=?',
+            (request.form.get('beget_login'), request.form.get('beget_password'), existing['id']))
+    else:
+        db.execute('INSERT INTO settings (beget_login, beget_password) VALUES (?, ?)',
+            (request.form.get('beget_login'), request.form.get('beget_password')))
+    db.commit()
+    flash('Настройки Beget сохранены', 'success')
+    return redirect(url_for('index'))
+
+@app.route('/settings/saby', methods=['POST'])
+def save_saby_settings():
+    db = get_db()
+    db.execute('''CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        smtp_server TEXT, smtp_port TEXT, sender_email TEXT, sender_password TEXT,
+        default_report_email TEXT, beget_login TEXT, beget_password TEXT,
+        saby_api_key TEXT, saby_org_id TEXT, company_name TEXT, auto_report_interval TEXT
+    )''')
+    
+    existing = db.execute('SELECT id FROM settings LIMIT 1').fetchone()
+    if existing:
+        db.execute('UPDATE settings SET saby_api_key=?, saby_org_id=? WHERE id=?',
+            (request.form.get('saby_api_key'), request.form.get('saby_org_id'), existing['id']))
+    else:
+        db.execute('INSERT INTO settings (saby_api_key, saby_org_id) VALUES (?, ?)',
+            (request.form.get('saby_api_key'), request.form.get('saby_org_id')))
+    db.commit()
+    flash('Настройки Saby сохранены', 'success')
+    return redirect(url_for('index'))
+
+@app.route('/settings/system', methods=['POST'])
+def save_system_settings():
+    db = get_db()
+    db.execute('''CREATE TABLE IF NOT EXISTS settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        smtp_server TEXT, smtp_port TEXT, sender_email TEXT, sender_password TEXT,
+        default_report_email TEXT, beget_login TEXT, beget_password TEXT,
+        saby_api_key TEXT, saby_org_id TEXT, company_name TEXT, auto_report_interval TEXT
+    )''')
+    
+    existing = db.execute('SELECT id FROM settings LIMIT 1').fetchone()
+    if existing:
+        db.execute('UPDATE settings SET company_name=?, auto_report_interval=? WHERE id=?',
+            (request.form.get('company_name'), request.form.get('auto_report_interval'), existing['id']))
+    else:
+        db.execute('INSERT INTO settings (company_name, auto_report_interval) VALUES (?, ?)',
+            (request.form.get('company_name'), request.form.get('auto_report_interval')))
+    db.commit()
+    flash('Системные настройки сохранены', 'success')
+    return redirect(url_for('index'))
 
     # Получаем события хостинга из backups.db host_events за период
     host_events = []
