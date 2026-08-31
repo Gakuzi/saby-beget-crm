@@ -20,31 +20,24 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo "Deploying latest changes to /opt/backup-reports..."
+            echo "🚀 Start deployment to /opt/backup-reports..."
             
-            # Переходим в системную директорию проекта
             cd /opt/backup-reports
             
-            # Проверяем наличие репозитория
             if [ -d ".git" ]; then
-              echo "Updating existing repository..."
+              echo "📦 Updating existing repository..."
               git fetch --all
               git reset --hard origin/main
+              git clean -fd
             else
-              echo "Cloning fresh repository..."
-              # Очищаем папку если она не пуста, но нет .git
-              rm -rf * 
-              git clone https://github.com/${{ github.repository }} .
+              echo "❌ Error: Not a git repository. Please initialize manually."
+              exit 1
             fi
             
-            # Установка зависимостей
-            if [ -f "requirements.txt" ]; then
-              echo "Installing Python dependencies..."
-              pip3 install -r requirements.txt --user
-            fi
+            echo "📦 Installing dependencies..."
+            pip3 install -r requirements.txt --user --quiet
             
-            # Перезапуск сервиса
-            echo "Restarting CRM service..."
+            echo "🔄 Restarting CRM service..."
             sudo systemctl restart crm
             
-            echo "Deployment completed successfully!"
+            echo "✅ Deployment completed successfully!"
