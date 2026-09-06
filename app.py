@@ -1025,7 +1025,7 @@ def generate_report(client_id):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3002)
+    app.run(host='0.0.0.0', port=int(os.environ.get('CRM_PORT', '3002')))
 
 
 
