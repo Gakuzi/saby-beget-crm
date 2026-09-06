@@ -18,6 +18,12 @@ from email.mime.text import MIMEText
 
 CRM_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'crm_data.db')
 FLASK_URL = os.environ.get('FLASK_URL', 'http://127.0.0.1:3002')
+INTERNAL_TOKEN_FILE = os.environ.get('CRM_INTERNAL_TOKEN_FILE', os.path.join(os.path.dirname(os.path.abspath(__file__)), '.internal_report_token'))
+try:
+    with open(INTERNAL_TOKEN_FILE, 'r', encoding='utf-8') as _token_file:
+        INTERNAL_REPORT_TOKEN = _token_file.read().strip()
+except OSError:
+    INTERNAL_REPORT_TOKEN = ''
 SMTP_HOST = os.environ.get('SMTP_HOST', 'localhost')
 SMTP_PORT = int(os.environ.get('SMTP_PORT', '25'))
 SMTP_USER = os.environ.get('SMTP_USER')
@@ -90,7 +96,7 @@ def main():
         try:
             url = f"{FLASK_URL}/client/{cid}/report?date_from={d_from}&date_to={d_to}"
             print('Fetching', url)
-            r = requests.get(url, timeout=30)
+            r = requests.get(url, headers={'X-CRM-Internal-Token': INTERNAL_REPORT_TOKEN}, timeout=30)
             if r.status_code != 200:
                 print(f'Failed to fetch report for client {cid}: HTTP {r.status_code}')
                 return

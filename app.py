@@ -1,4 +1,7 @@
-from flask import Flask, render_template_string, request, redirect, url_for, jsonify, flash
+from flask import Flask, render_template_string, request, redirect, url_for, jsonify, flash, session
+from functools import wraps
+from urllib.parse import quote, urlparse
+import base64, hashlib, hmac, secrets
 import saby_helper, inn_helper, crm_core, sqlite3, requests
 
 app = Flask(__name__)
@@ -15,6 +18,168 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+
+def ensure_access_tables():
+    db = get_db()
+    db.execute('''CREATE TABLE IF NOT EXISTS client_access_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_used_at TEXT,
+        revoked_at TEXT,
+        FOREIGN KEY(client_id) REFERENCES clients(id)
+    )''')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_client_access_links_client ON client_access_links(client_id)')
+    db.commit()
+    db.close()
+
+
+def _token_hash(token):
+    return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+
+def _public_client_from_token(token):
+    if not token or len(token) < 32:
+        return None
+    db = get_db()
+    row = db.execute('''SELECT l.id AS link_id, l.client_id, c.company_name
+                        FROM client_access_links l JOIN clients c ON c.id=l.client_id
+                        WHERE l.token_hash=? AND l.revoked_at IS NULL''', (_token_hash(token),)).fetchone()
+    if row:
+        db.execute("UPDATE client_access_links SET last_used_at=CURRENT_TIMESTAMP WHERE id=?", (row['link_id'],))
+        db.commit()
+    db.close()
+    return dict(row) if row else None
+
+
+ensure_access_tables()
+
+# Первый этап защиты CRM: credentials и внутренний токен хранятся вне кода,
+# в root-only файлах рядом с приложением. Формат credentials:
+# username\\nsalt_hex\\ndigest_hex\\nmust_change(0|1)\\n
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ADMIN_CREDENTIALS_FILE = os.environ.get('CRM_ADMIN_CREDENTIALS_FILE', os.path.join(BASE_DIR, '.admin_credentials'))
+INTERNAL_TOKEN_FILE = os.environ.get('CRM_INTERNAL_TOKEN_FILE', os.path.join(BASE_DIR, '.internal_report_token'))
+ADMIN_SESSION_KEY = 'crm_admin_user'
+
+
+def _read_lines(path):
+    try:
+        with open(path, 'r', encoding='utf-8') as fh:
+            return [line.rstrip('\n') for line in fh]
+    except OSError:
+        return []
+
+
+def _load_admin_credentials():
+    lines = _read_lines(ADMIN_CREDENTIALS_FILE)
+    if len(lines) < 4:
+        return None
+    return {'username': lines[0], 'salt': lines[1], 'digest': lines[2], 'must_change': lines[3] == '1'}
+
+
+def _verify_password(password, record):
+    try:
+        digest = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), bytes.fromhex(record['salt']), 210000)
+        return hmac.compare_digest(digest.hex(), record['digest'])
+    except (ValueError, TypeError):
+        return False
+
+
+def _internal_token_valid():
+    expected = ''.join(_read_lines(INTERNAL_TOKEN_FILE)).strip()
+    supplied = request.headers.get('X-CRM-Internal-Token', '')
+    return bool(expected) and hmac.compare_digest(expected, supplied)
+
+
+def _admin_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get(ADMIN_SESSION_KEY):
+            next_url = request.full_path.rstrip('?')
+            return redirect('/login?next=' + quote(next_url))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+@app.before_request
+def protect_admin_routes():
+    # Login and health check remain public. Public client cabinets will use
+    # their own token route in the next migration and will not enter here.
+    if request.endpoint in {'login', 'healthz'} or request.path.startswith('/public/'):
+        return None
+    # The scheduled report sender authenticates with a root-only token rather
+    # than exposing the administrative session to a background process.
+    if request.path.endswith('/report') and _internal_token_valid():
+        return None
+    if request.path.endswith('/report') and _public_client_from_token(request.args.get('access_token')):
+        return None
+    if session.get(ADMIN_SESSION_KEY):
+        return None
+    return redirect('/login?next=' + quote(request.full_path.rstrip('?')))
+
+
+@app.route('/healthz')
+def healthz():
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    record = _load_admin_credentials()
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        if record and hmac.compare_digest(username.lower(), record['username'].lower()) and _verify_password(password, record):
+            session.clear()
+            session[ADMIN_SESSION_KEY] = record['username']
+            session.permanent = True
+            next_url = request.args.get('next', '/')
+            parsed = urlparse(next_url)
+            if parsed.scheme or parsed.netloc or not next_url.startswith('/'):
+                next_url = '/'
+            if record['must_change']:
+                return redirect('/change-password')
+            return redirect(next_url)
+        error = 'Неверный логин или пароль.'
+    return render_template_string('''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Вход в CRM</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(135deg,#f5f7fb,#eef1f7);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#20242c}.card{width:min(420px,calc(100% - 32px));padding:32px;border:1px solid rgba(255,255,255,.75);border-radius:28px;background:rgba(255,255,255,.72);box-shadow:0 20px 60px rgba(37,45,65,.14);backdrop-filter:blur(18px)}h1{margin-top:0;font-size:28px}label{display:block;margin:16px 0 6px;color:#626b7d}input{width:100%;box-sizing:border-box;padding:13px 14px;border:1px solid #d8deea;border-radius:12px;font-size:16px}button{margin-top:22px;width:100%;padding:13px;border:0;border-radius:12px;background:#202b45;color:#fff;font-size:16px;font-weight:700;cursor:pointer}.error{padding:10px 12px;background:#fff0f0;border:1px solid #ffcaca;border-radius:10px;color:#a12626}</style></head><body><main class="card"><h1>Вход в CRM</h1><p>Защищённое рабочее пространство администратора.</p>{% if error %}<div class="error">{{ error }}</div>{% endif %}<form method="post"><label for="username">Логин</label><input id="username" name="username" autocomplete="username" required><label for="password">Пароль</label><input id="password" type="password" name="password" autocomplete="current-password" required><button type="submit">Войти</button></form></main></body></html>''', error=error)
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/login')
+
+
+@app.route('/change-password', methods=['GET', 'POST'])
+def change_password():
+    if not session.get(ADMIN_SESSION_KEY):
+        return redirect('/login?next=/change-password')
+    record = _load_admin_credentials()
+    error = None
+    message = None
+    if request.method == 'POST':
+        current = request.form.get('current_password', '')
+        new_password = request.form.get('new_password', '')
+        confirm = request.form.get('confirm_password', '')
+        if not record or not _verify_password(current, record):
+            error = 'Текущий пароль указан неверно.'
+        elif not new_password:
+            error = 'Новый пароль не может быть пустым.'
+        elif new_password != confirm:
+            error = 'Новые пароли не совпадают.'
+        else:
+            salt = secrets.token_bytes(16)
+            digest = hashlib.pbkdf2_hmac('sha256', new_password.encode('utf-8'), salt, 210000).hex()
+            with open(ADMIN_CREDENTIALS_FILE, 'w', encoding='utf-8') as fh:
+                fh.write(f"{record['username']}\n{salt.hex()}\n{digest}\n0\n")
+            os.chmod(ADMIN_CREDENTIALS_FILE, 0o600)
+            message = 'Пароль изменён. Теперь можно работать в CRM.'
+            record = {**record, 'must_change': False}
+    return render_template_string('''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Смена пароля</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(460px,calc(100% - 32px));padding:32px;background:#fff;border-radius:24px;box-shadow:0 18px 50px #24314d18}label{display:block;margin:14px 0 6px}input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #d8deea;border-radius:10px;font-size:16px}button{margin-top:20px;width:100%;padding:12px;border:0;border-radius:10px;background:#202b45;color:#fff;font-weight:700}.error{color:#a12626}.ok{color:#176b3b}</style></head><body><main class="card"><h1>Смена пароля</h1>{% if error %}<p class="error">{{ error }}</p>{% endif %}{% if message %}<p class="ok">{{ message }}</p>{% endif %}<form method="post"><label>Текущий пароль</label><input type="password" name="current_password" required><label>Новый пароль</label><input type="password" name="new_password" required><label>Повторите новый пароль</label><input type="password" name="confirm_password" required><button type="submit">Сохранить новый пароль</button></form></main></body></html>''', error=error, message=message)
+
 INDEX_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ru">
@@ -30,42 +195,12 @@ INDEX_TEMPLATE = """
         th { background: #f8f4f3; color: #6b5a57; }
         a { color: #6b5a57; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        .btn { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: white; padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3); transition: all 0.2s ease; }
-        .btn:hover { background: #1d4ed8; }
-        .settings-icon { position: fixed; top: 20px; right: 20px; font-size: 24px; cursor: pointer; z-index: 1000; }
-        .settings-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1001; }
-        .settings-content { background: #1e293b; max-width: 800px; margin: 50px auto; padding: 25px; border-radius: 8px; }
-        .tab-buttons { display: flex; gap: 10px; border-bottom: 2px solid #334155; padding-bottom: 10px; margin-bottom: 20px; }
-        .tab-btn { background: transparent; border: 1px solid #475569; color: #94a3b8; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
-        .tab-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 5px; color: #38bdf8; }
-        .form-group input, .form-group textarea { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 4px; box-sizing: border-box; }
-        .close-btn { float: right; font-size: 24px; cursor: pointer; color: #94a3b8; }
-        .close-btn:hover { color: white; }
         .btn { background: linear-gradient(135deg,#ffd6c2 0%, #ffb4a2 100%); color: #2b2f2f; padding: 10px 18px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; transition: all 0.15s ease; box-shadow: 0 6px 12px rgba(255,180,162,0.12); }
         .btn:hover { filter: brightness(0.97); }
     </style>
-    <script>
-        function openSettings() { document.getElementById('settingsModal').style.display = 'block'; }
-        function closeSettings() { document.getElementById('settingsModal').style.display = 'none'; }
-        function switchSettingsTab(tabId) {
-            document.querySelectorAll('.settings-content .tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.settings-content .tab-btn').forEach(el => el.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-            event.target.classList.add('active');
-        }
-        window.onclick = function(event) {
-            const modal = document.getElementById('settingsModal');
-            if (event.target == modal) { modal.style.display = 'none'; }
-        }
-    </script>
 </head>
 <body>
     <div class="container">
-        <span class="settings-icon" onclick="openSettings()" title="Настройки">⚙️</span>
         <h2>CRM-система управления инфраструктурой сайтов и договоров</h2>
         <div style="margin-bottom: 20px;">
             <a href="/add_page" class="btn" style="display:inline-block;">+ Добавить контрагента из Saby</a>
@@ -88,94 +223,6 @@ INDEX_TEMPLATE = """
             </tr>
             {% endfor %}
         </table>
-    </div>
-
-    <!-- Модальное окно настроек -->
-    <div id="settingsModal" class="settings-modal">
-        <div class="settings-content">
-            <span class="close-btn" onclick="closeSettings()">&times;</span>
-            <h2>⚙️ Настройки CRM</h2>
-            
-            <div class="tab-buttons">
-                <button class="tab-btn active" onclick="switchSettingsTab('tab-email')">📧 Настройки почты</button>
-                <button class="tab-btn" onclick="switchSettingsTab('tab-beget')">🌐 Beget API</button>
-                <button class="tab-btn" onclick="switchSettingsTab('tab-saby')">📄 Saby интеграция</button>
-                <button class="tab-btn" onclick="switchSettingsTab('tab-system')">🔧 Системные</button>
-            </div>
-
-            <div id="tab-email" class="tab-content active">
-                <h3>Настройки электронной почты</h3>
-                <form action="/settings/email" method="POST">
-                    <div class="form-group">
-                        <label>SMTP сервер:</label>
-                        <input type="text" name="smtp_server" placeholder="smtp.example.com" value="{{ settings.smtp_server or '' }}">
-                    </div>
-                    <div class="form-group">
-                        <label>SMTP порт:</label>
-                        <input type="number" name="smtp_port" placeholder="587" value="{{ settings.smtp_port or '587' }}">
-                    </div>
-                    <div class="form-group">
-                        <label>Email отправителя:</label>
-                        <input type="email" name="sender_email" placeholder="reports@example.com" value="{{ settings.sender_email or '' }}">
-                    </div>
-                    <div class="form-group">
-                        <label>Пароль приложения:</label>
-                        <input type="password" name="sender_password" value="{{ settings.sender_password or '' }}">
-                    </div>
-                    <div class="form-group">
-                        <label>Email для отчетов по умолчанию:</label>
-                        <input type="email" name="default_report_email" placeholder="admin@example.com" value="{{ settings.default_report_email or '' }}">
-                    </div>
-                    <button type="submit" class="btn">Сохранить настройки почты</button>
-                </form>
-            </div>
-
-            <div id="tab-beget" class="tab-content">
-                <h3>Настройки Beget API</h3>
-                <p style="color: #94a3b8; margin-bottom: 15px;">Beget API использует логин и пароль от панели управления. Отдельный API-ключ не требуется.</p>
-                <form action="/settings/beget" method="POST">
-                    <div class="form-group">
-                        <label>Логин Beget (по умолчанию):</label>
-                        <input type="text" name="beget_login" value="{{ settings.beget_login or '' }}">
-                    </div>
-                    <div class="form-group">
-                        <label>Пароль Beget (по умолчанию):</label>
-                        <input type="password" name="beget_password" value="{{ settings.beget_password or '' }}">
-                    </div>
-                    <button type="submit" class="btn">Сохранить настройки Beget</button>
-                </form>
-            </div>
-
-            <div id="tab-saby" class="tab-content">
-                <h3>Настройки Saby (СБИС)</h3>
-                <form action="/settings/saby" method="POST">
-                    <div class="form-group">
-                        <label>API ключ Saby:</label>
-                        <input type="text" name="saby_api_key" value="{{ settings.saby_api_key or '' }}">
-                    </div>
-                    <div class="form-group">
-                        <label>Организация Saby (ID):</label>
-                        <input type="text" name="saby_org_id" value="{{ settings.saby_org_id or '' }}">
-                    </div>
-                    <button type="submit" class="btn">Сохранить настройки Saby</button>
-                </form>
-            </div>
-
-            <div id="tab-system" class="tab-content">
-                <h3>Системные настройки</h3>
-                <form action="/settings/system" method="POST">
-                    <div class="form-group">
-                        <label>Название компании:</label>
-                        <input type="text" name="company_name" value="{{ settings.company_name or '' }}">
-                    </div>
-                    <div class="form-group">
-                        <label>Интервал автоотчетов (часы):</label>
-                        <input type="number" name="auto_report_interval" value="{{ settings.auto_report_interval or '24' }}">
-                    </div>
-                    <button type="submit" class="btn">Сохранить системные настройки</button>
-                </form>
-            </div>
-        </div>
     </div>
 </body>
 </html>
@@ -301,33 +348,12 @@ CLIENT_CARD_TEMPLATE = """
     <meta charset="UTF-8">
     <title>Карточка: {{ client.company_name }}</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #2e1065 0%, #1e1b4b 50%, #0f172a 100%); min-height: 100vh; color: #f1f5f9; padding: 25px; margin: 0; }
-        .container { max-width: 1200px; margin: auto; background: #1e293b; padding: 25px; border-radius: 8px; }
-        h2, h3, h4 { color: #38bdf8; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg,#fffaf0 0%, #ffffff 100%); min-height: 100vh; color: #2b2f2f; padding: 25px; margin: 0; }
         .container { max-width: 950px; margin: auto; background: #ffffff; padding: 25px; border-radius: 8px; }
         h2, h3 { color: #6b5a57; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .box { background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #f0e9e6; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 8px; border: 1px solid #334155; text-align: left; font-size: 13px; }
-        th { background: #0f172a; color: #38bdf8; }
-        input, textarea { width: 100%; padding: 8px; box-sizing: border-box; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 4px; margin-top: 5px; }
-        button, .btn-link { background: #2563eb; color: white; padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; text-decoration:none; display:inline-block; }
-        button:hover, .btn-link:hover { background: #1d4ed8; }
-        .btn-success { background: #10b981; }
-        .btn-success:hover { background: #059669; }
-        a { color: #38bdf8; }
-        .tab-container { margin-top: 20px; }
-        .tab-buttons { display: flex; gap: 10px; border-bottom: 2px solid #334155; padding-bottom: 10px; }
-        .tab-btn { background: transparent; border: 1px solid #475569; color: #94a3b8; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
-        .tab-btn.active { background: #2563eb; color: white; border-color: #2563eb; }
-        .tab-content { display: none; padding: 15px 0; }
-        .tab-content.active { display: block; }
-        .status-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-        .status-done { background: #10b981; color: white; }
-        .status-pending { background: #f59e0b; color: white; }
-        .status-cancelled { background: #ef4444; color: white; }
         th, td { padding: 8px; border: 1px solid #f0e9e6; text-align: left; font-size: 13px; }
         th { background: #f8f4f3; color: #6b5a57; }
         input, textarea { width: 100%; padding: 8px; box-sizing: border-box; background: #fff; border: 1px solid #f0e9e6; color: #2b2f2f; border-radius: 6px; margin-top: 5px; }
@@ -335,61 +361,6 @@ CLIENT_CARD_TEMPLATE = """
         button:hover, .btn-link:hover { filter: brightness(0.98); }
         a { color: #6b5a57; }
     </style>
-    <script>
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-            event.target.classList.add('active');
-        }
-        function syncSaby(clientId) {
-            const btn = event.target;
-            btn.disabled = true;
-            btn.textContent = 'Синхронизация...';
-            fetch('/api/saby/sync/' + clientId, {method: 'POST'})
-                .then(r => r.json())
-                .then(data => {
-                    btn.disabled = false;
-                    btn.textContent = '✓ Синхронизировано';
-                    setTimeout(() => { location.reload(); }, 1500);
-                })
-                .catch(err => {
-                    btn.disabled = false;
-                    btn.textContent = 'Ошибка синхронизации';
-                    alert('Ошибка: ' + err);
-                });
-        }
-        function testSabyConnection(clientId) {
-            const btn = event.target;
-            btn.disabled = true;
-            btn.textContent = 'Тестирование...';
-            fetch('/api/saby/test/' + clientId)
-                .then(r => r.json())
-                .then(data => {
-                    btn.disabled = false;
-                    if (data.success) {
-                        btn.textContent = '✓ Соединение OK';
-                        showTestResult(data);
-                    } else {
-                        btn.textContent = '✗ Ошибка теста';
-                        alert('Ошибка тестирования: ' + (data.error || 'Неизвестная ошибка'));
-                    }
-                })
-                .catch(err => {
-                    btn.disabled = false;
-                    btn.textContent = '✗ Ошибка теста';
-                    alert('Ошибка: ' + err);
-                });
-        }
-        function showTestResult(data) {
-            let msg = 'Результаты тестирования:\\n\\n';
-            data.steps.forEach(step => {
-                const icon = step.status === 'success' ? '✓' : (step.status === 'error' ? '✗' : '⚠');
-                msg += icon + ' ' + step.step + ': ' + step.message + '\\n';
-            });
-            alert(msg);
-        }
-    </script>
 </head>
 <body>
     <div class="container">
@@ -411,12 +382,6 @@ CLIENT_CARD_TEMPLATE = """
                     <label>Логин Beget:</label>
                     <input type="text" name="beget_login" value="{{ client.beget_login or '' }}">
                     <label>Пароль Beget:</label>
-                    <input type="password" name="beget_pass" value="{{ client.beget_password or '' }}">
-                    <label>Сайты:</label>
-                    <input type="text" name="sites" value="{{ client.sites or '' }}">
-                    <label>Email для отчетов (через запятую):</label>
-                    <input type="text" name="emails" value="{{ client.email_reports or '' }}">
-                    <button type="submit">Сохранить доступы</button>
                     <input type="password" name="beget_pass" value="{{ client.beget_pass or '' }}">
                     <label>API-ключ Beget (если есть):</label>
                     <input type="text" name="beget_api_key" value="{{ client.beget_api_key or '' }}">
@@ -447,9 +412,15 @@ CLIENT_CARD_TEMPLATE = """
         </div>
 
         <div style="margin-top: 25px;" class="box">
+            <h3>Клиентский кабинет</h3>
+            <p>Создайте отзывную ссылку, по которой клиент сможет выбрать период и самостоятельно сформировать отчёт без доступа к рабочему пространству.</p>
+            <form action="/client/{{ client.id }}/create-access-link" method="POST"><button type="submit">Создать новую ссылку кабинета</button></form>
+        </div>
+
+        <div style="margin-top: 25px;" class="box">
             <h3>Генерация отчета и мониторинг</h3>
             <p>Выберите период для формирования отчета со списком выполненных работ, бэкапов (включая 1С-Битрикс), состоянием доменов, почты и баланса хостинга.</p>
-            <form action="/client/{{ client.id }}/report" method="GET" style="display: flex; gap: 10px; align-items: flex-end; margin-top: 10px;" target="_blank">
+            <form action="/client/{{ client.id }}/report" method="GET" style="display: flex; gap: 10px; align-items: flex-end; margin-top: 10px;" target="_blank" onsubmit="return openReportTab(this)">
                 <div style="flex: 1;">
                     <label style="font-size: 13px;">Дата с:</label>
                     <input type="date" name="date_from" value="{{ default_date_from }}" style="margin-top:5px; padding:8px; background:#ffffff; border:1px solid #f0e9e6; color:#2b2f2f; border-radius:4px; width:100%;">
@@ -466,6 +437,26 @@ CLIENT_CARD_TEMPLATE = """
                 </div>
             </form>
             <script>
+                function openReportTab(form) {
+                    const url = form.action + '?' + new URLSearchParams(new FormData(form)).toString();
+                    const w = window.open('', '_blank');
+                    if (!w) { alert('Разрешите всплывающие окна для этого сайта'); return false; }
+                    w.document.write('<html><head><meta charset="utf-8"><title>Формирование отчёта...</title></head><body style="font-family:sans-serif;display:flex;flex-direction:column;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f7fa;"><h2 style="color:#333;">⏳ Формирование отчёта...</h2><p style="color:#666;">Идёт сбор данных с хостинга Beget, пожалуйста, подождите.</p><svg width="50" height="50" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="none" stroke="#3498db" stroke-width="5" stroke-dasharray="80"><animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite"/></circle></svg></body></html>');
+                    w.document.close();
+                    fetch(url).then(function(r){ return r.text(); }).then(function(html){
+                        w.document.open(); w.document.write(html); w.document.close();
+                    }).catch(function(e){
+                        w.document.body.innerHTML = '<h2 style="color:#c0392b;text-align:center;">Ошибка загрузки отчёта: ' + e + '</h2>';
+                    });
+                    return false;
+                }
+                function showReportLoader() {
+                    const overlay = document.createElement('div');
+                    overlay.id = 'report-loader-overlay';
+                    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.95);z-index:9999;display:flex;flex-direction:column;justify-content:center;align-items:center;font-family:sans-serif;';
+                    overlay.innerHTML = '<h2 style="color:#333;margin-bottom:10px;">⏳ Формирование отчёта...</h2><p style="color:#666;">Пожалуйста, подождите (до 30 сек).<br>Идёт сбор и сжатие данных.</p><div style="margin-top:20px;"><svg width="40" height="40" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="none" stroke="#ffb4a2" stroke-width="5" stroke-dasharray="80" stroke-dashoffset="0"><animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite"/></circle></svg></div>';
+                    document.body.appendChild(overlay);
+                }
                 function fmtY(d){ return d.toISOString().slice(0,10); }
                 function setPrevMonth(){
                     const now = new Date();
@@ -491,94 +482,6 @@ CLIENT_CARD_TEMPLATE = """
             </script>
         </div>
 
-        <!-- Вкладки с данными из Saby -->
-        <div class="tab-container">
-            <div class="tab-buttons">
-                <button class="tab-btn active" onclick="switchTab('tab-works')">📋 Работы из Saby</button>
-                <button class="tab-btn" onclick="switchTab('tab-requests')">📞 Обращения</button>
-                <button class="tab-btn" onclick="switchTab('tab-documents')">📄 Документы (Акты/Счета)</button>
-                <button class="tab-btn" onclick="switchTab('tab-local')">✏️ Локальные записи</button>
-            </div>
-
-            <div id="tab-works" class="tab-content active">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <h4>Выполненные работы из СБИС</h4>
-                    <div>
-                        <button class="btn-success" onclick="testSabyConnection({{ client.id }})" style="background:#0891b2;margin-right:8px;">🔌 Тест соединения</button>
-                        <button class="btn-success" onclick="syncSaby({{ client.id }})">🔄 Синхронизировать с Saby</button>
-                    </div>
-                </div>
-                <table>
-                    <tr><th>Дата</th><th>Наименование работы</th><th>Количество</th><th>Ед. изм.</th><th>Цена</th><th>Сумма</th></tr>
-                    {% for work in saby_works %}
-                    <tr>
-                        <td>{{ work.work_date }}</td>
-                        <td>{{ work.name }}</td>
-                        <td>{{ work.quantity }}</td>
-                        <td>{{ work.unit }}</td>
-                        <td>{{ work.price }} ₽</td>
-                        <td>{{ work.total }} ₽</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="6" style="text-align:center; color:#94a3b8;">Нет данных. Нажмите "Синхронизировать с Saby"</td></tr>
-                    {% endfor %}
-                </table>
-            </div>
-
-            <div id="tab-requests" class="tab-content">
-                <h4>Обращения клиентов из СБИС</h4>
-                <table>
-                    <tr><th>Дата создания</th><th>Тема</th><th>Статус</th><th>Ответственный</th></tr>
-                    {% for req in saby_requests %}
-                    <tr>
-                        <td>{{ req.created_date }}</td>
-                        <td>{{ req.subject }}</td>
-                        <td><span class="status-badge {% if req.status == 'Завершено' %}status-done{% elif req.status == 'В работе' %}status-pending{% else %}status-cancelled{% endif %}">{{ req.status }}</span></td>
-                        <td>{{ req.responsible or '-' }}</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="4" style="text-align:center; color:#94a3b8;">Нет обращений</td></tr>
-                    {% endfor %}
-                </table>
-            </div>
-
-            <div id="tab-documents" class="tab-content">
-                <h4>Документы из СБИС (Акты, Счета)</h4>
-                <table>
-                    <tr><th>Тип</th><th>Номер</th><th>Дата</th><th>Сумма</th><th>Статус</th></tr>
-                    {% for doc in saby_documents %}
-                    <tr>
-                        <td>{{ doc.doc_type }}</td>
-                        <td>{{ doc.number }}</td>
-                        <td>{{ doc.date }}</td>
-                        <td>{{ doc.amount }} ₽</td>
-                        <td><span class="status-badge {% if doc.status == 'Подписан' %}status-done{% elif doc.status == 'На подписании' %}status-pending{% else %}status-cancelled{% endif %}">{{ doc.status }}</span></td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="5" style="text-align:center; color:#94a3b8;">Нет документов</td></tr>
-                    {% endfor %}
-                </table>
-            </div>
-
-            <div id="tab-local" class="tab-content">
-                <h4>Локальные записи о работах</h4>
-                <table>
-                    <tr><th>Дата</th><th>Описание работ / бэкапов / инцидентов</th><th>Часы</th></tr>
-                    {% for log in logs %}
-                    <tr><td>{{ log.work_date }}</td><td>{{ log.description }}</td><td>{{ log.hours }} ч.</td></tr>
-                    {% else %}
-                    <tr><td colspan="3" style="text-align:center; color:#94a3b8;">Нет записей</td></tr>
-                    {% endfor %}
-                </table>
-
-                <form action="/client/{{ client.id }}/add_log" method="POST" style="margin-top:15px;" class="box">
-                    <h4>Добавить запись о работах</h4>
-                    <textarea name="description" rows="2" placeholder="Например: Штатный бэкап, создание почтового ящика info@site.ru..." required></textarea>
-                    <label style="margin-top:10px; display:block;">Часы:</label>
-                    <input type="number" step="0.5" name="hours" value="1.0" required style="width: 100px;">
-                    <button type="submit">Добавить запись</button>
-                </form>
-            </div>
         <h3 style="margin-top:25px;">Учет выполненных работ и обращений</h3>
         <table>
             <tr><th>Дата / время</th><th>Описание работ / бэкапов / инцидентов</th><th>Часы</th><th>Действия</th></tr>
@@ -622,7 +525,7 @@ CLIENT_CARD_TEMPLATE = """
                             {% elif e.type == 'backup' %}
                                 Бэкап: {{ e.site_name or e.site_domain }} — {{ e.status }} — {{ e.size_mb or 'N/A' }} МБ
                             {% elif e.type == 'host_event' %}
-                                {{ e.event_type }} — {{ e.details }}
+                                {{ e.event_type }} — (детали события скрыты для компактности)
                             {% else %}
                                 {{ e }}
                             {% endif %}
@@ -644,78 +547,123 @@ REPORT_TEMPLATE = """
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Отчет для {{ client.company_name }}</title>
+    <title>Отчёт {{ client.company_name or 'Клиент' }}</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #fff; color: #000; padding: 30px; }
-        .report-container { max-width: 800px; margin: auto; border: 1px solid #ccc; padding: 30px; }
-        h2, h3 { border-bottom: 2px solid #000; padding-bottom: 5px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #999; padding: 8px; text-align: left; font-size: 14px; }
-        th { background: #eee; }
-        .no-print { margin-top: 20px; }
-        @media print { .no-print { display: none; } }
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; color: #333; }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #2980b9; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background: #3498db; color: white; font-weight: bold; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        .summary { background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .summary p { margin: 8px 0; font-size: 15px; }
+        .no-data { color: #7f8c8d; font-style: italic; text-align: center; padding: 20px; }
+        .btn { padding: 12px 24px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; margin-right: 10px; color: white; }
+        .btn-print { background: #27ae60; }
+        .btn-close { background: #95a5a6; }
+        @media print {
+            .no-print { display: none; }
+            body { margin: 0; padding: 10px; }
+            table { page-break-inside: avoid; }
+        }
     </style>
 </head>
 <body>
-    <div class="report-container">
-        <h2>Отчет о сопровождении ИТ-инфраструктуры за период с {{ date_from }} по {{ date_to }}</h2>
-        <p><strong>Заказчик:</strong> {{ client.company_name }} (ИНН: {{ client.inn }})</p>
-        <p><strong>Основание:</strong> Договор № {{ client.saby_contract_number }}</p>
-        <p><strong>Исполнитель:</strong> Самозанятый Климов Евгений Александрович</p>
-        <p><strong>Обслуживаемые сайты:</strong> {{ client.sites }}</p>
-
-        <h3>Состояние хостинга и доменов (Beget API)</h3>
-        <p>{{ beget_status }}</p>
-
-        <h3>События хостинга (Beget)</h3>
-        <p style="color:#b91c1c;">Алерты доменов: {% if domain_alerts %}{% for a in domain_alerts %}<strong>{{ a.domain }}</strong> истекает {{ a.expires }} (через {{ a.days_left }} дней) — {{ a.severity }}{% if not loop.last %}; {% endif %}{% endfor %}{% else %}критичных доменов не обнаружено{% endif %}</p>
-
-        <h4>Краткая сводка по событиям</h4>
-        {% if grouped_events.snapshots %}
-            <p>Последние снимки аккаунта: {{ grouped_events.snapshots|length }}</p>
-        {% endif %}
-
-        <table>
-            <tr><th>Дата/Время</th><th>Категория</th><th>Объект</th><th>Описание</th><th>Влияние</th></tr>
-            {% set any = false %}
-            {% for cat, items in grouped_events.items() %}
-                {% for ev in items %}
-                    {% set any = true %}
-                    <tr>
-                        <td>{{ ev.human_time or '-' }}</td>
-                        <td>{{ cat }}</td>
-                        <td>{{ (ev.details.domain if ev.details is mapping and ev.details.domain) or (ev.site) or (ev.host_account) or '-' }}</td>
-                        <td>{{ ev.description }}</td>
-                        <td>{{ ev.impact }}{% if ev.impact_note %}: {{ ev.impact_note }}{% endif %}</td>
-                    </tr>
-                {% endfor %}
+    <div class="no-print">
+        <button onclick="window.print()" class="btn btn-print">🖨️ Печать / Сохранить PDF</button>
+        <button onclick="window.close()" class="btn btn-close">✖ Закрыть</button>
+    </div>
+    
+    <h1>Отчёт о сопровождении ИТ-инфраструктуры</h1>
+    
+    <div class="summary">
+        <p><strong>Заказчик:</strong> {{ client.company_name or 'Не указано' }} (ИНН: {{ client.inn or 'Н/Д' }})</p>
+        <p><strong>Договор:</strong> № {{ client.saby_contract_number or client.contract or 'Н/Д' }}</p>
+        <p><strong>Период отчёта:</strong> с {{ date_from }} по {{ date_to }}</p>
+        <p><strong>Дата формирования:</strong> {{ moment().format('DD.MM.YYYY HH:mm') if moment else 'сейчас' }}</p>
+    </div>
+    
+    <h2>💰 Баланс аккаунта Beget (на дату формирования)</h2>
+    <p style="font-size: 18px; font-weight: bold; color: {% if balance != 'Н/Д' %}#27ae60{% else %}#e74c3c{% endif %};">
+        {{ balance }}
+    </p>
+    
+    <h2>🌐 Домены и SSL-сертификаты</h2>
+    {% if domains %}
+    <table>
+        <thead>
+            <tr>
+                <th>Домен</th>
+                <th>Статус SSL</th>
+                <th>Срок продления домена</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for domain in domains %}
+            <tr>
+                <td><strong>{{ domain.domain }}</strong></td>
+                <td>{{ domain.ssl }}</td>
+                <td>{{ domain.expire }}</td>
+            </tr>
             {% endfor %}
-            {% if not any %}
-            <tr><td colspan="5" style="text-align:center;">За период событий хостинга не найдено</td></tr>
-            {% endif %}
-        </table>
-
-        <h3>Резервные копии (Автоматические и 1С-Битрикс)</h3>
-        <table>
-            <tr><th>Сайт / Источник</th><th>Дата бэкапа</th><th>Размер</th></tr>
-            {% for b in backups %}
-            <tr><td>{{ b.site_name }}</td><td>{{ b.backup_date_rus or b.backup_date }}</td><td>{% if b.size_mb %}{{ b.size_mb }} МБ{% else %}-{% endif %}</td></tr>
-            {% else %}
-            <tr><td colspan="3" style="text-align:center;">За выбранный период бэкапов в базе не зафиксировано</td></tr>
+        </tbody>
+    </table>
+    {% else %}
+    <p class="no-data">Нет данных о доменах в последнем снимке хостинга</p>
+    {% endif %}
+    
+    <h2>💾 Резервные копии хостинга ({{ backups|length }} шт.)</h2>
+    {% if backups %}
+    <table>
+        <thead>
+            <tr>
+                <th>Сайт / Источник</th>
+                <th>Дата и время бэкапа</th>
+                <th>Размер</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for backup in backups %}
+            <tr>
+                <td>{{ backup.site_name or backup.site_domain or 'Неизвестно' }}</td>
+                <td>{{ backup.backup_date }}</td>
+                <td>{% if backup.size_mb %}{{ backup.size_mb }} МБ{% else %}—{% endif %}</td>
+            </tr>
             {% endfor %}
-        </table>
-
-        <h3>Выполненные работы, бэкапы и обращения</h3>
-        <table>
-            <tr><th>Дата</th><th>Описание</th><th>Затрачено часов</th></tr>
+        </tbody>
+    </table>
+    {% else %}
+    <p class="no-data">Бэкапы за выбранный период отсутствуют</p>
+    {% endif %}
+    
+    <h2>📋 Выполненные работы и обращения ({{ logs|length }} шт.)</h2>
+    {% if logs %}
+    <table>
+        <thead>
+            <tr>
+                <th>Дата выполнения</th>
+                <th>Описание работы</th>
+                <th>Затрачено часов</th>
+            </tr>
+        </thead>
+        <tbody>
             {% for log in logs %}
-            <tr><td>{{ log.work_date }}</td><td>{{ log.description }}</td><td>{{ log.hours }} ч.</td></tr>
+            <tr>
+                <td>{{ log.work_date }}</td>
+                <td>{{ log.description }}</td>
+                <td style="text-align: center;">{{ log.hours }}</td>
+            </tr>
             {% endfor %}
-        </table>
-
-        <div class="no-print">
-            <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">Напечатать / Сохранить в PDF</button>
-        </div>
+        </tbody>
+    </table>
+    {% else %}
+    <p class="no-data">Работы за выбранный период не зафиксированы</p>
+    {% endif %}
+    
+    <div class="no-print" style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #eee;">
+        <button onclick="window.print()" class="btn btn-print">🖨️ Печать / Сохранить PDF</button>
+        <button onclick="window.close()" class="btn btn-close">✖ Закрыть</button>
     </div>
 </body>
 </html>
@@ -725,12 +673,7 @@ REPORT_TEMPLATE = """
 def index():
     db = get_db()
     clients = db.execute('SELECT * FROM clients').fetchall()
-    
-    # Загружаем настройки из таблицы settings
-    settings_row = db.execute('SELECT * FROM settings LIMIT 1').fetchone()
-    settings = dict(settings_row) if settings_row else {}
-    
-    return render_template_string(INDEX_TEMPLATE, clients=clients, settings=settings)
+    return render_template_string(INDEX_TEMPLATE, clients=clients)
 
 @app.route('/add_page')
 def add_page():
@@ -758,49 +701,43 @@ def add_client_post():
     )
     return redirect(url_for('index'))
 
+@app.route('/public/client/<token>')
+def public_client_portal(token):
+    access = _public_client_from_token(token)
+    if not access:
+        return 'Ссылка недействительна или отозвана', 404
+    db = get_db()
+    client = db.execute('SELECT id, company_name, sites FROM clients WHERE id=?', (access['client_id'],)).fetchone()
+    db.close()
+    if not client:
+        return 'Клиент не найден', 404
+    import datetime
+    today = datetime.date.today()
+    first = today.replace(day=1)
+    return render_template_string('''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Кабинет {{ client.company_name }}</title><style>body{margin:0;min-height:100vh;background:linear-gradient(135deg,#f5f7fb,#eef1f7);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#20242c;padding:24px}.card{max-width:760px;margin:0 auto;padding:30px;background:rgba(255,255,255,.8);border:1px solid #fff;border-radius:28px;box-shadow:0 20px 60px #25304d18;backdrop-filter:blur(18px)}h1{margin-top:0}label{display:block;margin:12px 0 6px;color:#626b7d}input{padding:12px;border:1px solid #d8deea;border-radius:10px;font-size:16px}button{margin-top:18px;padding:12px 18px;border:0;border-radius:10px;background:#202b45;color:#fff;font-weight:700;cursor:pointer}.muted{color:#687286}</style></head><body><main class="card"><p class="muted">Клиентский кабинет</p><h1>{{ client.company_name }}</h1><p class="muted">Выберите период, чтобы сформировать отчёт по техническому сопровождению.</p><form method="get" action="/client/{{ client.id }}/report"><input type="hidden" name="access_token" value="{{ token }}"><label>Дата начала</label><input type="date" name="date_from" value="{{ first }}" required><label>Дата окончания</label><input type="date" name="date_to" value="{{ today }}" required><br><button type="submit">Сформировать отчёт</button></form></main></body></html>''', client=dict(client), token=token, first=first.isoformat(), today=today.isoformat())
+
+
+@app.route('/client/<int:client_id>/create-access-link', methods=['POST'])
+def create_access_link(client_id):
+    db = get_db()
+    client = db.execute('SELECT id, company_name FROM clients WHERE id=?', (client_id,)).fetchone()
+    if not client:
+        db.close()
+        return 'Клиент не найден', 404
+    token = secrets.token_urlsafe(32)
+    db.execute('UPDATE client_access_links SET revoked_at=CURRENT_TIMESTAMP WHERE client_id=? AND revoked_at IS NULL', (client_id,))
+    db.execute('INSERT INTO client_access_links(client_id, token_hash) VALUES (?, ?)', (client_id, _token_hash(token)))
+    db.commit()
+    db.close()
+    link = 'https://' + request.host + '/public/client/' + token
+    return render_template_string('''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ссылка создана</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(700px,calc(100% - 32px));padding:32px;background:#fff;border-radius:24px;box-shadow:0 18px 50px #24314d18}input{width:100%;box-sizing:border-box;padding:13px;border:1px solid #d8deea;border-radius:10px;font-size:15px}a{display:inline-block;margin-top:18px;color:#202b45}</style></head><body><main class="card"><h1>Ссылка создана</h1><p>Ссылка для {{ company_name }} активна. Скопируйте её и передайте клиенту. Предыдущая ссылка отозвана.</p><input readonly value="{{ link }}" onclick="this.select()"><p><a href="/client/{{ client_id }}">Вернуться в карточку клиента</a></p></main></body></html>''', company_name=client['company_name'], link=link, client_id=client_id)
+
+
 @app.route('/client/<int:client_id>')
 def client_card(client_id):
     db = get_db()
     row = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
     client = dict(row) if row else {}
-    logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (client_id,)).fetchall()
-    
-    # Загружаем данные из Saby для этого клиента
-    saby_works = []
-    saby_requests = []
-    saby_documents = []
-    
-    if client.get('inn'):
-        try:
-            # Получаем работы из БД
-            saby_works = db.execute(
-                'SELECT * FROM saby_works WHERE inn = ? ORDER BY work_date DESC', 
-                (client['inn'],)
-            ).fetchall()
-            saby_works = [dict(w) for w in saby_works]
-            
-            # Получаем обращения
-            saby_requests = db.execute(
-                'SELECT * FROM saby_requests WHERE inn = ? ORDER BY created_date DESC',
-                (client['inn'],)
-            ).fetchall()
-            saby_requests = [dict(r) for r in saby_requests]
-            
-            # Получаем документы
-            saby_documents = db.execute(
-                'SELECT * FROM saby_documents WHERE inn = ? ORDER BY date DESC',
-                (client['inn'],)
-            ).fetchall()
-            saby_documents = [dict(d) for d in saby_documents]
-        except Exception as e:
-            print(f'Error loading Saby data: {e}')
-    
-    return render_template_string(CLIENT_CARD_TEMPLATE, 
-                                  client=client, 
-                                  logs=logs,
-                                  saby_works=saby_works,
-                                  saby_requests=saby_requests,
-                                  saby_documents=saby_documents)
     raw_logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (client_id,)).fetchall()
     # format logs with russian-friendly date
     logs = []
@@ -989,383 +926,111 @@ def delete_log(client_id, log_id):
     crm_core.delete_work_log(log_id)
     return redirect(url_for('client_card', client_id=client_id))
 
-@app.route('/api/saby/sync/<int:client_id>', methods=['POST'])
-def api_saby_sync(client_id):
-    """API endpoint для ручной синхронизации с Saby"""
-    try:
-        from saby_integration import run_daily_sync
-        db = get_db()
-        client = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
-        
-        if not client:
-            return jsonify({'error': 'Клиент не найден'}), 404
-        
-        # Запускаем синхронизацию для конкретного клиента
-        result = run_daily_sync(client_id)
-        
-        return jsonify({
-            'success': True,
-            'message': 'Синхронизация завершена',
-            'details': result
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/saby/test/<int:client_id>', methods=['GET'])
-def api_saby_test(client_id):
-    """API endpoint для тестирования соединения с Saby по клиенту"""
-    try:
-        from saby_integration import test_saby_connection
-        db = get_db()
-        client = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
-        
-        if not client:
-            return jsonify({'error': 'Клиент не найден'}), 404
-        
-        # Запускаем тестирование соединения
-        result = test_saby_connection(client_id)
-        
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/client/<int:client_id>/report')
 def generate_report(client_id):
-    db = get_db()
-    row = db.execute('SELECT * FROM clients WHERE id = ?', (client_id,)).fetchone()
-    client = dict(row) if row else {}
+    access_token = request.args.get('access_token')
+    if access_token:
+        access = _public_client_from_token(access_token)
+        if not access or int(access['client_id']) != int(client_id):
+            return 'Ссылка недействительна для этого клиента', 403
+    import sqlite3, os, datetime, json
+    from flask import render_template_string, request
     
-    import datetime
-    today = datetime.date.today()
-    date_from = request.args.get('date_from', today.replace(day=1).strftime('%Y-%m-%d'))
-    date_to = request.args.get('date_to', today.strftime('%Y-%m-%d'))
-
-    logs = db.execute('SELECT * FROM work_logs WHERE client_id = ? AND work_date BETWEEN ? AND ? ORDER BY work_date DESC', (client_id, date_from, date_to)).fetchall()
+    db_path = os.path.join(os.path.dirname(__file__), 'crm_data.db')
+    backups_db_path = os.path.join(os.path.dirname(__file__), 'backups.db')
     
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    client = conn.execute('SELECT * FROM clients WHERE id=?', (client_id,)).fetchone()
+    if not client:
+        conn.close()
+        return "Клиент не найден", 404
+    client = dict(client)
+    conn.close()
+    
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    if not date_from or not date_to:
+        today = datetime.date.today()
+        date_from = today.replace(day=1).isoformat()
+        date_to = today.isoformat()
+    
+    # Работы
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    logs = conn.execute('SELECT * FROM work_logs WHERE client_id=? AND work_date BETWEEN ? AND ? ORDER BY work_date DESC', (client_id, date_from, date_to)).fetchall()
+    logs = [dict(row) for row in logs]
+    conn.close()
+    
+    # Бэкапы и данные хостинга
     backups = []
-    try:
-        import os
-        db_path_backups = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups.db')
-        if os.path.exists(db_path_backups):
-            conn_b = sqlite3.connect(db_path_backups)
-            conn_b.row_factory = sqlite3.Row
-            cursor_b = conn_b.cursor()
-
-            # Получаем все бэкапы за период, затем фильтруем по списку сайтов клиента
-            cursor_b.execute('SELECT site_name, site_domain, backup_date, size_mb, extra FROM backup_history WHERE date(backup_date) BETWEEN ? AND ? ORDER BY backup_date DESC', (date_from, date_to))
-            all_rows = [dict(r) for r in cursor_b.fetchall()]
-
-            client_sites_raw = client.get('sites') or ''
-            client_sites = [s.strip().lower().replace('https://','').replace('http://','').split('/')[0] for s in client_sites_raw.split(',') if s.strip()]
-            company_name = (client.get('company_name') or '').strip()
-
-            # фильтрация по site_mapping (client_id)
-            backups = []
-            # если у клиента есть client_id, используем прямой запрос
-            client_id = client.get('id')
-            if client_id:
-                cursor_b.execute('SELECT site_name, site_domain, backup_date, size_mb, extra FROM backup_history WHERE client_id = ? AND date(backup_date) BETWEEN ? AND ? ORDER BY backup_date DESC', (client_id, date_from, date_to))
-                backups = [dict(r) for r in cursor_b.fetchall()]
-            else:
-                # fallback: фильтруем по доменам в поле sites
-                for r in all_rows:
-                    domain = (r.get('site_domain') or '').lower()
-                    name = (r.get('site_name') or '').strip()
-                    matched = False
-                    if domain and domain in client_sites:
-                        matched = True
-                    if not matched and company_name and company_name == name:
-                        matched = True
-                    if matched:
-                        backups.append(r)
-
-            conn_b.close()
-
-            # Если ничего не найдено для клиента, покажем все бэкапы за период (для отладки)
-            if not backups:
-                backups = all_rows
-                backups_note = 'Показаны все бэкапы за период, сопоставление с сайтом клиента не обнаружило совпадений.'
-            else:
-                backups_note = ''
-
-    except Exception as e:
-        print(f'Error loading backups: {e}')
-
-    beget_status = 'Доступы Beget не настроены в карточке.'
-    beget_data = {}
-    login = client.get('beget_login')
-    password = client.get('beget_password') or client.get('beget_pass')
-    if login and password:
-        try:
-            import beget_helper
-            beget_data = beget_helper.get_full_beget_report(login, password)
-            if not beget_data.get('error'):
-                bal = beget_data.get('account', {}).get('balance', 'Н/Д')
-                beget_status = f'Хостинг активен. Баланс аккаунта: {bal} руб. Сайтов: {len(beget_data.get("sites", []))}, доменов: {len(beget_data.get("domains", []))}, почтовых ящиков: {len(beget_data.get("mailboxes", []))}.'
-            else:
-                beget_status = f'Ошибка Beget API: {beget_data.get("error")}'
-        except Exception as e:
-            beget_status = f'Не удалось связаться с Beget API: {str(e)}'
-
-    return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from, date_to=date_to)
-
-# Маршруты для настроек CRM
-@app.route('/settings/email', methods=['POST'])
-def save_email_settings():
-    db = get_db()
-    # Создаем таблицу settings если не существует
-    db.execute('''CREATE TABLE IF NOT EXISTS settings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        smtp_server TEXT,
-        smtp_port TEXT,
-        sender_email TEXT,
-        sender_password TEXT,
-        default_report_email TEXT,
-        beget_login TEXT,
-        beget_password TEXT,
-        saby_api_key TEXT,
-        saby_org_id TEXT,
-        company_name TEXT,
-        auto_report_interval TEXT
-    )''')
+    balance = 'Н/Д'
+    domains_info = []
     
-    # Проверяем есть ли запись
-    existing = db.execute('SELECT id FROM settings LIMIT 1').fetchone()
-    if existing:
-        db.execute('''UPDATE settings SET 
-            smtp_server=?, smtp_port=?, sender_email=?, sender_password=?, default_report_email=?
-            WHERE id=?''', 
-            (request.form.get('smtp_server'), request.form.get('smtp_port'), 
-             request.form.get('sender_email'), request.form.get('sender_password'),
-             request.form.get('default_report_email'), existing['id']))
-    else:
-        db.execute('''INSERT INTO settings (smtp_server, smtp_port, sender_email, sender_password, default_report_email)
-            VALUES (?, ?, ?, ?, ?)''',
-            (request.form.get('smtp_server'), request.form.get('smtp_port'),
-             request.form.get('sender_email'), request.form.get('sender_password'),
-             request.form.get('default_report_email')))
-    db.commit()
-    flash('Настройки почты сохранены', 'success')
-    return redirect(url_for('index'))
-
-@app.route('/settings/beget', methods=['POST'])
-def save_beget_settings():
-    db = get_db()
-    db.execute('''CREATE TABLE IF NOT EXISTS settings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        smtp_server TEXT, smtp_port TEXT, sender_email TEXT, sender_password TEXT,
-        default_report_email TEXT, beget_login TEXT, beget_password TEXT,
-        saby_api_key TEXT, saby_org_id TEXT, company_name TEXT, auto_report_interval TEXT
-    )''')
+    if os.path.exists(backups_db_path):
+        conn_b = sqlite3.connect(backups_db_path)
+        conn_b.row_factory = sqlite3.Row
+        
+        # Уникальные бэкапы
+        backup_rows = conn_b.execute('SELECT site_name, site_domain, backup_date, size_mb, source FROM backup_history WHERE client_id=? AND backup_date >= ? AND backup_date <= ? ORDER BY backup_date DESC', (client_id, date_from, date_to + ' 23:59:59')).fetchall()
+        seen = set()
+        for row in backup_rows:
+            rd = dict(row)
+            key = (rd.get('site_name'), rd.get('backup_date'))
+            if key not in seen:
+                seen.add(key)
+                backups.append(rd)
+        
+        # Последний снимок для баланса и доменов
+        last_snapshot = conn_b.execute('SELECT details FROM host_events WHERE event_type=? AND client_id=? ORDER BY event_time DESC LIMIT 1', ('beget_snapshot', client_id)).fetchone()
+        if last_snapshot:
+            try:
+                details = json.loads(last_snapshot['details'])
+                account = details.get('account', {})
+                bal = account.get('user_balance') or account.get('balance')
+                if bal is not None:
+                    balance = f"{bal} руб."
+                
+                snap_data = details.get('snapshot', {})
+                raw_domains = snap_data.get('domains', [])
+                for d in raw_domains:
+                    if isinstance(d, dict):
+                        domain_name = d.get('fqdn') or d.get('domain')
+                        ssl_status = d.get('ssl_status', 'unknown')
+                        date_expire = d.get('date_expire', '')
+                        if domain_name:
+                            domains_info.append({
+                                'domain': domain_name,
+                                'ssl': '✅ Включен' if ssl_status in ['le_set', 'custom_set', 'active'] else '❌ Выключен',
+                                'expire': date_expire if date_expire else 'Н/Д'
+                            })
+            except Exception as e:
+                print(f"Error parsing snapshot: {e}")
+        
+        conn_b.close()
     
-    existing = db.execute('SELECT id FROM settings LIMIT 1').fetchone()
-    if existing:
-        db.execute('UPDATE settings SET beget_login=?, beget_password=? WHERE id=?',
-            (request.form.get('beget_login'), request.form.get('beget_password'), existing['id']))
-    else:
-        db.execute('INSERT INTO settings (beget_login, beget_password) VALUES (?, ?)',
-            (request.form.get('beget_login'), request.form.get('beget_password')))
-    db.commit()
-    flash('Настройки Beget сохранены', 'success')
-    return redirect(url_for('index'))
-
-@app.route('/settings/saby', methods=['POST'])
-def save_saby_settings():
-    db = get_db()
-    db.execute('''CREATE TABLE IF NOT EXISTS settings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        smtp_server TEXT, smtp_port TEXT, sender_email TEXT, sender_password TEXT,
-        default_report_email TEXT, beget_login TEXT, beget_password TEXT,
-        saby_api_key TEXT, saby_org_id TEXT, company_name TEXT, auto_report_interval TEXT
-    )''')
+    try:
+        date_from_rus = datetime.datetime.strptime(date_from, '%Y-%m-%d').strftime('%d.%m.%Y')
+        date_to_rus = datetime.datetime.strptime(date_to, '%Y-%m-%d').strftime('%d.%m.%Y')
+    except:
+        date_from_rus = date_from
+        date_to_rus = date_to
     
-    existing = db.execute('SELECT id FROM settings LIMIT 1').fetchone()
-    if existing:
-        db.execute('UPDATE settings SET saby_api_key=?, saby_org_id=? WHERE id=?',
-            (request.form.get('saby_api_key'), request.form.get('saby_org_id'), existing['id']))
-    else:
-        db.execute('INSERT INTO settings (saby_api_key, saby_org_id) VALUES (?, ?)',
-            (request.form.get('saby_api_key'), request.form.get('saby_org_id')))
-    db.commit()
-    flash('Настройки Saby сохранены', 'success')
-    return redirect(url_for('index'))
+    return render_template_string(REPORT_TEMPLATE,
+        client=client, logs=logs, backups=backups,
+        balance=balance, domains=domains_info,
+        date_from=date_from_rus, date_to=date_to_rus
+    )
 
-@app.route('/settings/system', methods=['POST'])
-def save_system_settings():
-    db = get_db()
-    db.execute('''CREATE TABLE IF NOT EXISTS settings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        smtp_server TEXT, smtp_port TEXT, sender_email TEXT, sender_password TEXT,
-        default_report_email TEXT, beget_login TEXT, beget_password TEXT,
-        saby_api_key TEXT, saby_org_id TEXT, company_name TEXT, auto_report_interval TEXT
-    )''')
-    
-    existing = db.execute('SELECT id FROM settings LIMIT 1').fetchone()
-    if existing:
-        db.execute('UPDATE settings SET company_name=?, auto_report_interval=? WHERE id=?',
-            (request.form.get('company_name'), request.form.get('auto_report_interval'), existing['id']))
-    else:
-        db.execute('INSERT INTO settings (company_name, auto_report_interval) VALUES (?, ?)',
-            (request.form.get('company_name'), request.form.get('auto_report_interval')))
-    db.commit()
-    flash('Системные настройки сохранены', 'success')
-    return redirect(url_for('index'))
-
-    # Получаем события хостинга из backups.db host_events за период
-    host_events = []
-    grouped_events = {'domains': [], 'sites': [], 'databases': [], 'mailboxes': [], 'snapshots': [], 'diffs': [], 'others': []}
-    try:
-        import os, json as _json
-        db_path_backups = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups.db')
-        if os.path.exists(db_path_backups):
-            conn_b = sqlite3.connect(db_path_backups)
-            conn_b.row_factory = sqlite3.Row
-            cur_b = conn_b.cursor()
-            start_ts = int(datetime.datetime.strptime(date_from, '%Y-%m-%d').timestamp())
-            end_ts = int(datetime.datetime.strptime(date_to, '%Y-%m-%d').timestamp()) + 86400
-            # client_id may be null — but we filter by client.id when available
-            if client_id:
-                cur_b.execute('SELECT * FROM host_events WHERE client_id = ? AND event_time BETWEEN ? AND ? ORDER BY event_time DESC', (client_id, start_ts, end_ts))
-            else:
-                cur_b.execute('SELECT * FROM host_events WHERE event_time BETWEEN ? AND ? ORDER BY event_time DESC', (start_ts, end_ts))
-            rows = [dict(r) for r in cur_b.fetchall()]
-            for r in rows:
-                human = None
-                try:
-                    human = datetime.datetime.fromtimestamp(r.get('event_time')).strftime('%d.%m.%Y %H:%M:%S') if r.get('event_time') else None
-                except Exception:
-                    human = None
-                details_raw = r.get('details')
-                details = None
-                try:
-                    details = _json.loads(details_raw) if details_raw else None
-                except Exception:
-                    details = details_raw
-
-                ev = {
-                    'id': r.get('id'),
-                    'client_id': r.get('client_id'),
-                    'host_account': r.get('host_account'),
-                    'site': r.get('site'),
-                    'event_type': r.get('event_type'),
-                    'details': details,
-                    'event_time': r.get('event_time'),
-                    'human_time': human,
-                    'source': r.get('source')
-                }
-
-                host_events.append(ev)
-
-                # categorize and create human-friendly description + impact
-                desc = ''
-                impact = 'Low'
-                impact_note = ''
-                et = ev['event_type'] or ''
-                if et == 'beget_snapshot':
-                    grouped_events['snapshots'].append(ev)
-                    desc = 'Полный снимок состояния аккаунта Beget'
-                elif et in ('domain_created', 'domain_removed'):
-                    grouped_events['domains'].append(ev)
-                    d = ev.get('details')
-                    dom = d.get('domain') if isinstance(d, dict) else d
-                    desc = f"Домен: {dom} — {'создан' if 'created' in et else 'удален'}"
-                    # impact: удаление домена — высокий
-                    impact = 'High' if 'removed' in et else 'Medium'
-                    if 'removed' in et:
-                        impact_note = 'Домен удалён — возможна потеря почты и доступности сайта.'
-                elif et in ('site_created', 'site_removed'):
-                    grouped_events['sites'].append(ev)
-                    s = ev.get('details')
-                    desc = f"Сайт: {s} — {'создан' if 'created' in et else 'удален'}"
-                    impact = 'Medium' if 'removed' in et else 'Low'
-                elif et in ('db_created', 'db_removed'):
-                    grouped_events['databases'].append(ev)
-                    d = ev.get('details')
-                    dbn = d.get('db') if isinstance(d, dict) else d
-                    desc = f"БД: {dbn} — {'создана' if 'created' in et else 'удалена'}"
-                    impact = 'High' if 'removed' in et else 'Medium'
-                elif et in ('mailbox_created', 'mailbox_removed'):
-                    grouped_events['mailboxes'].append(ev)
-                    d = ev.get('details')
-                    mb = d.get('mailbox') if isinstance(d, dict) else d
-                    desc = f"Почтовый ящик: {mb} — {'создан' if 'created' in et else 'удален'}"
-                    impact = 'Medium' if 'removed' in et else 'Low'
-                elif ev['source'] == 'beget_diff':
-                    grouped_events['diffs'].append(ev)
-                    desc = 'Изменение: ' + (str(ev.get('details'))[:200])
-                else:
-                    grouped_events['others'].append(ev)
-                    desc = str(ev.get('details'))[:200]
-
-                ev['description'] = desc
-                ev['impact'] = impact
-                ev['impact_note'] = impact_note
-
-            conn_b.close()
-    except Exception as e:
-        print(f'Error loading host_events: {e}')
-
-    # Simple additional checks: domain expirations from latest snapshot
-    domain_alerts = []
-    try:
-        # find latest snapshot for client
-        latest_snapshot = None
-        for s in grouped_events.get('snapshots', []):
-            if not latest_snapshot or (s.get('event_time') or 0) > (latest_snapshot.get('event_time') or 0):
-                latest_snapshot = s
-        if latest_snapshot and isinstance(latest_snapshot.get('details'), dict):
-            snap = latest_snapshot.get('details', {}).get('snapshot', {})
-            for d in snap.get('domains', []) or []:
-                exp = d.get('date_expire')
-                fqdn = d.get('fqdn') or d.get('domain')
-                if exp:
-                    try:
-                        exp_dt = datetime.datetime.strptime(exp.split(' ')[0], '%Y-%m-%d').date()
-                        days_left = (exp_dt - datetime.date.today()).days
-                        if days_left <= 30:
-                            domain_alerts.append({'domain': fqdn, 'expires': exp, 'days_left': days_left, 'severity': 'High' if days_left <=7 else 'Medium'})
-                    except Exception:
-                        pass
-    except Exception:
-        pass
-
-    # format backups dates into Russian readable form
-    import datetime as _dt
-    for b in backups:
-        bd = b.get('backup_date')
-        bd_rus = bd
-        try:
-            if bd:
-                try:
-                    dt = _dt.datetime.fromisoformat(bd)
-                except Exception:
-                    try:
-                        dt = _dt.datetime.strptime(bd[:19], '%Y-%m-%d %H:%M:%S')
-                    except Exception:
-                        dt = None
-                if dt:
-                    bd_rus = dt.strftime('%d.%m.%Y %H:%M:%S')
-        except Exception:
-            bd_rus = bd
-        b['backup_date_rus'] = bd_rus
-
-    # format report header dates
-    date_from_rus = date_from
-    date_to_rus = date_to
-    try:
-        df = _dt.datetime.strptime(date_from, '%Y-%m-%d')
-        date_from_rus = df.strftime('%d.%m.%Y')
-    except Exception:
-        pass
-    try:
-        dtv = _dt.datetime.strptime(date_to, '%Y-%m-%d')
-        date_to_rus = dtv.strftime('%d.%m.%Y')
-    except Exception:
-        pass
-
-    print(f'[REPORT] client_id={client_id} backups_count={len(backups)} host_events={len(host_events)}')
-    return render_template_string(REPORT_TEMPLATE, client=client, logs=logs, backups=backups, beget_status=beget_status, beget_data=beget_data, date_from=date_from_rus, date_to=date_to_rus, host_events=host_events, grouped_events=grouped_events, domain_alerts=domain_alerts)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=3002)
 
+
+
+@app.errorhandler(Exception)
+def handle_all_errors(e):
+    # Подробности остаются в systemd journal; наружу не выдаём пути,
+    # переменные окружения, клиентские данные и traceback.
+    app.logger.exception('Unhandled CRM exception')
+    return render_template_string('''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ошибка CRM</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(560px,calc(100% - 32px));padding:32px;background:#fff;border-radius:24px;box-shadow:0 18px 50px #24314d18}a{display:inline-block;margin-top:14px;color:#202b45}</style></head><body><main class="card"><h1>Не удалось выполнить операцию</h1><p>Ошибка записана в защищённый журнал. Повторите действие позже или обратитесь к администратору CRM.</p><a href="/">Вернуться на главную</a></main></body></html>'''), 500
