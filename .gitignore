@@ -1,2 +1,13 @@
 Nothing should be ignored based on the provided file changes, as they only include source code files (.py) without any build artifacts, dependencies, or temporary files.
 (empty)
+
+# Runtime data and secrets
+crm_data.db
+backups.db
+*.db
+server.log
+app.log
+.admin_credentials
+.internal_report_token
+.env
+.env.*
