@@ -176,8 +176,9 @@ def change_password():
             with open(ADMIN_CREDENTIALS_FILE, 'w', encoding='utf-8') as fh:
                 fh.write(f"{record['username']}\n{salt.hex()}\n{digest}\n0\n")
             os.chmod(ADMIN_CREDENTIALS_FILE, 0o600)
-            message = 'Пароль изменён. Теперь можно работать в CRM.'
-            record = {**record, 'must_change': False}
+            session[ADMIN_SESSION_KEY] = record['username']
+            session.permanent = True
+            return redirect('/')
     return render_template_string('''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Смена пароля</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(460px,calc(100% - 32px));padding:32px;background:#fff;border-radius:24px;box-shadow:0 18px 50px #24314d18}label{display:block;margin:14px 0 6px}input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #d8deea;border-radius:10px;font-size:16px}button{margin-top:20px;width:100%;padding:12px;border:0;border-radius:10px;background:#202b45;color:#fff;font-weight:700}.error{color:#a12626}.ok{color:#176b3b}</style></head><body><main class="card"><h1>Смена пароля</h1>{% if error %}<p class="error">{{ error }}</p>{% endif %}{% if message %}<p class="ok">{{ message }}</p>{% endif %}<form method="post"><label>Текущий пароль</label><input type="password" name="current_password" required><label>Новый пароль</label><input type="password" name="new_password" required><label>Повторите новый пароль</label><input type="password" name="confirm_password" required><button type="submit">Сохранить новый пароль</button></form></main></body></html>''', error=error, message=message)
 
 INDEX_TEMPLATE = """
