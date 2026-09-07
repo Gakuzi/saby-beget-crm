@@ -935,7 +935,7 @@ def generate_report(client_id):
         if not access or int(access['client_id']) != int(client_id):
             return 'Ссылка недействительна для этого клиента', 403
     import sqlite3, os, datetime, json
-    from flask import render_template_string, request
+    from flask import render_template_string
     
     db_path = os.path.join(os.path.dirname(__file__), 'crm_data.db')
     backups_db_path = os.path.join(os.path.dirname(__file__), 'backups.db')
@@ -1025,7 +1025,7 @@ def generate_report(client_id):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3002)
+    app.run(host='0.0.0.0', port=int(os.environ.get('CRM_PORT', '3002')))
 
 
 
