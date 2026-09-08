@@ -708,14 +708,111 @@ def public_client_portal(token):
     if not access:
         return 'Ссылка недействительна или отозвана', 404
     db = get_db()
-    client = db.execute('SELECT id, company_name, sites FROM clients WHERE id=?', (access['client_id'],)).fetchone()
+    client = db.execute('SELECT id, company_name, inn, contract, sites FROM clients WHERE id=?', (access['client_id'],)).fetchone()
     db.close()
     if not client:
         return 'Клиент не найден', 404
+    
+    # Build timeline for this client (same logic as in client_card)
     import datetime
     today = datetime.date.today()
     first = today.replace(day=1)
-    return render_template_string('''<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Кабинет {{ client.company_name }}</title><style>body{margin:0;min-height:100vh;background:linear-gradient(135deg,#f5f7fb,#eef1f7);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#20242c;padding:24px}.card{max-width:760px;margin:0 auto;padding:30px;background:rgba(255,255,255,.8);border:1px solid #fff;border-radius:28px;box-shadow:0 20px 60px #25304d18;backdrop-filter:blur(18px)}h1{margin-top:0}label{display:block;margin:12px 0 6px;color:#626b7d}input{padding:12px;border:1px solid #d8deea;border-radius:10px;font-size:16px}button{margin-top:18px;padding:12px 18px;border:0;border-radius:10px;background:#202b45;color:#fff;font-weight:700;cursor:pointer}.muted{color:#687286}</style></head><body><main class="card"><p class="muted">Клиентский кабинет</p><h1>{{ client.company_name }}</h1><p class="muted">Выберите период, чтобы сформировать отчёт по техническому сопровождению.</p><form method="get" action="/client/{{ client.id }}/report"><input type="hidden" name="access_token" value="{{ token }}"><label>Дата начала</label><input type="date" name="date_from" value="{{ first }}" required><label>Дата окончания</label><input type="date" name="date_to" value="{{ today }}" required><br><button type="submit">Сформировать отчёт</button></form></main></body></html>''', client=dict(client), token=token, first=first.isoformat(), today=today.isoformat())
+    
+    # Get timeline data
+    timeline = []
+    logs = []
+    try:
+        db2 = get_db()
+        raw_logs = db2.execute('SELECT * FROM work_logs WHERE client_id = ? ORDER BY work_date DESC', (access['client_id'],)).fetchall()
+        for r in raw_logs:
+            row = dict(r)
+            wd = row.get('work_date')
+            wd_rus = wd
+            try:
+                if wd and len(wd) >= 10:
+                    try:
+                        dt = datetime.datetime.fromisoformat(wd)
+                    except Exception:
+                        dt = datetime.datetime.strptime(wd[:10], '%Y-%m-%d')
+                    wd_rus = dt.strftime('%d.%m.%Y %H:%M')
+            except Exception:
+                wd_rus = wd
+            row['work_date_rus'] = wd_rus
+            logs.append(row)
+        
+        # Get host_events and backup_history from backups.db
+        import os, json as _json, time as _time
+        db_path_backups = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backups.db')
+        if os.path.exists(db_path_backups):
+            conn_b = sqlite3.connect(db_path_backups)
+            conn_b.row_factory = sqlite3.Row
+            cur_b = conn_b.cursor()
+            # host_events
+            cur_b.execute('SELECT * FROM host_events WHERE client_id = ? ORDER BY event_time DESC LIMIT 500', (access['client_id'],))
+            for r in cur_b.fetchall():
+                try:
+                    details = _json.loads(r['details']) if r['details'] else None
+                except Exception:
+                    details = r['details']
+                ts = r['event_time'] or int(_time.time())
+                human = None
+                try:
+                    human = datetime.datetime.fromtimestamp(ts).strftime('%d.%m.%Y %H:%M:%S')
+                except Exception:
+                    human = None
+                timeline.append({'type': 'host_event', 'ts': ts, 'human': human, 'source': r['source'], 'event_type': r['event_type'], 'details': details})
+            # backups
+            cur_b.execute('SELECT site_name, site_domain, backup_date, size_mb, status, extra FROM backup_history WHERE client_id = ? ORDER BY backup_date DESC LIMIT 500', (access['client_id'],))
+            for r in cur_b.fetchall():
+                bd = r['backup_date']
+                ts = None
+                try:
+                    ts = int(datetime.datetime.fromisoformat(bd).timestamp()) if bd else None
+                except Exception:
+                    try:
+                        ts = int(datetime.datetime.strptime(bd[:19], '%Y-%m-%d %H:%M:%S').timestamp())
+                    except Exception:
+                        ts = None
+                if not ts:
+                    ts = int(_time.time())
+                human = None
+                try:
+                    human = datetime.datetime.fromtimestamp(ts).strftime('%d.%m.%Y %H:%M:%S')
+                except Exception:
+                    human = bd
+                timeline.append({'type': 'backup', 'ts': ts, 'human': human, 'site_name': r['site_name'], 'site_domain': r['site_domain'], 'size_mb': r['size_mb'], 'status': r['status'], 'extra': r['extra']})
+            conn_b.close()
+        
+        # include work_logs
+        for w in logs:
+            ts = None
+            try:
+                ts = int(datetime.datetime.fromisoformat(w.get('work_date')).timestamp())
+            except Exception:
+                try:
+                    ts = int(datetime.datetime.strptime(w.get('work_date')[:19], '%Y-%m-%d %H:%M:%S').timestamp())
+                except Exception:
+                    ts = int(_time.time())
+            timeline.append({'type': 'work_log', 'ts': ts, 'human': w.get('work_date_rus'), 'description': w.get('description'), 'hours': w.get('hours')})
+        
+        # sort timeline by timestamp desc
+        timeline = sorted(timeline, key=lambda x: x.get('ts', 0), reverse=True)
+        db2.close()
+    except Exception as e:
+        print('Error building timeline for portal:', e)
+    
+    # Default dates for report form
+    default_date_from = first.isoformat()
+    default_date_to = today.isoformat()
+    
+    return render_template('client_portal.html', 
+                          client=dict(client), 
+                          token=token, 
+                          access_token=token,
+                          timeline=timeline,
+                          default_date_from=default_date_from,
+                          default_date_to=default_date_to,
+                          reports=[])
 
 
 @app.route('/client/<int:client_id>/create-access-link', methods=['POST'])
