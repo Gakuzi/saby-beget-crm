@@ -28,7 +28,7 @@ jobs:
         run: python3 -m py_compile app.py
 
       - name: Create release archive
-        run: tar --exclude='./.git' --exclude='./__pycache__' --exclude='*.db' --exclude='*.sqlite*' -czf /tmp/crm-release.tgz . && mv /tmp/crm-release.tgz crm-release.tgz
+        run: tar --exclude='./.git' --exclude='./__pycache__' --exclude='*.db' --exclude='*.sqlite*' -czf /tmp/crm-release-${{ github.sha }}.tgz . && mv /tmp/crm-release-${{ github.sha }}.tgz crm-release-${{ github.sha }}.tgz
 
       - name: Upload release archive
         uses: appleboy/scp-action@v0.1.7
@@ -36,7 +36,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: crm-release.tgz
+          source: crm-release-${{ github.sha }}.tgz
           target: /tmp
           overwrite: true
 
@@ -52,7 +52,7 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
-            archive="/tmp/crm-release.tgz"
+            archive="/tmp/crm-release-${GITHUB_SHA}.tgz"
             test -s "$archive"
             sudo -n /usr/local/sbin/crm-deploy "$DEPLOY_TARGET" < "$archive"
             rm -f "$archive"
