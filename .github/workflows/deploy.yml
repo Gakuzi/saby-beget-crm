@@ -57,9 +57,16 @@ jobs:
             test -s "$archive"
             sudo -n /usr/local/sbin/crm-deploy "$DEPLOY_TARGET" < "$archive"
             rm -f "$archive"
-            sleep 2
             if [ "$DEPLOY_TARGET" = "prod" ]; then
-              curl --fail --silent --show-error http://127.0.0.1:3002/healthz
+              health_url=http://127.0.0.1:3002/healthz
             else
-              curl --fail --silent --show-error http://127.0.0.1:3003/healthz
+              health_url=http://127.0.0.1:3003/healthz
             fi
+            for attempt in $(seq 1 20); do
+              if curl --fail --silent --show-error "$health_url"; then
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "Health check failed: $health_url" >&2
+            exit 1
