@@ -4,40 +4,59 @@ on:
   push:
     branches:
       - main
+      - test
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crm-deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  DEPLOY_TARGET: ${{ github.ref_name == 'main' && 'prod' || 'test' }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@master
+      - name: Validate Python source
+        run: python3 -m py_compile app.py
+
+      - name: Create release archive
+        run: tar --exclude='./.git' --exclude='./__pycache__' --exclude='*.db' --exclude='*.sqlite*' -czf crm-release.tgz .
+
+      - name: Upload release archive
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: crm-release.tgz
+          target: /tmp
+          overwrite: true
+
+      - name: Deploy and run health check
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_TARGET: ${{ env.DEPLOY_TARGET }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DEPLOY_TARGET
+          script_stop: true
           script: |
-            echo "🚀 Start deployment to /opt/backup-reports..."
-            
-            cd /opt/backup-reports
-            
-            if [ -d ".git" ]; then
-              echo "📦 Updating existing repository..."
-              git fetch --all
-              git reset --hard origin/main
-              git clean -fd
-            else
-              echo "❌ Error: Not a git repository. Please initialize manually."
-              exit 1
-            fi
-            
-            echo "📦 Installing dependencies..."
-            pip3 install -r requirements.txt --user --quiet
-            
-            echo "🔄 Restarting CRM service..."
-            sudo systemctl restart crm
-            
-            echo "✅ Deployment completed successfully!"
+            set -euo pipefail
+            archive="/tmp/crm-release.tgz"
+            test -s "$archive"
+            sudo -n /usr/local/sbin/crm-deploy "$DEPLOY_TARGET" < "$archive"
+            rm -f "$archive"
+            case "$DEPLOY_TARGET" in
+              prod) curl --fail --silent --show-error http://127.0.0.1:3002/healthz ;;
+              test) curl --fail --silent --show-error http://127.0.0.1:3003/healthz ;;
+            esac
