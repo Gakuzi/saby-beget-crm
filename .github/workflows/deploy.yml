@@ -15,6 +15,7 @@ concurrency:
 
 env:
   DEPLOY_TARGET: ${{ github.ref_name == 'main' && 'prod' || 'test' }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   deploy:
@@ -24,11 +25,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Validate Python source
-        run: python3 -m py_compile app.py
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate Node.js source
+        run: |
+          node --check server.js
+          node --check crm_store.js
+          node --check portal_view.js
+          node --check admin_view.js
+          node --check inn_helper.js
 
       - name: Create release archive
-        run: tar --exclude='./.git' --exclude='./__pycache__' --exclude='*.db' --exclude='*.sqlite*' -czf /tmp/crm-release-${{ github.sha }}.tgz . && mv /tmp/crm-release-${{ github.sha }}.tgz crm-release-${{ github.sha }}.tgz
+        run: tar --exclude='./.git' --exclude='./node_modules' --exclude='*.db' --exclude='*.sqlite*' -czf /tmp/crm-release-${{ github.sha }}.tgz . && mv /tmp/crm-release-${{ github.sha }}.tgz crm-release-${{ github.sha }}.tgz
 
       - name: Upload release archive
         uses: appleboy/scp-action@v0.1.7

@@ -1,5 +1,6 @@
 // In-memory persistent data store for CRM with pre-seeded data
 import crypto from 'crypto';
+import { authenticateSaby, fetchSabyContracts, getSabyCredentials } from './saby_client.js';
 
 class CrmStore {
   constructor() {
@@ -839,10 +840,35 @@ class CrmStore {
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }
 
-  syncWithSaby(clientId) {
+  async syncWithSaby(clientId) {
     const cId = parseInt(clientId, 10);
     const client = this.getClientById(cId);
     if (!client) return { ok: false, error: 'Контрагент не найден' };
+
+    const creds = getSabyCredentials();
+    let isLiveSaby = false;
+    let liveSabyMessage = '';
+
+    if (creds.hasCredentials) {
+      try {
+        const auth = await authenticateSaby();
+        if (auth.ok) {
+          isLiveSaby = true;
+          liveSabyMessage = ' [Saby RPC Live Gateway: Авторизован]';
+          // Query live contracts if available
+          const liveContracts = await fetchSabyContracts(client.inn);
+          if (liveContracts.ok && liveContracts.contracts.length > 0) {
+            const first = liveContracts.contracts[0];
+            if (!client.saby_contract_number || client.saby_contract_number === 'б/н') {
+              client.saby_contract_number = first.number;
+              client.saby_contract_id = first.id;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Live Saby connection attempt:', err.message);
+      }
+    }
 
     let syncedOutCount = 0;
     // 1. Outbound: Sync unsynced work logs from CRM to Saby
@@ -905,7 +931,7 @@ class CrmStore {
           title: `Импорт из СБИС: ${item.category_name}`,
           service: `${item.subject} (${taskId})`,
           detail_label: 'Источник',
-          detail_value: 'Сервис-деск Saby / СБИС ЭДО',
+          detail_value: isLiveSaby ? 'Saby RPC Gateway (online.sbis.ru)' : 'Сервис-деск Saby / СБИС ЭДО',
           status: 'Готово',
           status_type: 'done',
           group: 'today',
@@ -918,16 +944,18 @@ class CrmStore {
       }
     }
 
+    const modeLabel = isLiveSaby ? 'Боевой режим Saby RPC' : 'Локальный режим синхронизации';
     const logEntry = {
       id: (this.sabySyncLogs || []).length + 1,
       client_id: cId,
       direction: 'two_way',
+      mode: isLiveSaby ? 'live_rpc' : 'simulated',
       synced_out_count: syncedOutCount,
       synced_in_count: importedInCount,
       status: 'Успешно',
-      message: syncedOutCount > 0 || importedInCount > 0
+      message: (syncedOutCount > 0 || importedInCount > 0
         ? `Двусторонняя синхронизация завершена: передано в СБИС: ${syncedOutCount} наряд(ов), получено из СБИС: ${importedInCount} обращение.`
-        : 'Все данные уже полностью синхронизированы со СБИС (расхождений нет).',
+        : 'Все данные уже полностью синхронизированы со СБИС (расхождений нет).') + ` (${modeLabel})`,
       timestamp: new Date().toISOString()
     };
     if (!this.sabySyncLogs) this.sabySyncLogs = [];
@@ -935,9 +963,11 @@ class CrmStore {
 
     return {
       ok: true,
+      isLiveSaby,
       syncedOutCount,
       importedInCount,
       logEntry,
+      message: logEntry.message,
       clientName: client.company_name,
       contractNumber: client.saby_contract_number
     };

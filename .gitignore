@@ -1,13 +1,21 @@
-Nothing should be ignored based on the provided file changes, as they only include source code files (.py) without any build artifacts, dependencies, or temporary files.
-(empty)
+# Dependencies
+node_modules/
+.npm/
 
 # Runtime data and secrets
+.env
+.env.*
+.admin_credentials
+.internal_report_token
+.github_sync_history.json
+*.log
 crm_data.db
 backups.db
 *.db
-server.log
-app.log
-.admin_credentials
-.internal_report_token
-.env
-.env.*
+*.sqlite*
+
+# System and OS
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc

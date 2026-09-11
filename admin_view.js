@@ -651,6 +651,11 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
       </a>
 
       <div style="display:flex; align-items:center; gap:10px;">
+        <button type="button" onclick="openGitHubModal()" class="btn btn-glass" title="Синхронизация CRM с GitHub и запуск деплоя">
+          <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24" style="vertical-align:text-bottom;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          <span>GitHub</span>
+          <span style="font-size:10.5px; padding:1px 6px; border-radius:6px; background:#dcfce7; color:#166534; font-weight:700;">main</span>
+        </button>
         <a href="/portal/${client.id}" target="_blank" class="btn btn-portal" title="Открыть персональный клиентский портал">
           <span>✨</span>
           <span>Кабинет клиента ↗</span>
@@ -1086,9 +1091,14 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
 
           <!-- 3. Infrastructure & Beget Cloud -->
           <div style="margin-bottom:28px;">
-            <h3 style="font-size:16px; font-weight:700; color:#5b21b6; margin-bottom:14px; display:flex; align-items:center; gap:8px;">
-              <span>☁️</span> Инфраструктура хостинга Beget и сайты
-            </h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+              <h3 style="font-size:16px; font-weight:700; color:#5b21b6; display:flex; align-items:center; gap:8px; margin:0;">
+                <span>☁️</span> Инфраструктура хостинга Beget и сайты
+              </h3>
+              <button type="button" onclick="refreshBegetData(${client.id})" class="btn btn-glass" style="font-size:12.5px; padding:6px 14px;">
+                <span>🌐</span> Запросить актуальные данные с Beget API
+              </button>
+            </div>
 
             <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px;">
               <div class="form-group">
@@ -1174,10 +1184,15 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
               Автоматический обмен: работы из CRM регистрируются в Saby, а обращения из Saby импортируются в журнал CRM
             </p>
           </div>
-          <button type="button" onclick="triggerSabySync(${client.id})" class="btn btn-primary">
-            <span>🔄</span>
-            <span>Запустить синхронизацию</span>
-          </button>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <button type="button" onclick="testSabyRPC()" class="btn btn-glass" style="font-size:13px;">
+              <span>⚡</span> Проверить шлюз Saby
+            </button>
+            <button type="button" onclick="triggerSabySync(${client.id})" class="btn btn-primary">
+              <span>🔄</span>
+              <span>Запустить синхронизацию</span>
+            </button>
+          </div>
         </div>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:24px;">
@@ -1603,7 +1618,149 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         document.getElementById('report_date_to').value = now.toISOString().slice(0, 10);
       }
     }
+
+    // --- GitHub & CI/CD Synchronization ---
+    function openGitHubModal() {
+      document.getElementById('admin-gh-modal').style.display = 'flex';
+    }
+
+    function closeGitHubModal() {
+      document.getElementById('admin-gh-modal').style.display = 'none';
+    }
+
+    async function executeGitHubPush() {
+      const msg = document.getElementById('gh-commit-msg').value || 'Синхронизация состояния CRM';
+      const box = document.getElementById('gh-result-box');
+      const btn = document.getElementById('gh-push-btn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Выполняется push...';
+      box.style.display = 'block';
+      box.style.background = '#eff6ff';
+      box.style.color = '#1e3a8a';
+      box.textContent = 'Индексация, создание снимка базы данных и отправка в репозиторий GitHub...';
+
+      try {
+        const res = await fetch('/api/github/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          box.style.background = '#ecfdf5';
+          box.style.color = '#065f46';
+          box.textContent = '✓ ' + (data.log?.message || 'Успешно отправлено на GitHub!');
+          showToast('✓ ' + (data.log?.message || 'Синхронизировано с GitHub'));
+        } else {
+          box.style.background = '#fef2f2';
+          box.style.color = '#991b1b';
+          box.textContent = 'Ошибка: ' + (data.log?.message || data.error);
+        }
+      } catch (e) {
+        box.style.background = '#fef2f2';
+        box.style.color = '#991b1b';
+        box.textContent = 'Сетевая ошибка: ' + e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 Запустить Git Commit & Push на GitHub';
+      }
+    }
+
+    async function testGitHubConnection() {
+      const box = document.getElementById('gh-result-box');
+      box.style.display = 'block';
+      box.style.background = '#eff6ff';
+      box.style.color = '#1e3a8a';
+      box.textContent = 'Проверка токена и прав доступа через GitHub API...';
+
+      try {
+        const res = await fetch('/api/github/test', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          box.style.background = '#ecfdf5';
+          box.style.color = '#065f46';
+          box.textContent = '✓ ' + data.message + (data.repo?.canPush ? ' (Права на запись: ДА)' : '');
+        } else {
+          box.style.background = '#fffbeb';
+          box.style.color = '#92400e';
+          box.textContent = 'Статус: ' + data.message;
+        }
+      } catch (e) {
+        box.style.background = '#fef2f2';
+        box.style.color = '#991b1b';
+        box.textContent = 'Сетевая ошибка: ' + e.message;
+      }
+    }
+
+    // --- Saby RPC Test ---
+    async function testSabyRPC() {
+      showToast('⚡ Проверка шлюза Saby RPC...');
+      try {
+        const res = await fetch('/api/saby/test');
+        const data = await res.json();
+        if (data.ok) {
+          alert('✓ Saby RPC Статус: ' + data.message);
+        } else {
+          alert('⚠️ Saby RPC: ' + data.message + '\n\nДля подключения боевого шлюза укажите SABY_APP_CLIENT_ID и SABY_SECRET_KEY.');
+        }
+      } catch (e) {
+        alert('Ошибка связи: ' + e.message);
+      }
+    }
+
+    // --- Live Beget API Refresh ---
+    async function refreshBegetData(clientId) {
+      showToast('🌐 Запрос данных с серверов Beget Cloud...');
+      try {
+        const res = await fetch('/api/beget/refresh/' + clientId, { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('✓ ' + data.message);
+          setTimeout(() => { window.location.reload(); }, 1200);
+        } else {
+          alert('Beget API: ' + data.message);
+        }
+      } catch (e) {
+        alert('Ошибка связи с сервером: ' + e.message);
+      }
+    }
   </script>
+
+  <!-- GitHub Sync & CI/CD Modal -->
+  <div id="admin-gh-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.5); backdrop-filter:blur(4px); align-items:center; justify-content:center; z-index:2000; padding:20px;">
+    <div style="background:#ffffff; border-radius:18px; max-width:600px; width:100%; padding:26px; box-shadow:0 24px 60px rgba(0,0,0,0.25);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; padding-bottom:12px; border-bottom:1px solid #e2e8f0;">
+        <h3 style="margin:0; font-size:18px; font-weight:800; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
+          <span>🐙</span> Синхронизация с GitHub (EKlimov84/crm-beget-saby)
+        </h3>
+        <button type="button" onclick="closeGitHubModal()" style="background:transparent; border:none; font-size:24px; cursor:pointer; color:#94a3b8;">&times;</button>
+      </div>
+
+      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px; font-size:13.5px; line-height:1.6; margin-bottom:16px;">
+        <div><strong>Ветка:</strong> <code>main</code> &bull; <strong>Репозиторий:</strong> <code>EKlimov84/crm-beget-saby</code></div>
+        <div><strong>CI/CD Workflow:</strong> <code>.github/workflows/deploy.yml</code> (автоматический деплой)</div>
+        <div style="font-size:12px; color:#64748b; margin-top:4px;">
+          При синхронизации создаётся коммит состояния CRM и базы данных, отправляется в origin/main и запускает деплой на сервер.
+        </div>
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <label style="display:block; font-size:13px; font-weight:700; color:#334155; margin-bottom:6px;">Комментарий к коммиту:</label>
+        <input type="text" id="gh-commit-msg" value="Обновление данных контрагента ${client.company_name}" style="width:100%; box-sizing:border-box; padding:10px 14px; border:1px solid #cbd5e1; border-radius:10px; font-size:14px;">
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+        <button type="button" id="gh-push-btn" onclick="executeGitHubPush()" class="btn btn-primary" style="padding:10px 20px;">
+          <span>🚀</span> Запустить Git Commit & Push на GitHub
+        </button>
+        <button type="button" onclick="testGitHubConnection()" class="btn btn-glass" style="padding:10px 16px;">
+          🔍 Тест GitHub API
+        </button>
+      </div>
+
+      <div id="gh-result-box" style="display:none; padding:12px; border-radius:10px; font-size:13px; line-height:1.4;"></div>
+    </div>
+  </div>
 </body>
 </html>`;
 }

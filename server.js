@@ -6,6 +6,9 @@ import { db } from './crm_store.js';
 import { checkInnChecksum, suggestCompany, getContracts } from './inn_helper.js';
 import { renderPortalPage } from './portal_view.js';
 import { renderAdminClientPage, renderNewClientPage } from './admin_view.js';
+import { getGitStatus, getGitHubConfig, testGitHubApi, syncToGitHub } from './github_sync.js';
+import { testSabyConnection, authenticateSaby, searchSabyCompany, fetchSabyContracts } from './saby_client.js';
+import { testBegetConnection, pullBegetSnapshot } from './beget_client.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -148,6 +151,11 @@ app.post('/change-password', (req, res) => {
 // Dashboard: List clients
 app.get('/', (req, res) => {
   const clients = db.getClients();
+  const gitStatus = getGitStatus();
+  const gitConfig = getGitHubConfig();
+  const hasSaby = !!(process.env.SABY_APP_CLIENT_ID && process.env.SABY_APP_SECRET);
+  const hasBeget = !!process.env.BEGET_LOGIN;
+
   res.send(`<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -173,7 +181,7 @@ app.get('/', (req, res) => {
     .user-info { font-size: 14px; color: #78716c; }
     .user-info a { color: #b45309; text-decoration: none; margin-left: 10px; }
     .user-info a:hover { text-decoration: underline; }
-    .actions-bar { margin-bottom: 20px; display: flex; gap: 12px; align-items: center; }
+    .actions-bar { margin-bottom: 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
     table { width: 100%; border-collapse: collapse; margin-top: 15px; }
     th, td { padding: 12px 14px; border: 1px solid #f0e9e6; text-align: left; font-size: 14px; }
     th { background: #f8f4f3; color: #6b5a57; font-weight: 600; }
@@ -199,6 +207,22 @@ app.get('/', (req, res) => {
       font-size: 12px; background: #e2e8f0; color: #475569;
     }
     .badge-active { background: #dcfce7; color: #166534; font-weight: 600; }
+    .badge-warn { background: #fef3c7; color: #92400e; font-weight: 600; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(15,23,42,0.5); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px;
+    }
+    .modal-card {
+      background: #ffffff; border-radius: 16px; max-width: 620px; width: 100%; padding: 24px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+    }
+    .toast {
+      position: fixed; bottom: 20px; right: 20px; background: #1e1b4b; color: #fff;
+      padding: 12px 20px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3); display: none; z-index: 2000;
+    }
   </style>
 </head>
 <body>
@@ -206,9 +230,54 @@ app.get('/', (req, res) => {
     <div class="header-bar">
       <h2>CRM-система управления инфраструктурой сайтов и договоров</h2>
       <div class="user-info">
-        Администратор: <strong>${req.session.crm_admin_user || 'admin'}</strong>
+        Администратор: <strong>${req.session.crm_admin_user || 'Климов Евгений'}</strong>
         <a href="/change-password">Сменить пароль</a>
         <a href="/logout">Выйти</a>
+      </div>
+    </div>
+
+    <!-- GitHub & CI/CD Live Control Banner -->
+    <div style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: #fff; border-radius: 14px; padding: 18px 22px; margin-bottom: 20px; box-shadow: 0 10px 25px rgba(15,23,42,0.15);">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <svg width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            <span style="font-size: 16px; font-weight: 700;">GitHub Репозиторий: ${gitConfig.repo}</span>
+            <span style="background: rgba(16,185,129,0.25); color: #34d399; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 6px;">Ветка: ${gitStatus.branch || 'main'}</span>
+          </div>
+          <div style="font-size: 13px; color: #cbd5e1; margin-top: 6px;">
+            Последний коммит: <strong>${gitStatus.lastCommit ? gitStatus.lastCommit.shortHash : 'Инициализация'}</strong>
+            &bull; <em>${gitStatus.lastCommit ? gitStatus.lastCommit.subject : 'Первичный снимок CRM'}</em>
+            &bull; Автор: ${gitStatus.lastCommit ? gitStatus.lastCommit.author : 'Климов Евгений'}
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button type="button" id="gh-sync-btn" onclick="triggerMainGitHubSync()" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; padding: 9px 18px; border-radius: 8px; font-weight: 700; font-size: 13.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(16,185,129,0.3);">
+            <span>🚀</span>
+            <span>Синхронизировать на GitHub</span>
+          </button>
+          <button type="button" onclick="openGitHubModal()" style="background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.25); padding: 9px 14px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer;">
+            ⚙️ Секреты и CI/CD
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick secrets pills -->
+      <div style="display: flex; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 12px; flex-wrap: wrap;">
+        <span style="color: #94a3b8;">Статус интеграций:</span>
+        <span style="color: ${gitConfig.hasToken ? '#34d399' : '#f59e0b'};">
+          ${gitConfig.hasToken ? '● GITHUB_TOKEN настроен' : '○ GITHUB_TOKEN (для push)'}
+        </span>
+        <span style="color: ${hasSaby ? '#34d399' : '#94a3b8'};">
+          ${hasSaby ? '● Saby RPC API активен' : '○ Saby API (локальный режим)'}
+        </span>
+        <span style="color: ${hasBeget ? '#34d399' : '#94a3b8'};">
+          ${hasBeget ? '● Beget Cloud API настроен' : '○ Beget Cloud (по карточкам)'}
+        </span>
+        <span style="color: #60a5fa;">
+          ● CI/CD Deploy Workflow: .github/workflows/deploy.yml
+        </span>
       </div>
     </div>
 
@@ -217,10 +286,10 @@ app.get('/', (req, res) => {
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
         <div>
           <div style="font-size: 16px; font-weight: 700; color: #1e1b4b; display: flex; align-items: center; gap: 8px;">
-            <span>✨</span> Клиентские кабинеты активны (Без паролей и секретов — режим открытого доступа)
+            <span>✨</span> Клиентские кабинеты активны (Режим прямого доступа без паролей)
           </div>
           <div style="font-size: 13.5px; color: #4338ca; margin-top: 3px;">
-            Вся функциональность работает со встроенными заглушками (СБИС ЭДО, Beget Cloud, SLA, мониторинг). Авторизация снята для прямого входа.
+            Вся функциональность работает: СБИС ЭДО, Beget Cloud, SLA, мониторинг, заявки и акты.
           </div>
         </div>
       </div>
@@ -246,6 +315,9 @@ app.get('/', (req, res) => {
     <div class="actions-bar">
       <a href="/add_page" class="btn">+ Добавить контрагента из Saby</a>
       <a href="/portal/2" target="_blank" class="btn" style="background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%); color: #5b21b6; box-shadow: none;">🖥️ Открыть Клиентский портал</a>
+      <button type="button" onclick="triggerMainGitHubSync()" class="btn" style="background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); color: #1e293b; box-shadow: none;">
+        🐙 Отправить изменения на GitHub
+      </button>
       <span style="font-size:13px; color:#94a3b8; margin-left: auto;">Всего контрагентов: ${clients.length}</span>
     </div>
 
@@ -288,6 +360,185 @@ app.get('/', (req, res) => {
       </tbody>
     </table>
   </div>
+
+  <!-- Modal: GitHub & CI/CD Diagnostics -->
+  <div id="github-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
+        <h3 style="margin: 0; font-size: 18px; color: #1e1b4b; display: flex; align-items: center; gap: 8px;">
+          <span>🐙</span> Синхронизация с GitHub и CI/CD
+        </h3>
+        <button type="button" onclick="closeGitHubModal()" style="background: transparent; border: none; font-size: 22px; cursor: pointer; color: #94a3b8;">&times;</button>
+      </div>
+
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 16px; font-size: 13.5px; line-height: 1.5;">
+        <div><strong>Репозиторий:</strong> ${gitConfig.repo} (ветка <code>${gitStatus.branch || 'main'}</code>)</div>
+        <div><strong>Удалённый адрес:</strong> <code style="font-size: 12px;">${gitConfig.remoteUrl}</code></div>
+        <div><strong>Автор коммитов:</strong> ${gitConfig.committerName} &lt;${gitConfig.committerEmail}&gt;</div>
+        <div><strong>Последний коммит:</strong> ${gitStatus.lastCommit ? `${gitStatus.lastCommit.shortHash} — "${gitStatus.lastCommit.subject}"` : 'Отсутствует'}</div>
+        <div><strong>Неотправленные файлы:</strong> ${gitStatus.uncommittedCount} шт.</div>
+      </div>
+
+      <div style="margin-bottom: 18px;">
+        <label style="display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px;">Комментарий к коммиту синхронизации:</label>
+        <input type="text" id="modal-commit-msg" value="Обновление состояния CRM и данных договоров" style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px;">
+      </div>
+
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;">
+        <button type="button" id="modal-push-btn" onclick="executeGitHubPush()" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+          <span>🚀</span> Запустить синхронизацию (Git Commit & Push)
+        </button>
+        <button type="button" onclick="testGitHubConnection()" style="background: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1; padding: 10px 14px; border-radius: 8px; font-weight: 600; cursor: pointer;">
+          🔍 Тест GitHub API
+        </button>
+        <button type="button" onclick="testSabyGateway()" style="background: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1; padding: 10px 14px; border-radius: 8px; font-weight: 600; cursor: pointer;">
+          ⚡ Тест Saby RPC
+        </button>
+      </div>
+
+      <div id="modal-result" style="display: none; padding: 12px; border-radius: 8px; font-size: 13px; line-height: 1.4; max-height: 140px; overflow-y: auto;"></div>
+    </div>
+  </div>
+
+  <div id="toast-el" class="toast"></div>
+
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast-el');
+      t.textContent = msg;
+      t.style.display = 'block';
+      setTimeout(() => { t.style.display = 'none'; }, 3500);
+    }
+
+    function openGitHubModal() {
+      document.getElementById('github-modal').style.display = 'flex';
+    }
+
+    function closeGitHubModal() {
+      document.getElementById('github-modal').style.display = 'none';
+    }
+
+    async function triggerMainGitHubSync() {
+      const btn = document.getElementById('gh-sync-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span><span>Синхронизация...</span>';
+      }
+      try {
+        const res = await fetch('/api/github/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: 'Автоматическая синхронизация CRM из панели управления' })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('✓ ' + (data.log?.message || 'Синхронизация с GitHub успешно завершена!'));
+          setTimeout(() => { window.location.reload(); }, 1800);
+        } else {
+          alert('Ошибка синхронизации: ' + (data.log?.message || data.error || 'Неизвестная ошибка'));
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<span>🚀</span><span>Синхронизировать на GitHub</span>';
+          }
+        }
+      } catch (err) {
+        alert('Ошибка связи с сервером: ' + err.message);
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<span>🚀</span><span>Синхронизировать на GitHub</span>';
+        }
+      }
+    }
+
+    async function executeGitHubPush() {
+      const msg = document.getElementById('modal-commit-msg').value || 'Синхронизация состояния CRM';
+      const box = document.getElementById('modal-result');
+      const btn = document.getElementById('modal-push-btn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Выполняется push...';
+      box.style.display = 'block';
+      box.style.background = '#eff6ff';
+      box.style.color = '#1e3a8a';
+      box.textContent = 'Индексация файлов, экспорт базы данных и отправка в ветку origin/main...';
+
+      try {
+        const res = await fetch('/api/github/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          box.style.background = '#ecfdf5';
+          box.style.color = '#065f46';
+          box.textContent = '✓ ' + (data.log?.message || 'Успешно отправлено на GitHub!');
+        } else {
+          box.style.background = '#fef2f2';
+          box.style.color = '#991b1b';
+          box.textContent = 'Ошибка: ' + (data.log?.message || data.error);
+        }
+      } catch (e) {
+        box.style.background = '#fef2f2';
+        box.style.color = '#991b1b';
+        box.textContent = 'Сетевая ошибка: ' + e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 Запустить синхронизацию (Git Commit & Push)';
+      }
+    }
+
+    async function testGitHubConnection() {
+      const box = document.getElementById('modal-result');
+      box.style.display = 'block';
+      box.style.background = '#eff6ff';
+      box.style.color = '#1e3a8a';
+      box.textContent = 'Проверка токена и прав доступа к репозиторию через GitHub API...';
+
+      try {
+        const res = await fetch('/api/github/test', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          box.style.background = '#ecfdf5';
+          box.style.color = '#065f46';
+          box.textContent = '✓ ' + data.message + (data.repo?.canPush ? ' (Права на запись: ДА)' : '');
+        } else {
+          box.style.background = '#fffbeb';
+          box.style.color = '#92400e';
+          box.textContent = 'Статус: ' + data.message;
+        }
+      } catch (e) {
+        box.style.background = '#fef2f2';
+        box.style.color = '#991b1b';
+        box.textContent = 'Сетевая ошибка: ' + e.message;
+      }
+    }
+
+    async function testSabyGateway() {
+      const box = document.getElementById('modal-result');
+      box.style.display = 'block';
+      box.style.background = '#eff6ff';
+      box.style.color = '#1e3a8a';
+      box.textContent = 'Проверка шлюза Saby (online.sbis.ru/service/sbis-rpc.service)...';
+
+      try {
+        const res = await fetch('/api/saby/test');
+        const data = await res.json();
+        if (data.ok) {
+          box.style.background = '#ecfdf5';
+          box.style.color = '#065f46';
+          box.textContent = '✓ ' + data.message;
+        } else {
+          box.style.background = '#fffbeb';
+          box.style.color = '#92400e';
+          box.textContent = 'Статус Saby: ' + data.message;
+        }
+      } catch (e) {
+        box.style.background = '#fef2f2';
+        box.style.color = '#991b1b';
+        box.textContent = 'Сетевая ошибка: ' + e.message;
+      }
+    }
+  </script>
 </body>
 </html>`);
 });
@@ -404,9 +655,108 @@ app.post('/client/:id/edit_log_post', (req, res) => {
 });
 
 // Two-way Saby Synchronization API
-app.post('/api/client/:id/sync_saby', (req, res) => {
-  const result = db.syncWithSaby(req.params.id);
+app.post('/api/client/:id/sync_saby', async (req, res) => {
+  try {
+    const result = await db.syncWithSaby(req.params.id);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GitHub Integration & Auto-Sync APIs
+app.get('/api/github/status', (req, res) => {
+  const status = getGitStatus();
+  const config = getGitHubConfig();
+  res.json({ ok: true, status, config });
+});
+
+app.post('/api/github/test', async (req, res) => {
+  const result = await testGitHubApi();
   res.json(result);
+});
+
+app.post('/api/github/sync', async (req, res) => {
+  try {
+    const message = req.body?.message || 'Синхронизация состояния CRM и базы данных';
+    const result = await syncToGitHub({ message, crmDb: db });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Saby Live Test API
+app.get('/api/saby/test', async (req, res) => {
+  const result = await testSabyConnection();
+  res.json(result);
+});
+
+// Beget Live Test & Refresh API
+app.get('/api/beget/test/:clientId', async (req, res) => {
+  const client = db.getClientById(req.params.clientId);
+  if (!client) return res.status(404).json({ ok: false, error: 'Контрагент не найден' });
+  const result = await testBegetConnection(client);
+  res.json(result);
+});
+
+app.post('/api/beget/refresh/:clientId', async (req, res) => {
+  const client = db.getClientById(req.params.clientId);
+  if (!client) return res.status(404).json({ ok: false, error: 'Контрагент не найден' });
+
+  const snapshot = await pullBegetSnapshot(client);
+  if (snapshot.hasLiveConnection) {
+    db.addHostEvent(client.id, {
+      event_type: 'beget_live_snapshot',
+      source: 'beget_api',
+      details: {
+        account: snapshot.account,
+        snapshot: {
+          domains: snapshot.domains || [],
+          sites: snapshot.sites || []
+        }
+      }
+    });
+    return res.json({
+      ok: true,
+      message: 'Свежие данные (домены, сайты, баланс) успешно загружены с серверов Beget!',
+      snapshot
+    });
+  } else {
+    return res.json({
+      ok: false,
+      message: snapshot.account?.error || 'Не удалось связаться с серверами Beget. Проверьте логин/пароль Beget в карточке контрагента.',
+      snapshot
+    });
+  }
+});
+
+// System Integrations Status
+app.get('/api/system/integrations', (req, res) => {
+  const ghConfig = getGitHubConfig();
+  const ghStatus = getGitStatus();
+  const sabyCreds = authenticateSaby; // presence
+  res.json({
+    ok: true,
+    github: {
+      hasToken: ghConfig.hasToken,
+      repo: ghConfig.repo,
+      branch: ghConfig.branch,
+      lastCommit: ghStatus.lastCommit,
+      uncommittedCount: ghStatus.uncommittedCount
+    },
+    saby: {
+      hasCredentials: !!(process.env.SABY_APP_CLIENT_ID && process.env.SABY_APP_SECRET)
+    },
+    beget: {
+      hasDefaultCredentials: !!process.env.BEGET_LOGIN
+    },
+    deployment: {
+      hasHost: !!process.env.SERVER_HOST,
+      hasUser: !!process.env.SERVER_USER,
+      hasSshKey: !!process.env.SSH_PRIVATE_KEY
+    }
+  });
 });
 
 // Saby Act Generation API
