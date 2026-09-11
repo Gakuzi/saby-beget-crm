@@ -41,7 +41,8 @@ jobs:
 
       - name: Create release archive
         run: |
-          tar --exclude='./.git' --exclude='./node_modules' --exclude='*.db' --exclude='*.sqlite*' -czf crm-release-${{ github.sha }}.tgz .
+          tar --exclude='./.git' --exclude='./node_modules' --exclude='*.db' --exclude='*.sqlite*' --exclude='*.tgz' -czf /tmp/crm-release-${{ github.sha }}.tgz .
+          mv /tmp/crm-release-${{ github.sha }}.tgz ./crm-release-${{ github.sha }}.tgz
           ls -lh crm-release-${{ github.sha }}.tgz
 
       - name: Check deployment secrets
