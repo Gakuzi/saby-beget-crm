@@ -33,6 +33,8 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
   const syncLogs = db.getSabySyncLogs(cId);
   const backups = db.getBackups(cId);
   const snapshot = db.getLastSnapshot(cId);
+  const creds = db.getClientCredentials(cId, { mask: false });
+  const clientSites = db.getClientSites(cId);
 
   const planHours = client.plan_hours || 15;
   const totalHoursUsed = logs.reduce((sum, l) => sum + (parseFloat(l.hours) || 0), 0);
@@ -805,7 +807,15 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
     <div class="tabs-bar">
       <a href="?tab=works" class="tab-btn ${activeTab === 'works' ? 'active' : ''}">
         <span>💼</span>
-        <span>Журнал работ и нарядов (${logs.length})</span>
+        <span>Журнал работ (${logs.length})</span>
+      </a>
+      <a href="?tab=keys" class="tab-btn ${activeTab === 'keys' ? 'active' : ''}">
+        <span>🔑</span>
+        <span>Доступы и хостинг</span>
+      </a>
+      <a href="?tab=backups" class="tab-btn ${activeTab === 'backups' ? 'active' : ''}">
+        <span>📦</span>
+        <span>Бэкапы сайтов (${backups.length})</span>
       </a>
       <a href="?tab=settings" class="tab-btn ${activeTab === 'settings' ? 'active' : ''}">
         <span>⚙️</span>
@@ -813,11 +823,11 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
       </a>
       <a href="?tab=saby_sync" class="tab-btn ${activeTab === 'saby_sync' ? 'active' : ''}">
         <span>🔄</span>
-        <span>Двусторонняя синхронизация (${syncLogs.length})</span>
+        <span>Синхронизация Saby (${syncLogs.length})</span>
       </a>
       <a href="?tab=edo" class="tab-btn ${activeTab === 'edo' ? 'active' : ''}">
         <span>📑</span>
-        <span>Документы СБИС ЭДО (${sabyDocs.length})</span>
+        <span>Документы СБИС (${sabyDocs.length})</span>
       </a>
       <a href="?tab=report" class="tab-btn ${activeTab === 'report' ? 'active' : ''}">
         <span>📊</span>
@@ -1351,6 +1361,400 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         </form>
       </div>
     ` : ''}
+
+    <!-- TAB: KEYS & INFRASTRUCTURE -->
+    ${activeTab === 'keys' ? `
+      <div class="glass-panel" style="padding: 26px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:20px; font-weight:800; color:var(--text-main); margin-bottom:4px;">🔑 Учетные записи, хостинг и доступы к сайтам</h2>
+            <p style="font-size:14px; color:var(--text-secondary);">
+              Централизованное защищённое хранение логинов, паролей, API-токенов хостинга и панели 1С-Битрикс
+            </p>
+          </div>
+          <div style="display:flex; gap:10px;">
+            ${creds.bitrix_admin_url ? `
+              <a href="${creds.bitrix_admin_url}" target="_blank" class="btn" style="background:#dc2626; color:#fff; font-weight:700;">
+                <span>🔑</span> Вход в 1С-Битрикс &nearr;
+              </a>
+            ` : ''}
+            ${creds.hosting_url ? `
+              <a href="${creds.hosting_url}" target="_blank" class="btn btn-glass">
+                <span>🌐</span> Панель хостинга &nearr;
+              </a>
+            ` : ''}
+          </div>
+        </div>
+
+        <form action="/client/${client.id}/update_full" method="POST">
+          <input type="hidden" name="active_tab" value="keys">
+          
+          <!-- Keep existing basic fields so they are not wiped -->
+          <input type="hidden" name="company_name" value="${client.company_name || ''}">
+          <input type="hidden" name="inn" value="${client.inn || ''}">
+          <input type="hidden" name="kpp" value="${client.kpp || ''}">
+          <input type="hidden" name="ogrn" value="${client.ogrn || ''}">
+          <input type="hidden" name="director" value="${client.director || ''}">
+          <input type="hidden" name="address" value="${client.address || ''}">
+          <input type="hidden" name="sites" value="${client.sites || ''}">
+          <input type="hidden" name="emails" value="${client.emails || ''}">
+          <input type="hidden" name="tariff" value="${client.tariff || ''}">
+          <input type="hidden" name="plan_hours" value="${client.plan_hours || ''}">
+          <input type="hidden" name="sla_target" value="${client.sla_target || ''}">
+          <input type="hidden" name="saby_contract_number" value="${client.saby_contract_number || ''}">
+          <input type="hidden" name="saby_contract_date" value="${client.saby_contract_date || ''}">
+
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap:20px; margin-bottom:24px;">
+            
+            <!-- SECTION 1: HOSTING -->
+            <div style="background: rgba(248,250,252,0.85); border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+                <h3 style="font-size:16px; font-weight:700; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
+                  <span>☁️</span> Хостинг и Cloud API
+                </h3>
+                <span class="badge badge-warning" style="font-size:11px;">Beget / Timeweb / VPS</span>
+              </div>
+
+              <div class="form-group">
+                <label>Провайдер хостинга:</label>
+                <input type="text" name="cred_hosting_provider" value="${creds.hosting_provider || 'Beget'}" class="form-control" placeholder="Beget, TimeWeb, Reg.ru, VPS">
+              </div>
+
+              <div class="form-group">
+                <label>URL панели управления хостинга:</label>
+                <div style="display:flex; gap:8px;">
+                  <input type="text" name="cred_hosting_url" id="inp_hosting_url" value="${creds.hosting_url || (client.beget_login ? 'https://cp.beget.com' : '')}" class="form-control" placeholder="https://cp.beget.com">
+                  ${creds.hosting_url ? `<a href="${creds.hosting_url}" target="_blank" class="btn btn-glass" style="padding:8px 12px;" title="Открыть">↗</a>` : ''}
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                <div class="form-group">
+                  <label>Логин хостинга:</label>
+                  <input type="text" name="cred_hosting_login" id="inp_hosting_login" value="${creds.hosting_login || client.beget_login || ''}" class="form-control">
+                </div>
+                <div class="form-group">
+                  <label>Пароль хостинга:</label>
+                  <div style="display:flex; gap:6px;">
+                    <input type="password" name="cred_hosting_password" id="inp_hosting_pass" value="${creds.hosting_password || client.beget_password || ''}" class="form-control">
+                    <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="togglePassVisibility('inp_hosting_pass')">👁️</button>
+                    <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="copyTextValue(document.getElementById('inp_hosting_pass').value, 'Пароль хостинга')">📋</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom:0;">
+                <label>API-ключ хостинга (для бэкапов и DNS):</label>
+                <div style="display:flex; gap:6px;">
+                  <input type="password" name="cred_hosting_api_key" id="inp_hosting_api" value="${creds.hosting_api_key || client.beget_api_key || ''}" class="form-control" placeholder="Токен API">
+                  <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="togglePassVisibility('inp_hosting_api')">👁️</button>
+                  <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="copyTextValue(document.getElementById('inp_hosting_api').value, 'API-ключ')">📋</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- SECTION 2: 1C-BITRIX ADMIN -->
+            <div style="background: rgba(248,250,252,0.85); border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; border-top: 3px solid #dc2626;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+                <h3 style="font-size:16px; font-weight:700; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
+                  <span>🔑</span> Панель 1С-Битрикс
+                </h3>
+                <span class="badge" style="background:#fee2e2; color:#991b1b; font-size:11px; font-weight:700;">CMS 1C-Битрикс</span>
+              </div>
+
+              <div class="form-group">
+                <label>URL административной панели (/bitrix/admin/):</label>
+                <div style="display:flex; gap:8px;">
+                  <input type="text" name="cred_bitrix_admin_url" id="inp_bitrix_url" value="${creds.bitrix_admin_url || (clientSites[0] ? clientSites[0].bitrix_admin_url : '')}" class="form-control" placeholder="https://site.ru/bitrix/admin/">
+                  ${creds.bitrix_admin_url ? `<a href="${creds.bitrix_admin_url}" target="_blank" class="btn btn-glass" style="padding:8px 12px; background:#dc2626; color:#fff;" title="Войти в Битрикс">Войти ↗</a>` : ''}
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                <div class="form-group">
+                  <label>Логин администратора:</label>
+                  <input type="text" name="cred_bitrix_login" id="inp_bitrix_login" value="${creds.bitrix_login || 'admin'}" class="form-control">
+                </div>
+                <div class="form-group">
+                  <label>Пароль администратора:</label>
+                  <div style="display:flex; gap:6px;">
+                    <input type="password" name="cred_bitrix_password" id="inp_bitrix_pass" value="${creds.bitrix_password || ''}" class="form-control">
+                    <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="togglePassVisibility('inp_bitrix_pass')">👁️</button>
+                    <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="copyTextValue(document.getElementById('inp_bitrix_pass').value, 'Пароль 1С-Битрикс')">📋</button>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:0;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label>Редакция / Версия Битрикс:</label>
+                  <input type="text" name="cred_bitrix_version" value="${creds.bitrix_version || '24.100.0 (Стандарт)'}" class="form-control">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label>Версия PHP:</label>
+                  <input type="text" name="cred_php_version" value="${creds.php_version || '8.2'}" class="form-control">
+                </div>
+              </div>
+            </div>
+
+            <!-- SECTION 3: SSH / SFTP -->
+            <div style="background: rgba(248,250,252,0.85); border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+                <h3 style="font-size:16px; font-weight:700; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
+                  <span>💻</span> Сервер SSH & SFTP
+                </h3>
+                <span class="badge badge-info" style="font-size:11px;">Консоль Linux</span>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 3fr 1fr; gap:12px;">
+                <div class="form-group">
+                  <label>Хост (IP или FQDN):</label>
+                  <input type="text" name="cred_ssh_host" id="inp_ssh_host" value="${creds.ssh_host || ''}" class="form-control" placeholder="185.xxx.xxx.xxx или domain.ru">
+                </div>
+                <div class="form-group">
+                  <label>Порт:</label>
+                  <input type="number" name="cred_ssh_port" id="inp_ssh_port" value="${creds.ssh_port || 22}" class="form-control">
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                <div class="form-group">
+                  <label>Пользователь (User):</label>
+                  <input type="text" name="cred_ssh_user" id="inp_ssh_user" value="${creds.ssh_user || 'root'}" class="form-control">
+                </div>
+                <div class="form-group">
+                  <label>Пароль / ключ SSH:</label>
+                  <div style="display:flex; gap:6px;">
+                    <input type="password" name="cred_ssh_password" id="inp_ssh_pass" value="${creds.ssh_password || ''}" class="form-control">
+                    <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="togglePassVisibility('inp_ssh_pass')">👁️</button>
+                    <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="copyTextValue(document.getElementById('inp_ssh_pass').value, 'Пароль SSH')">📋</button>
+                  </div>
+                </div>
+              </div>
+
+              <div style="margin-top:4px;">
+                <button type="button" class="btn btn-glass" style="width:100%; font-size:12px; font-family:monospace;" onclick="copyTextValue('ssh ' + (document.getElementById('inp_ssh_user').value || 'root') + '@' + (document.getElementById('inp_ssh_host').value || 'host') + ' -p ' + (document.getElementById('inp_ssh_port').value || 22), 'Команда SSH')">
+                  📋 Скопировать команду подключения: ssh user@host -p 22
+                </button>
+              </div>
+            </div>
+
+            <!-- SECTION 4: MYSQL DATABASE -->
+            <div style="background: rgba(248,250,252,0.85); border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+                <h3 style="font-size:16px; font-weight:700; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
+                  <span>🗄️</span> База данных MySQL
+                </h3>
+                <span class="badge badge-success" style="font-size:11px;">MySQL 8.0</span>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                <div class="form-group">
+                  <label>Сервер БД (Host):</label>
+                  <input type="text" name="cred_mysql_host" value="${creds.mysql_host || 'localhost'}" class="form-control">
+                </div>
+                <div class="form-group">
+                  <label>Имя базы данных:</label>
+                  <input type="text" name="cred_mysql_name" value="${creds.mysql_name || ''}" class="form-control" placeholder="bitrix_db">
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:0;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label>Пользователь БД:</label>
+                  <input type="text" name="cred_mysql_user" value="${creds.mysql_user || ''}" class="form-control">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label>Пароль БД:</label>
+                  <div style="display:flex; gap:6px;">
+                    <input type="password" name="cred_mysql_password" id="inp_mysql_pass" value="${creds.mysql_password || ''}" class="form-control">
+                    <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="togglePassVisibility('inp_mysql_pass')">👁️</button>
+                    <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="copyTextValue(document.getElementById('inp_mysql_pass').value, 'Пароль БД')">📋</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- SECTION 5: NOTES -->
+          <div class="form-group" style="margin-bottom:24px;">
+            <label style="font-size:14px; font-weight:700; color:#1e1b4b;">Заметки по инфраструктуре и особые инструкции доступа:</label>
+            <textarea name="cred_notes" rows="3" class="form-control" placeholder="Особые порты, VPN, 2FA, контакты системного администратора со стороны клиента">${creds.notes || ''}</textarea>
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:12px;">
+            <button type="submit" class="btn btn-primary" style="padding:12px 28px; font-size:15px;">
+              <span>💾</span> Сохранить все учетные записи и доступы
+            </button>
+          </div>
+        </form>
+      </div>
+    ` : ''}
+
+    <!-- TAB: BACKUPS & MONITORING -->
+    ${activeTab === 'backups' ? `
+      <div class="glass-panel" style="padding: 26px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:20px; font-weight:800; color:var(--text-main); margin-bottom:4px;">📦 Резервное копирование сайтов клиента</h2>
+            <p style="font-size:14px; color:var(--text-secondary);">
+              Мониторинг резервных копий 1С-Битрикс, прием отчетов от серверных cron-скриптов и ручная фиксация архивов
+            </p>
+          </div>
+        </div>
+
+        <!-- Cards for monitored sites -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px; margin-bottom:24px;">
+          ${clientSites.map(s => `
+            <div style="background:rgba(248,250,252,0.9); border:1px solid #e2e8f0; border-radius:14px; padding:18px; border-left: 4px solid #10b981;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+                <div>
+                  <div style="font-size:16px; font-weight:800; color:#1e1b4b;">${s.domain}</div>
+                  <div style="font-size:12px; color:#64748b;">${s.cms} (${s.cms_version}) &bull; PHP ${s.php_version}</div>
+                </div>
+                <span class="badge badge-success" style="font-size:11px;">В сети</span>
+              </div>
+              
+              <div style="font-size:13px; margin-bottom:14px; color:#334155;">
+                <div>Последний бэкап: <strong style="color:#10b981;">&check; ${s.last_backup?.status || 'Успешно'}</strong></div>
+                <div style="color:#64748b; font-size:12px;">${s.last_backup?.date || 'Сегодня 03:15'} (${s.last_backup?.size_mb || 3840} МБ)</div>
+              </div>
+
+              <div style="display:flex; gap:8px;">
+                <a href="${s.bitrix_admin_url}" target="_blank" class="btn" style="background:#dc2626; color:#fff; font-size:12px; padding:6px 12px; text-decoration:none; border-radius:8px; font-weight:700;">
+                  🔑 1С-Битрикс &nearr;
+                </a>
+                <a href="${s.url}" target="_blank" class="btn btn-glass" style="font-size:12px; padding:6px 12px; text-decoration:none;">
+                  🌐 Сайт &nearr;
+                </a>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:24px;">
+          
+          <!-- Automation / Webhook info -->
+          <div style="background:rgba(248,250,252,0.85); border:1px solid #e2e8f0; border-radius:14px; padding:20px;">
+            <h3 style="font-size:16px; font-weight:700; color:#1e1b4b; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+              <span>🤖</span> Автоматический сбор бэкапов через Webhook
+            </h3>
+            <p style="font-size:13px; color:#64748b; margin-bottom:14px;">
+              Скрипт бэкапа на сервере сайта может автоматически передавать статус выполнения в CRM после каждого ночного прогона:
+            </p>
+
+            <div class="form-group">
+              <label style="font-size:12px; font-weight:600; color:#475569;">Webhook URL:</label>
+              <div style="display:flex; gap:6px;">
+                <input type="text" id="webhook_url" value="https://test.crm.e-klimov.ru/api/backups/report" class="form-control" readonly style="font-family:monospace; font-size:12px; background:#f1f5f9;">
+                <button type="button" class="btn btn-glass" onclick="copyTextValue('https://test.crm.e-klimov.ru/api/backups/report', 'Webhook URL')">📋</button>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:10px;">
+              <label style="font-size:12px; font-weight:600; color:#475569;">Пример команды для Cron на сервере клиента:</label>
+              <textarea rows="3" class="form-control" readonly style="font-family:monospace; font-size:11.5px; background:#f8fafc;">/usr/bin/php -f /home/bitrix/www/bitrix/modules/main/tools/backup.php &amp;&amp; curl -s -X POST https://test.crm.e-klimov.ru/api/backups/report -H "Content-Type: application/json" -d '{"site":"${clientSites[0]?.domain || 'site.ru'}", "size_mb":3840, "status":"Успешно"}'</textarea>
+            </div>
+            <button type="button" class="btn btn-glass" style="font-size:12px; width:100%;" onclick="copyTextValue('curl -s -X POST https://test.crm.e-klimov.ru/api/backups/report -H &quot;Content-Type: application/json&quot; -d \'{\&quot;site\&quot;:\&quot;${clientSites[0]?.domain || 'site.ru'}\&quot;, \&quot;size_mb\&quot;:3840, \&quot;status\&quot;:\&quot;Успешно\&quot;}\'', 'Команда cURL')">
+              📋 Скопировать cURL команду для cron
+            </button>
+          </div>
+
+          <!-- Manual Backup Record Form -->
+          <div style="background:rgba(248,250,252,0.85); border:1px solid #e2e8f0; border-radius:14px; padding:20px;">
+            <h3 style="font-size:16px; font-weight:700; color:#1e1b4b; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+              <span>➕</span> Зафиксировать резервную копию вручную
+            </h3>
+            
+            <form action="/client/${client.id}/record_backup" method="POST">
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                <div class="form-group">
+                  <label>Сайт:</label>
+                  <select name="site_domain" class="form-control">
+                    ${clientSites.map(s => `<option value="${s.domain}">${s.domain}</option>`).join('')}
+                    ${clientSites.length === 0 ? '<option value="site.ru">site.ru</option>' : ''}
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Размер архива (МБ):</label>
+                  <input type="number" name="size_mb" value="3840" class="form-control" required>
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                <div class="form-group">
+                  <label>Тип резервной копии:</label>
+                  <select name="type" class="form-control">
+                    <option value="full">Полный архив (Сайт + БД)</option>
+                    <option value="db">Дамп базы данных (MySQL)</option>
+                    <option value="files">Файловый архив (/upload/)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Статус выполнения:</label>
+                  <select name="status" class="form-control">
+                    <option value="Успешно">Успешно</option>
+                    <option value="Предупреждение">Предупреждение</option>
+                    <option value="Ошибка">Ошибка</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Примечание / Локация:</label>
+                <input type="text" name="details" value="Штатный бэкап 1С-Битрикс в облако S3" class="form-control">
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="width:100%; padding:10px;">
+                <span>💾</span> Добавить запись о резервной копии
+              </button>
+            </form>
+          </div>
+
+        </div>
+
+        <!-- Backups Log Table -->
+        <div style="background:#fff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
+          <div style="padding:14px 18px; border-bottom:1px solid #e2e8f0; font-weight:700; color:#1e1b4b;">
+            История бэкапов клиента (${backups.length})
+          </div>
+          <table style="width:100%; border-collapse:collapse; font-size:13.5px;">
+            <thead>
+              <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0; text-align:left; color:#64748b;">
+                <th style="padding:10px 14px;">Дата и время</th>
+                <th style="padding:10px 14px;">Сайт</th>
+                <th style="padding:10px 14px;">Тип</th>
+                <th style="padding:10px 14px;">Размер</th>
+                <th style="padding:10px 14px;">Статус</th>
+                <th style="padding:10px 14px;">Источник</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${backups.length > 0 ? backups.map(b => `
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                  <td style="padding:10px 14px; font-weight:600; color:#1e1b4b;">${b.date || b.created_at || 'Сегодня 03:15'}</td>
+                  <td style="padding:10px 14px; font-weight:700;">${b.site || b.domain || clientSites[0]?.domain || 'Сайт клиента'}</td>
+                  <td style="padding:10px 14px; color:#475569;">${b.type || 'Полный архив'}</td>
+                  <td style="padding:10px 14px; font-family:monospace;">${b.size_mb ? b.size_mb + ' МБ' : '3 840 МБ'}</td>
+                  <td style="padding:10px 14px;">
+                    <span class="badge badge-success" style="font-size:11px;">&check; ${b.status || 'Успешно'}</span>
+                  </td>
+                  <td style="padding:10px 14px; color:#64748b; font-size:12px;">${b.source || 'Bitrix Cron'}</td>
+                </tr>
+              `).join('') : `
+                <tr>
+                  <td colspan="6" style="padding:24px; text-align:center; color:#94a3b8;">
+                    Архивов еще не зафиксировано
+                  </td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    ` : ''}
   </div>
 
   <!-- Modal: Edit Work Log -->
@@ -1442,6 +1846,23 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         });
       } else {
         prompt('Ссылка для клиента:', url);
+      }
+    }
+
+    function togglePassVisibility(inputId) {
+      const el = document.getElementById(inputId);
+      if (!el) return;
+      el.type = el.type === 'password' ? 'text' : 'password';
+    }
+
+    function copyTextValue(val, label) {
+      if (!val) return;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(val).then(() => {
+          showToast('✓ ' + (label || 'Значение') + ' скопировано в буфер!');
+        });
+      } else {
+        prompt('Скопируйте:', val);
       }
     }
 

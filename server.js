@@ -3,6 +3,7 @@ import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { db } from './crm_store.js';
+import { settingsManager } from './settings_manager.js';
 import { checkInnChecksum, suggestCompany, getContracts } from './inn_helper.js';
 import { renderPortalPage } from './portal_view.js';
 import { renderAdminClientPage, renderNewClientPage } from './admin_view.js';
@@ -314,6 +315,9 @@ app.get('/', (req, res) => {
 
     <div class="actions-bar">
       <a href="/add_page" class="btn">+ Добавить контрагента из Saby</a>
+      <button type="button" onclick="openSabySettingsModal()" class="btn" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #fff; box-shadow: 0 4px 12px rgba(2,132,199,0.25);">
+        ⚙️ Интеграция Saby CRM & Ключи
+      </button>
       <a href="/portal/2" target="_blank" class="btn" style="background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%); color: #5b21b6; box-shadow: none;">🖥️ Открыть Клиентский портал</a>
       <button type="button" onclick="triggerMainGitHubSync()" class="btn" style="background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); color: #1e293b; box-shadow: none;">
         🐙 Отправить изменения на GitHub
@@ -397,6 +401,102 @@ app.get('/', (req, res) => {
       </div>
 
       <div id="modal-result" style="display: none; padding: 12px; border-radius: 8px; font-size: 13px; line-height: 1.4; max-height: 140px; overflow-y: auto;"></div>
+    </div>
+  </div>
+
+  <!-- Modal: Saby CRM & Hosting Global Configuration -->
+  <div id="saby-settings-modal" class="modal-overlay">
+    <div class="modal-card" style="max-width: 680px; max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
+        <h3 style="margin: 0; font-size: 18px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+          <span>⚙️</span> Настройка шлюза Saby CRM, СБИС и бэкапов
+        </h3>
+        <button type="button" onclick="closeSabySettingsModal()" style="background: transparent; border: none; font-size: 22px; cursor: pointer; color: #94a3b8;">&times;</button>
+      </div>
+
+      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; font-size: 13px; color: #166534; line-height: 1.5;">
+        🔒 <strong>Безопасное хранилище:</strong> Указанные ключи и токены синхронизируются с сервером и файлом <code>crm_secure_settings.json</code> с правами 0600. Существующие пароли защищены маскированием.
+      </div>
+
+      <!-- Saby API Credentials Group -->
+      <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+        <h4 style="margin: 0 0 12px; font-size: 14.5px; color: #0369a1; display: flex; align-items: center; gap: 6px;">
+          <span>🏢</span> Интеграция с Saby CRM / СБИС (online.sbis.ru)
+        </h4>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">App Client ID (Идентификатор приложения):</label>
+            <input type="text" id="cfg-saby-client-id" placeholder="например: app_12345..." style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">App Secret (Секретный ключ приложения):</label>
+            <input type="password" id="cfg-saby-app-secret" placeholder="••••••••••••" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Secret Key (Сервисный ключ API):</label>
+            <input type="password" id="cfg-saby-secret-key" placeholder="••••••••••••" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Адрес RPC сервиса:</label>
+            <input type="text" id="cfg-saby-rpc-url" value="https://online.sbis.ru/service/sbis-rpc.service" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Логин пользователя СБИС (опционально):</label>
+            <input type="text" id="cfg-saby-login" placeholder="Логин или телефон" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Пароль пользователя СБИС:</label>
+            <input type="password" id="cfg-saby-password" placeholder="••••••••••••" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Backup Webhook & Monitoring Group -->
+      <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+        <h4 style="margin: 0 0 12px; font-size: 14.5px; color: #b45309; display: flex; align-items: center; gap: 6px;">
+          <span>📦</span> Скрипты бэкапов сайтов (Webhook API)
+        </h4>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 10px;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Секретный токен для вебхуков бэкапов (Bearer Secret):</label>
+            <input type="text" id="cfg-backup-secret" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-family: monospace;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Email для алертов:</label>
+            <input type="email" id="cfg-backup-email" placeholder="EKlimov84@gmail.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+        </div>
+
+        <div style="font-size: 12px; color: #64748b; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px dashed #cbd5e1;">
+          <strong>URL для скриптов бэкапов:</strong> <code>https://test.crm.e-klimov.ru/api/backups/report</code><br>
+          <em>Скрипт на сервере сайта может вызывать curl с JSON: <code>{"site":"domain.ru", "size_mb": 2500, "status": "Успешно", "secret": "..."}</code></em>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 8px;">
+          <button type="button" id="cfg-save-btn" onclick="saveSabyGlobalSettings()" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer;">
+            💾 Сохранить параметры
+          </button>
+          <button type="button" id="cfg-test-saby-btn" onclick="testSabyFromModal()" style="background: #f1f5f9; color: #0369a1; border: 1px solid #bae6fd; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer;">
+            ⚡ Проверить связь с Saby
+          </button>
+        </div>
+        <button type="button" onclick="closeSabySettingsModal()" style="background: #f8fafc; border: 1px solid #cbd5e1; color: #64748b; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer;">
+          Закрыть
+        </button>
+      </div>
+
+      <div id="cfg-result-box" style="display: none; margin-top: 14px; padding: 12px; border-radius: 8px; font-size: 13px; line-height: 1.4;"></div>
     </div>
   </div>
 
@@ -538,6 +638,124 @@ app.get('/', (req, res) => {
         box.textContent = 'Сетевая ошибка: ' + e.message;
       }
     }
+
+    // Saby & Integration Settings Modal
+    async function openSabySettingsModal() {
+      const modal = document.getElementById('saby-settings-modal');
+      modal.style.display = 'flex';
+      const box = document.getElementById('cfg-result-box');
+      box.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/settings/global');
+        const data = await res.json();
+        if (data.ok && data.settings) {
+          const s = data.settings;
+          document.getElementById('cfg-saby-client-id').value = s.saby_app_client_id || '';
+          document.getElementById('cfg-saby-app-secret').value = s.has_saby_secret ? '••••••••' : '';
+          document.getElementById('cfg-saby-secret-key').value = s.has_saby_key ? '••••••••' : '';
+          document.getElementById('cfg-saby-rpc-url').value = s.saby_rpc_url || 'https://online.sbis.ru/service/sbis-rpc.service';
+          document.getElementById('cfg-saby-login').value = s.saby_login || '';
+          document.getElementById('cfg-saby-password').value = s.has_saby_password ? '••••••••' : '';
+          document.getElementById('cfg-backup-secret').value = s.backup_webhook_secret || '';
+          document.getElementById('cfg-backup-email').value = s.backup_alert_email || '';
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки настроек:', err);
+      }
+    }
+
+    function closeSabySettingsModal() {
+      document.getElementById('saby-settings-modal').style.display = 'none';
+    }
+
+    async function saveSabyGlobalSettings() {
+      const btn = document.getElementById('cfg-save-btn');
+      const box = document.getElementById('cfg-result-box');
+      btn.disabled = true;
+      btn.textContent = 'Сохранение...';
+
+      const payload = {
+        saby_app_client_id: document.getElementById('cfg-saby-client-id').value,
+        saby_app_secret: document.getElementById('cfg-saby-app-secret').value,
+        saby_secret_key: document.getElementById('cfg-saby-secret-key').value,
+        saby_rpc_url: document.getElementById('cfg-saby-rpc-url').value,
+        saby_login: document.getElementById('cfg-saby-login').value,
+        saby_password: document.getElementById('cfg-saby-password').value,
+        backup_webhook_secret: document.getElementById('cfg-backup-secret').value,
+        backup_alert_email: document.getElementById('cfg-backup-email').value
+      };
+
+      try {
+        const res = await fetch('/api/settings/global', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        box.style.display = 'block';
+        if (data.ok) {
+          box.style.background = '#ecfdf5';
+          box.style.color = '#065f46';
+          box.textContent = '✓ Настройки шлюза Saby CRM и бэкапов успешно сохранены!';
+          showToast('✓ Настройки Saby успешно сохранены!');
+        } else {
+          box.style.background = '#fef2f2';
+          box.style.color = '#991b1b';
+          box.textContent = 'Ошибка сохранения: ' + (data.error || 'Неизвестная ошибка');
+        }
+      } catch (err) {
+        box.style.display = 'block';
+        box.style.background = '#fef2f2';
+        box.style.color = '#991b1b';
+        box.textContent = 'Ошибка связи: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '💾 Сохранить параметры';
+      }
+    }
+
+    async function testSabyFromModal() {
+      const btn = document.getElementById('cfg-test-saby-btn');
+      const box = document.getElementById('cfg-result-box');
+      btn.disabled = true;
+      btn.textContent = 'Проверка связи...';
+      box.style.display = 'block';
+      box.style.background = '#eff6ff';
+      box.style.color = '#1e3a8a';
+      box.textContent = 'Отправка проверочного запроса к Saby RPC API (online.sbis.ru)...';
+
+      const payload = {
+        saby_app_client_id: document.getElementById('cfg-saby-client-id').value,
+        saby_app_secret: document.getElementById('cfg-saby-app-secret').value,
+        saby_secret_key: document.getElementById('cfg-saby-secret-key').value
+      };
+
+      try {
+        const res = await fetch('/api/settings/saby/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+          box.style.background = '#ecfdf5';
+          box.style.color = '#065f46';
+          box.textContent = '✓ ' + data.message;
+        } else {
+          box.style.background = '#fffbeb';
+          box.style.color = '#92400e';
+          box.textContent = 'Статус шлюза: ' + data.message + (data.status ? (' (Код: ' + data.status + ')') : '');
+        }
+      } catch (err) {
+        box.style.background = '#fef2f2';
+        box.style.color = '#991b1b';
+        box.textContent = 'Ошибка проверки: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '⚡ Проверить связь с Saby';
+      }
+    }
   </script>
 </body>
 </html>`);
@@ -595,9 +813,11 @@ app.get('/client/:id', (req, res) => {
   }));
 });
 
-// Full Client Update (Settings Tab)
+// Full Client Update (Settings Tab & Keys Tab)
 app.post('/client/:id/update_full', (req, res) => {
   const clientId = req.params.id;
+  const activeTab = req.body.active_tab || 'settings';
+
   db.updateClientFull(clientId, {
     company_name: req.body.company_name,
     inn: req.body.inn,
@@ -620,8 +840,103 @@ app.post('/client/:id/update_full', (req, res) => {
     report_sections: Array.isArray(req.body.report_sections) ? req.body.report_sections.join(',') : req.body.report_sections || '',
     report_start_day: req.body.report_start_day
   });
-  req.session.flash = 'Параметры карточки и договор Saby успешно сохранены!';
-  res.redirect(`/client/${clientId}?tab=settings`);
+
+  // Also save credentials if provided from the "Доступы и хостинг" tab
+  if (req.body.cred_hosting_provider !== undefined || req.body.cred_bitrix_admin_url !== undefined || activeTab === 'keys') {
+    db.updateClientCredentials(clientId, {
+      hosting_provider: req.body.cred_hosting_provider,
+      hosting_url: req.body.cred_hosting_url,
+      hosting_login: req.body.cred_hosting_login,
+      hosting_password: req.body.cred_hosting_password,
+      hosting_api_key: req.body.cred_hosting_api_key,
+      bitrix_admin_url: req.body.cred_bitrix_admin_url,
+      bitrix_login: req.body.cred_bitrix_login,
+      bitrix_password: req.body.cred_bitrix_password,
+      bitrix_version: req.body.cred_bitrix_version,
+      php_version: req.body.cred_php_version,
+      ssh_host: req.body.cred_ssh_host,
+      ssh_port: req.body.cred_ssh_port,
+      ssh_user: req.body.cred_ssh_user,
+      ssh_password: req.body.cred_ssh_password,
+      mysql_host: req.body.cred_mysql_host,
+      mysql_name: req.body.cred_mysql_name,
+      mysql_user: req.body.cred_mysql_user,
+      mysql_password: req.body.cred_mysql_password,
+      notes: req.body.cred_notes
+    });
+  }
+
+  req.session.flash = activeTab === 'keys'
+    ? '✓ Доступы к хостингу, 1С-Битрикс и SSH успешно сохранены!'
+    : '✓ Параметры карточки и договор Saby успешно сохранены!';
+  res.redirect(`/client/${clientId}?tab=${activeTab}`);
+});
+
+// Record manual backup
+app.post('/client/:id/record_backup', (req, res) => {
+  const clientId = req.params.id;
+  const { site_domain, size_mb, type, status, details } = req.body;
+  db.recordSiteBackup({
+    domain: site_domain || 'главный сайт',
+    size_mb: parseFloat(size_mb) || 0,
+    type: type || 'full',
+    status: status || 'Успешно',
+    details: details || 'Ручная фиксация в карточке CRM',
+    source: 'Панель администратора CRM',
+    clientId
+  });
+  req.session.flash = `✓ Резервная копия для ${site_domain || 'сайта'} успешно зафиксирована!`;
+  res.redirect(`/client/${clientId}?tab=backups`);
+});
+
+// Webhook for backup reporting from Bitrix / bash scripts on client websites
+app.post('/api/backups/report', (req, res) => {
+  const { site, domain, size_mb, status, type, details, secret } = req.body;
+  const expectedSecret = process.env.BACKUP_WEBHOOK_SECRET || settingsManager.getRawSettings().backup_webhook_secret;
+
+  if (secret && expectedSecret && secret !== expectedSecret) {
+    return res.status(403).json({ ok: false, error: 'Неверный секретный ключ вебхука' });
+  }
+
+  const targetDomain = domain || site;
+  if (!targetDomain) {
+    return res.status(400).json({ ok: false, error: 'Параметр domain или site обязателен' });
+  }
+
+  const backup = db.recordSiteBackup({
+    domain: targetDomain,
+    size_mb: parseFloat(size_mb) || 0,
+    type: type || 'full',
+    status: status || 'Успешно',
+    details: details || 'Автоматический отчет со скрипта бэкапа (Bitrix Cron Webhook)',
+    source: 'Bitrix Cron Webhook'
+  });
+
+  res.json({ ok: true, message: `Отчет о бэкапе для ${targetDomain} успешно сохранен`, backup });
+});
+
+// Global integration settings API
+app.get('/api/settings/global', (req, res) => {
+  res.json({ ok: true, settings: settingsManager.getPublicSettings() });
+});
+
+app.post('/api/settings/global', (req, res) => {
+  const result = settingsManager.saveSettings(req.body);
+  res.json(result);
+});
+
+// Test Saby API connection with optional newly passed credentials
+app.post('/api/settings/saby/test', async (req, res) => {
+  try {
+    const { saby_app_client_id, saby_app_secret, saby_secret_key } = req.body || {};
+    if (saby_app_client_id) {
+      settingsManager.saveSettings({ saby_app_client_id, saby_app_secret, saby_secret_key });
+    }
+    const testRes = await testSabyConnection();
+    res.json(testRes);
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
 });
 
 // Advanced Work Log Add (with category and Saby sync)

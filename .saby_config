@@ -1,0 +1,8 @@
+{
+  "app_client_id": "test_saby_client",
+  "app_secret": "",
+  "secret_key": "",
+  "login": "",
+  "password": "",
+  "rpc_url": "https://online.sbis.ru/service/sbis-rpc.service"
+}

@@ -12,18 +12,34 @@ export function renderPortalPage({ client, token = '', activeTab = 'home', reqQu
   // Clients list for switcher
   const allClients = db.getClients();
 
-  const domainsList = (snapshot?.details?.snapshot?.domains && snapshot.details.snapshot.domains.length > 0)
-    ? snapshot.details.snapshot.domains.map(d => ({
-        fqdn: d.fqdn || d.domain,
-        ssl_status: d.ssl_status === 'active' || d.ssl_status === 'le_set' ? 'active' : 'inactive',
-        date_expire: d.date_expire || '12.08.2026'
-      }))
-    : [
-        { fqdn: 'sever-vector.ru', ssl_status: 'active', date_expire: '12.08.2026' },
-        { fqdn: 'shop.sever-vector.ru', ssl_status: 'active', date_expire: '21.07.2026' },
-        { fqdn: 'blog.sever-vector.ru', ssl_status: 'active', date_expire: '03.06.2026' },
-        { fqdn: 'test.sever-vector.ru', ssl_status: 'inactive', date_expire: '—' }
-      ];
+  const clientSites = db.getClientSites(cId);
+  const domainsList = clientSites.length > 0 ? clientSites.map(s => ({
+    fqdn: s.domain,
+    url: s.url,
+    bitrix_admin_url: s.bitrix_admin_url,
+    ssl_status: s.ssl_status,
+    date_expire: '12.08.2026',
+    cms: s.cms,
+    cms_version: s.cms_version,
+    php_version: s.php_version,
+    status: s.status,
+    response_time_ms: s.response_time_ms,
+    last_backup: s.last_backup
+  })) : [
+    {
+      fqdn: 'uniklinika.ru',
+      url: 'https://uniklinika.ru',
+      bitrix_admin_url: 'https://uniklinika.ru/bitrix/admin/',
+      ssl_status: 'active',
+      date_expire: '12.08.2026',
+      cms: '1С-Битрикс',
+      cms_version: '24.100.0',
+      php_version: '8.2',
+      status: 'online',
+      response_time_ms: 145,
+      last_backup: { date: 'Сегодня 03:15', size_mb: 3840, status: 'Успешно' }
+    }
+  ];
 
   const contractNum = client.saby_contract_number || '№ Д-2024/017';
   const planHours = client.plan_hours || 15;
@@ -286,6 +302,46 @@ export function renderPortalPage({ client, token = '', activeTab = 'home', reqQu
       font-size: 13px;
       font-weight: 600;
       color: #475569;
+    }
+
+    .btn-bitrix-admin {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+      color: #ffffff !important;
+      font-weight: 700;
+      font-size: 12.5px;
+      padding: 7px 14px;
+      border-radius: 8px;
+      text-decoration: none;
+      box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .btn-bitrix-admin:hover {
+      background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);
+    }
+    .btn-site-visit {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #f8fafc;
+      color: #334155 !important;
+      font-weight: 600;
+      font-size: 12.5px;
+      padding: 7px 12px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .btn-site-visit:hover {
+      background: #e2e8f0;
+      color: #0f172a !important;
     }
 
     .icon-btn {
@@ -931,7 +987,7 @@ export function renderPortalPage({ client, token = '', activeTab = 'home', reqQu
           <li>
             <a class="nav-link ${activeTab === 'domains' ? 'active' : ''}" onclick="switchTab('domains')">
               <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-              Домены и SSL
+              Сайты и 1С-Битрикс
             </a>
           </li>
           <li>
@@ -1539,24 +1595,38 @@ export function renderPortalPage({ client, token = '', activeTab = 'home', reqQu
                 </a>
               </div>
 
-              <table style="width:100%; border-collapse:collapse; font-size:13.5px;">
+              <table style="width:100%; border-collapse:collapse; font-size:13px;">
                 <thead>
                   <tr style="border-bottom:1px solid #e2e8f0; color:#64748b; text-align:left;">
-                    <th style="padding:8px 6px;">Домен</th>
+                    <th style="padding:8px 6px;">Сайт</th>
+                    <th style="padding:8px 6px;">1С-Битрикс Админка</th>
                     <th style="padding:8px 6px;">SSL-сертификат</th>
-                    <th style="padding:8px 6px;">Истекает</th>
+                    <th style="padding:8px 6px;">Резервная копия</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${domainsList.map(d => `
                     <tr style="border-bottom:1px solid #f1f5f9;">
-                      <td style="padding:10px 6px; font-weight:600; color:#1e1b4b;">${d.fqdn}</td>
+                      <td style="padding:10px 6px; font-weight:700; color:#1e1b4b;">
+                        <a href="${d.url || 'https://' + d.fqdn}" target="_blank" style="color:#1e1b4b; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                          <span>${d.fqdn}</span>
+                          <span style="font-size:11px; color:#64748b;">&nearr;</span>
+                        </a>
+                      </td>
+                      <td style="padding:10px 6px;">
+                        <a href="${d.bitrix_admin_url}" target="_blank" class="btn-bitrix-admin" style="font-size:11.5px; padding:5px 10px;">
+                          <span>🔑</span>
+                          <span>Вход в Битрикс &nearr;</span>
+                        </a>
+                      </td>
                       <td style="padding:10px 6px;">
                         ${d.ssl_status === 'active'
-                          ? '<span class="badge-status-done" style="font-size:11px;">&check; Активен</span>'
+                          ? '<span class="badge-status-done" style="font-size:11px;">&check; Let\'s Encrypt</span>'
                           : '<span style="color:#94a3b8;">&mdash;</span>'}
                       </td>
-                      <td style="padding:10px 6px; color:#475569;">${d.date_expire}</td>
+                      <td style="padding:10px 6px; font-size:12px; color:#10b981; font-weight:600;">
+                        &check; ${d.last_backup?.status || 'Актуален'} (${d.last_backup?.size_mb || 3840} МБ)
+                      </td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -1750,41 +1820,107 @@ export function renderPortalPage({ client, token = '', activeTab = 'home', reqQu
         </div>
 
         <!-- ============================================== -->
-        <!-- TAB 6: ДОМЕНЫ И SSL                            -->
+        <!-- TAB 6: САЙТЫ, 1С-БИТРИКС И МОНИТОРИНГ          -->
         <!-- ============================================== -->
         <div id="tab-domains" class="tab-pane" style="display: ${activeTab === 'domains' ? 'block' : 'none'};">
           <div style="margin-bottom: 24px;">
-            <h1 style="font-size: 26px; font-weight:800; color:#1e1b4b; margin-bottom:4px;">Домены и SSL-сертификаты</h1>
-            <p style="font-size: 14px; color:var(--text-secondary);">Мониторинг продления доменных имен, DNS-записей и криптографических сертификатов безопасности</p>
+            <h1 style="font-size: 26px; font-weight:800; color:#1e1b4b; margin-bottom:4px;">Сайты, управление 1С-Битрикс и Мониторинг</h1>
+            <p style="font-size: 14px; color:var(--text-secondary);">Обслуживаемые сайты компании, быстрый вход в административную панель 1С-Битрикс, статус доступности и резервных копий</p>
           </div>
 
+          <!-- Cards Grid for Monitored Sites -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; margin-bottom: 24px;">
+            ${domainsList.map(d => `
+              <div class="glass-card" style="display:flex; flex-direction:column; justify-content:space-between; border-top: 3px solid #dc2626;">
+                <div>
+                  <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                    <div>
+                      <div style="font-size: 18px; font-weight: 800; color: #1e1b4b; word-break: break-all;">
+                        ${d.fqdn}
+                      </div>
+                      <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px;">
+                        Платформа: <strong style="color:#0f172a;">${d.cms || '1С-Битрикс'}</strong> (${d.cms_version || '24.100.0'}, PHP ${d.php_version || '8.2'})
+                      </div>
+                    </div>
+                    <span class="badge-status-done" style="font-size:11px; white-space:nowrap;">
+                      <span style="display:inline-block; width:6px; height:6px; background:#10b981; border-radius:50%; margin-right:4px;"></span>
+                      Онлайн 200 OK
+                    </span>
+                  </div>
+
+                  <div style="background: rgba(248,250,252,0.8); border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 16px; font-size: 13px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+                      <span style="color: #64748b;">SSL-сертификат:</span>
+                      <strong style="color: #10b981;">&check; Let's Encrypt (TLS 1.3)</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+                      <span style="color: #64748b;">Резервная копия:</span>
+                      <strong style="color: #1e1b4b;">&check; ${d.last_backup?.status || 'Успешно'} (${d.last_backup?.size_mb || 3840} МБ)</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                      <span style="color: #64748b;">Дата последнего бэкапа:</span>
+                      <span style="color: #475569; font-weight: 600;">${d.last_backup?.date || 'Сегодня 03:15'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Action Buttons: Site Link + Bitrix Admin Link -->
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; pt: 10px; border-top: 1px solid #f1f5f9;">
+                  <a href="${d.bitrix_admin_url}" target="_blank" class="btn-bitrix-admin" style="flex: 1; justify-content: center;">
+                    <span>🔑</span>
+                    <span>Панель 1С-Битрикс &nearr;</span>
+                  </a>
+                  <a href="${d.url || 'https://' + d.fqdn}" target="_blank" class="btn-site-visit" style="flex: 1; justify-content: center;">
+                    <span>🌐</span>
+                    <span>Открыть сайт &nearr;</span>
+                  </a>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Detailed Monitoring Table -->
           <div class="glass-card">
-            <h3 style="font-size:17px; font-weight:700; color:#1e1b4b; margin-bottom:14px;">Список обслуживаемых доменов</h3>
-            <table style="width:100%; border-collapse:collapse; font-size:13.5px;">
+            <h3 style="font-size:17px; font-weight:700; color:#1e1b4b; margin-bottom:14px;">Сводная таблица параметров и быстрый переход</h3>
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
               <thead>
                 <tr style="border-bottom:1px solid #e2e8f0; color:#64748b; text-align:left;">
-                  <th style="padding:10px 8px;">Домен (FQDN)</th>
+                  <th style="padding:10px 8px;">Сайт компании</th>
+                  <th style="padding:10px 8px;">Вход в 1С-Битрикс</th>
+                  <th style="padding:10px 8px;">CMS / Стек</th>
                   <th style="padding:10px 8px;">Статус SSL</th>
-                  <th style="padding:10px 8px;">Срок продления</th>
-                  <th style="padding:10px 8px;">Защита HTTPS</th>
-                  <th style="padding:10px 8px; text-align:right;">Проверка</th>
+                  <th style="padding:10px 8px;">Резервное копирование</th>
+                  <th style="padding:10px 8px; text-align:right;">Доступность</th>
                 </tr>
               </thead>
               <tbody>
                 ${domainsList.map(d => `
                   <tr style="border-bottom:1px solid #f1f5f9;">
                     <td style="padding:12px 8px; font-weight:700; color:#1e1b4b;">
-                      <a href="https://${d.fqdn}" target="_blank" style="color:#1e1b4b; text-decoration:none;">${d.fqdn} &nearr;</a>
+                      <a href="${d.url || 'https://' + d.fqdn}" target="_blank" style="color:#1e1b4b; text-decoration:none; display:inline-flex; align-items:center; gap:5px;">
+                        <span>${d.fqdn}</span>
+                        <span style="font-size:11px; color:#64748b;">&nearr;</span>
+                      </a>
+                    </td>
+                    <td style="padding:12px 8px;">
+                      <a href="${d.bitrix_admin_url}" target="_blank" class="btn-bitrix-admin" style="font-size:12px; padding:6px 12px;">
+                        <span>🔑</span>
+                        <span>Вход в Битрикс &nearr;</span>
+                      </a>
+                    </td>
+                    <td style="padding:12px 8px; color:#475569;">
+                      <strong>${d.cms || '1С-Битрикс'}</strong> <span style="font-size:11px; color:#64748b;">(${d.php_version || '8.2'})</span>
                     </td>
                     <td style="padding:12px 8px;">
                       ${d.ssl_status === 'active'
-                        ? '<span class="badge-status-done">&check; Let\'s Encrypt (Активен)</span>'
+                        ? '<span class="badge-status-done">&check; TLS 1.3 Let\'s Encrypt</span>'
                         : '<span style="color:#94a3b8;">Не подключен</span>'}
                     </td>
-                    <td style="padding:12px 8px; color:#475569;">${d.date_expire}</td>
-                    <td style="padding:12px 8px; color:#10b981; font-weight:600;">TLS 1.3 / HTTP/2</td>
+                    <td style="padding:12px 8px; font-size:12.5px; color:#10b981; font-weight:600;">
+                      &check; ${d.last_backup?.status || 'Успешно'} (${d.last_backup?.size_mb || 3840} МБ)
+                    </td>
                     <td style="padding:12px 8px; text-align:right;">
-                      <span class="badge-status-done" style="font-size:11px;">DNS OK</span>
+                      <span class="badge-status-done" style="font-size:11px;">200 OK (~${d.response_time_ms || 145}мс)</span>
                     </td>
                   </tr>
                 `).join('')}

@@ -1,0 +1,20 @@
+{
+  "saby_app_client_id": "test_saby_client",
+  "saby_app_secret": "",
+  "saby_secret_key": "",
+  "saby_login": "",
+  "saby_password": "",
+  "saby_rpc_url": "https://online.sbis.ru/service/sbis-rpc.service",
+  "saby_auto_sync": true,
+  "saby_sync_interval_hours": 6,
+  "beget_login": "",
+  "beget_password": "",
+  "beget_api_key": "",
+  "backup_webhook_secret": "91e694050e0dcdca81c6683e2c0d730c",
+  "backup_alert_email": "EKlimov84@gmail.com",
+  "backup_retention_days": 30,
+  "github_token": "",
+  "github_repo": "EKlimov84/crm-beget-saby",
+  "github_branch": "main",
+  "updated_at": "2026-09-11T09:33:03.886Z"
+}
