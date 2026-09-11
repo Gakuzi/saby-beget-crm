@@ -51,13 +51,19 @@ jobs:
           HAS_SERVER_HOST: ${{ secrets.SERVER_HOST != '' }}
           HAS_SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY != '' }}
         run: |
-          if [ "$HAS_SERVER_HOST" = "true" ] && [ "$HAS_SSH_KEY" = "true" ]; then
-            echo "can_deploy=true" >> "$GITHUB_OUTPUT"
-            echo "Secrets configured. Proceeding with remote deployment to ${{ env.DEPLOY_TARGET }}."
-          else
-            echo "can_deploy=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Деплой на VPS пропущен::Секреты SERVER_HOST и SSH_PRIVATE_KEY еще не настроены в GitHub Secrets. Валидация кода и сборка архива релиза успешно пройдены."
-          fi
+         - name: Check deployment secrets
+         id: check_secrets
+         env:
+           HAS_SERVER_HOST: ${{ secrets.SERVER_HOST != '' }}
+           HAS_SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY != '' }}
+         run: |
+           if [ "$HAS_SERVER_HOST" = "true" ] && [ "$HAS_SSH_KEY" = "true" ]; then
+             echo "can_deploy=true" >> "$GITHUB_OUTPUT"
+             echo "Secrets configured. Proceeding with remote deployment to ${{ env.DEPLOY_TARGET }}."
+           else
+             echo "can_deploy=false" >> "$GITHUB_OUTPUT"
+             echo "::notice title=Деплой на VPS пропущен::Секреты SERVER_HOST и SSH_PRIVATE_KEY еще не настроены в GitHub Secrets. Валидация кода выполнена успешно." >> "$GITHUB_STEP_SUMMARY"
+           fi
 
       - name: Upload release archive to VPS
         if: steps.check_secrets.outputs.can_deploy == 'true'
