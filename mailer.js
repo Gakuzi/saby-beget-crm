@@ -24,14 +24,25 @@ class MailerService {
       await transporter.sendMail({
         from,
         to: email,
-        subject: `Код для входа в CRM: ${code}`,
+        subject: `Код авторизации: ${code} - CRM Администратора`,
         html: `
-          <div style="font-family: sans-serif; padding: 20px;">
-            <h2>Вход в CRM Администратора</h2>
-            <p>Ваш одноразовый код для входа:</p>
-            <h1 style="color: #2563eb; letter-spacing: 5px;">${code}</h1>
-            <p>Код действителен в течение 10 минут.</p>
-          </div>
+          <!DOCTYPE html>
+          <html lang="ru">
+          <head>
+            <meta charset="utf-8">
+            <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+          </head>
+          <body>
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; color: #1e293b;">
+              <h2>Вход в CRM Администратора</h2>
+              <p>Ваш код подтверждения для входа:</p>
+              <div style="margin: 24px 0; padding: 16px; background-color: #f1f5f9; border-radius: 8px; display: inline-block;">
+                <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #0f172a;">${code}</span>
+              </div>
+              <p>Код действителен в течение 10 минут.</p>
+            </div>
+          </body>
+          </html>
         `
       });
       return { ok: true };

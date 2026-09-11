@@ -13,6 +13,7 @@ import { testSabyConnection, authenticateSaby, searchSabyCompany, fetchSabyContr
 import { testBegetConnection, pullBegetSnapshot } from './beget_client.js';
 import { sshService } from './ssh_service.js';
 import { generatePhpBackupAgent, generateBashInstaller } from './backup_agent_generator.js';
+import { setupWebAuthn } from './webauthn_routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +23,7 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use((req,res,next)=>{console.log('Proto:', req.protocol, 'Secure:', req.secure, 'Headers:', req.headers['x-forwarded-proto']); next();});
 
 app.set('trust proxy', 1);
 
@@ -41,6 +43,8 @@ app.use((req, res, next) => {
   delete req.session.flash;
   next();
 });
+
+setupWebAuthn(app);
 
 // Authentication middleware (Bypassed: open access mode so interface and client cabinets work seamlessly without secrets or login blocks)
 
@@ -121,13 +125,45 @@ app.get('/login', (req, res) => {
     .tab { flex: 1; text-align: center; padding: 8px; cursor: pointer; color: #64748b; font-weight: 600; border-radius: 6px; }
     .tab.active { background: #eff6ff; color: #2563eb; }
   </style>
+<script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+<script>
+async function registerPasskey() {
+  try {
+    const resp = await fetch('/webauthn/generate-reg');
+    if (!resp.ok) throw new Error('Failed to generate options');
+    const opts = await resp.json();
+    if (opts.error) throw new Error(opts.error);
+    
+    const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
+    
+    const verifyResp = await fetch('/webauthn/verify-reg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attResp),
+    });
+    
+    const verification = await verifyResp.json();
+    if (verification.verified) {
+      alert('Ключ (Passkey) успешно добавлен! Теперь вы можете входить по отпечатку или Face ID.');
+    } else {
+      alert('Ошибка при сохранении ключа: ' + (verification.error || 'Неизвестная ошибка'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Не удалось зарегистрировать ключ: ' + e.message);
+  }
+}
+</script>
 </head>
 <body>
   <div class="card">
     <h2>Вход в CRM</h2>
     ${msg ? `<div class="${req.query.type === 'success' ? 'success' : 'msg'}">${msg}</div>` : ''}
     
-    <div class="tabs">
+          <div style="background: #fef3c7; color: #92400e; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; text-align: center; border: 1px solid #fcd34d;">
+        <b>Возникает цикл авторизации?</b><br>Откройте приложение в новой вкладке (иконка вверху справа) — ваш браузер блокирует cookies в режиме предпросмотра.
+      </div>
+      <div class="tabs">
       <div class="tab active" onclick="switchTab('pwd')">По паролю</div>
       <div class="tab" onclick="switchTab('otp')">По E-mail (Код)</div>
     </div>
@@ -156,7 +192,7 @@ app.get('/login', (req, res) => {
         <input type="hidden" name="next" value="${nextUrl}">
         <input type="hidden" name="email" value="${req.query.email}">
         <label>Код из письма:</label>
-        <input type="text" name="code" required placeholder="123456" style="letter-spacing:4px; text-align:center; font-weight:bold; font-size:18px;">
+        <input type="text" name="code" required placeholder="123456" autocomplete="one-time-code" inputmode="numeric" style="letter-spacing:4px; text-align:center; font-weight:bold; font-size:18px;">
         <button type="submit" style="background:#10b981;">Подтвердить код</button>
       </form>
       <script>
@@ -166,6 +202,16 @@ app.get('/login', (req, res) => {
       </script>
     ` : ''}
 
+    <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center;">
+      <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Или используйте безопасный вход</p>
+      <button type="button" onclick="loginWithPasskey()" style="background: #0f172a; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
+        Вход по Face ID / Touch ID
+      </button>
+      <p id="passkey-error" style="color: #dc2626; font-size: 13px; margin-top: 8px; display: none;"></p>
+    </div>
+
+    <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
     <script>
       function switchTab(t) {
         document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
@@ -177,6 +223,35 @@ app.get('/login', (req, res) => {
           document.getElementById('form-pwd').style.display = 'none';
           document.getElementById('form-otp-req').style.display = 'block';
           document.querySelectorAll('.tab')[1].classList.add('active');
+        }
+      }
+
+      async function loginWithPasskey() {
+        const errorEl = document.getElementById('passkey-error');
+        errorEl.style.display = 'none';
+        try {
+          const resp = await fetch('/webauthn/generate-auth');
+          const opts = await resp.json();
+          if (opts.error) throw new Error(opts.error);
+          
+          const asseResp = await SimpleWebAuthnBrowser.startAuthentication({ optionsJSON: opts });
+          
+          const verifyResp = await fetch('/webauthn/verify-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(asseResp),
+          });
+          
+          const verification = await verifyResp.json();
+          if (verification.verified) {
+            window.location.href = "${nextUrl}";
+          } else {
+            throw new Error(verification.error || 'Ошибка проверки ключа');
+          }
+        } catch (err) {
+          console.error(err);
+          errorEl.innerText = err.message || 'Не удалось выполнить вход по ключу';
+          errorEl.style.display = 'block';
         }
       }
     </script>
@@ -195,8 +270,7 @@ app.post('/login', (req, res) => {
   req.session.admin_id = admin.id;
   req.session.crm_admin_user = admin.username || admin.email;
   db.setAdminLastLogin(admin.id);
-  
-  res.redirect(next || '/');
+  req.session.save(() => { res.redirect(next || '/'); });
 });
 
 const otps = new Map(); // Store OTPs in memory for simplicity
@@ -235,8 +309,7 @@ app.post('/login_otp_verify', (req, res) => {
   req.session.crm_admin_user = admin.username || admin.email;
   
   db.setAdminLastLogin(admin.id);
-  
-  res.redirect(next || '/');
+  req.session.save(() => { res.redirect(next || '/'); });
 });
 
 // Workers Management
@@ -474,6 +547,7 @@ app.get('/', (req, res) => {
         <a href="/?filter=${filter === 'active' ? 'archived' : 'active'}" style="font-size:13px; font-weight:600; color:#3b82f6;">${filter === 'active' ? '🗄️ Архив' : '📁 Активные'}</a>
         <a href="/workers" style="font-size:13px; font-weight:600;">👥 Сотрудники</a>
         <a href="#" onclick="openSabySettingsModal()" style="font-size:13px; font-weight:600;">⚙️ Настройки Saby</a>
+        <a href="#" onclick="registerPasskey()" style="font-size:13px; font-weight:600; color:#10b981;">🛡️ Создать Passkey</a>
         <a href="/change-password" style="font-size:13px; font-weight:600;">🔑 Пароль</a>
         <a href="/logout" style="font-size:13px; font-weight:600; color:#ef4444;">🚪 Выйти</a>
       </div>

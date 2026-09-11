@@ -34,6 +34,17 @@ class SqliteDatabase {
 
   initTables() {
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS admin_passkeys (
+        id TEXT PRIMARY KEY,
+        admin_id INTEGER,
+        public_key TEXT,
+        counter INTEGER,
+        device_type TEXT,
+        backed_up INTEGER,
+        transports TEXT,
+        created_at TEXT
+      );
+      
       CREATE TABLE IF NOT EXISTS admin_users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
@@ -324,6 +335,26 @@ class SqliteDatabase {
 
   setAdminLastLogin(adminId) {
     this.db.prepare('UPDATE admin_users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), adminId);
+  }
+
+  // --- Passkeys / WebAuthn ---
+  savePasskey(passkey) {
+    this.db.prepare(`
+      INSERT INTO admin_passkeys (id, admin_id, public_key, counter, device_type, backed_up, transports, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(passkey.id, passkey.admin_id, passkey.public_key, passkey.counter, passkey.device_type, passkey.backed_up ? 1 : 0, passkey.transports, new Date().toISOString());
+  }
+
+  getPasskey(id) {
+    return this.db.prepare('SELECT * FROM admin_passkeys WHERE id = ?').get(id);
+  }
+  
+  updatePasskeyCounter(id, counter) {
+    this.db.prepare('UPDATE admin_passkeys SET counter = ? WHERE id = ?').run(counter, id);
+  }
+
+  getAdminPasskeys(admin_id) {
+    return this.db.prepare('SELECT * FROM admin_passkeys WHERE admin_id = ?').all(admin_id);
   }
 
   // --- 2FA Verification Codes ---
