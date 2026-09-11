@@ -1,8 +1,10 @@
+import fs from 'fs';
 
+let code = `
 import { db } from './crm_store.js';
 
 export async function checkInnChecksum(inn) {
-  if (typeof inn !== 'string' || !inn.match(/^\d{10}$|^\d{12}$/)) return false;
+  if (typeof inn !== 'string' || !inn.match(/^\\d{10}$|^\\d{12}$/)) return false;
   if (inn.length === 10) {
     const weights = [2, 4, 10, 3, 5, 9, 4, 6, 8];
     let sum = 0;
@@ -39,10 +41,10 @@ export async function suggestCompany(query) {
         },
         body: JSON.stringify({
           jsonrpc: '2.0',
-          method: query.match(/^\d+$/)
+          method: query.match(/^\\d+$/)
             ? 'СБИС.Контрагенты.ПолучитьИнформациюОКонтрагенте'
             : 'СБИС.Контрагенты.НайтиКонтрагентов',
-          params: query.match(/^\d+$/)
+          params: query.match(/^\\d+$/)
             ? { Контрагент: contractorObj }
             : { Поиск: query, РазмерСтраницы: 6 },
           id: 1
@@ -51,7 +53,7 @@ export async function suggestCompany(query) {
 
       const rpcData = await rpcRes.json();
       if (rpcData.result) {
-        if (query.match(/^\d+$/)) {
+        if (query.match(/^\\d+$/)) {
           const comp = rpcData.result;
           const name = comp.Название || comp.НаименованиеСокращенное || comp.НаименованиеПолное || comp.ФИОПолное;
           if (name) {
@@ -101,3 +103,6 @@ export async function getContracts(inn) {
   }
   return [];
 }
+`;
+
+fs.writeFileSync('inn_helper.js', code);

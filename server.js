@@ -1268,7 +1268,7 @@ async function registerPasskey() {
       const payload = {
         saby_app_client_id: document.getElementById('cfg-saby-client-id').value,
         saby_app_secret: document.getElementById('cfg-saby-app-secret').value,
-        saby_secret_key: document.getElementById('cfg-saby-secret-key').value
+        saby_secret_key: document.getElementById('cfg-saby-secret-key').value === 'HIDDEN' ? '' : document.getElementById('cfg-saby-secret-key').value
       };
 
       try {
@@ -1347,16 +1347,46 @@ app.get('/get_contracts', async (req, res) => {
 
 // Add client POST
 app.post('/add_client', (req, res) => {
-  const { inn, company_name, emails, sites, contract_id, contract_number } = req.body;
+  const { inn, company_name, contract_id, contract_number, contract_title } = req.body;
+  
+  let sitesArray = [];
+  if (Array.isArray(req.body['sites[]'])) sitesArray = req.body['sites[]'];
+  else if (typeof req.body['sites[]'] === 'string') sitesArray = [req.body['sites[]']];
+  const sitesStr = sitesArray.filter(s => s.trim() !== '').join(', ');
+
+  let emailsArray = [];
+  if (Array.isArray(req.body['contact_emails[]'])) emailsArray = req.body['contact_emails[]'];
+  else if (typeof req.body['contact_emails[]'] === 'string') emailsArray = [req.body['contact_emails[]']];
+  const emailsStr = emailsArray.filter(e => e.trim() !== '').join(', ');
+
   const newClient = db.addClient({
     inn: inn || req.body.search_input,
     company_name: company_name || req.body.search_input,
-    email_reports: emails,
-    sites,
+    email_reports: emailsStr,
+    sites: sitesStr,
     saby_contract_id: contract_id,
     saby_contract_number: contract_number
   });
-  req.session.flash = `Карточка контрагента ${newClient.company_name} успешно создана!`;
+
+  let contactNames = [];
+  if (Array.isArray(req.body['contact_names[]'])) contactNames = req.body['contact_names[]'];
+  else if (typeof req.body['contact_names[]'] === 'string') contactNames = [req.body['contact_names[]']];
+  
+  for (let i = 0; i < contactNames.length; i++) {
+    const cName = contactNames[i].trim();
+    const cEmail = (emailsArray[i] || '').trim();
+    if (cName || cEmail) {
+      db.addContact(newClient.id, {
+        name: cName || 'Представитель',
+        position: '',
+        email: cEmail,
+        phone: '',
+        role: 'staff'
+      });
+    }
+  }
+
+  req.session.flash = `Карточка ${newClient.company_name} успешно создана!`;
   res.redirect(`/client/${newClient.id}`);
 });
 
