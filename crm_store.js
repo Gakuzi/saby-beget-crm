@@ -19,6 +19,8 @@ class CrmStore {
     this.serviceEvents = [];
     this.tickets = [];
     this.sabyDocs = [];
+    this.contacts = [];
+    this.verificationCodes = [];
     this.adminUser = {
       username: 'admin',
       passwordHash: this.hashPassword('admin123'),
@@ -28,6 +30,10 @@ class CrmStore {
     const loaded = this.loadFromDisk();
     if (!loaded) {
       this.seedInitialData();
+      this.saveToDisk();
+    }
+    if (!this.contacts || this.contacts.length === 0) {
+      this.seedInitialContacts();
       this.saveToDisk();
     }
   }
@@ -46,6 +52,8 @@ class CrmStore {
           this.serviceEvents = parsed.serviceEvents || [];
           this.tickets = parsed.tickets || [];
           this.sabyDocs = parsed.sabyDocs || [];
+          this.contacts = parsed.contacts || [];
+          this.verificationCodes = parsed.verificationCodes || [];
           if (parsed.adminUser) this.adminUser = parsed.adminUser;
           return true;
         }
@@ -72,6 +80,8 @@ class CrmStore {
         serviceEvents: this.serviceEvents,
         tickets: this.tickets,
         sabyDocs: this.sabyDocs,
+        contacts: this.contacts,
+        verificationCodes: this.verificationCodes,
         adminUser: this.adminUser
       };
       fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), { mode: 0o600 });
@@ -1291,6 +1301,223 @@ class CrmStore {
     return this.getClientById(link.client_id);
   }
 
+  // --- Seed Initial Contacts ---
+  seedInitialContacts() {
+    this.contacts = [
+      // Client 2 (ООО "Альфа-Сервис")
+      {
+        id: 201,
+        client_id: 2,
+        name: 'Смирнов Алексей Викторович',
+        position: 'Генеральный директор',
+        email: 'director@alpha-service.pro',
+        phone: '+7 (812) 450-20-10',
+        role: 'full', // 'full' | 'technical' | 'financial'
+        token: 'sec_alpha_dir_8f29d10e',
+        created_at: '2024-02-10T10:00:00.000Z',
+        last_login_at: '2026-09-10T16:45:00.000Z'
+      },
+      {
+        id: 202,
+        client_id: 2,
+        name: 'Романова Елена Игоревна',
+        position: 'Руководитель отдела маркетинга',
+        email: 'marketing@alpha-service.pro',
+        phone: '+7 (921) 980-44-12',
+        role: 'technical',
+        token: 'sec_alpha_mkt_9a41b23c',
+        created_at: '2024-03-01T12:00:00.000Z',
+        last_login_at: null
+      },
+      {
+        id: 203,
+        client_id: 2,
+        name: 'Кузнецов Михаил Андреевич',
+        position: 'Ведущий веб-разработчик',
+        email: 'dev@alpha-service.pro',
+        phone: '+7 (911) 234-56-78',
+        role: 'technical',
+        token: 'sec_alpha_dev_1d55e89a',
+        created_at: '2024-04-15T09:30:00.000Z',
+        last_login_at: null
+      },
+      // Client 1 (ООО "ТехноПром")
+      {
+        id: 101,
+        client_id: 1,
+        name: 'Петров Дмитрий Сергеевич',
+        position: 'IT-директор',
+        email: 'support@technoprom.ru',
+        phone: '+7 (495) 780-12-34',
+        role: 'full',
+        token: 'sec_tech_it_33a9b1c2',
+        created_at: '2024-01-15T11:00:00.000Z',
+        last_login_at: null
+      },
+      {
+        id: 102,
+        client_id: 1,
+        name: 'Соколова Анна Михайловна',
+        position: 'Главный бухгалтер',
+        email: 'director@technoprom.ru',
+        phone: '+7 (495) 780-12-35',
+        role: 'financial',
+        token: 'sec_tech_acc_77e4f8d1',
+        created_at: '2024-01-20T14:00:00.000Z',
+        last_login_at: null
+      }
+    ];
+  }
+
+  // --- Client Contacts Management ---
+  getContacts(clientId) {
+    const cId = parseInt(clientId, 10);
+    return this.contacts.filter(c => c.client_id === cId);
+  }
+
+  getContactById(contactId) {
+    const id = parseInt(contactId, 10);
+    return this.contacts.find(c => c.id === id) || null;
+  }
+
+  getContactByToken(token) {
+    if (!token || typeof token !== 'string' || token.trim().length < 8) return null;
+    const cleanToken = token.trim();
+    return this.contacts.find(c => c.token === cleanToken) || null;
+  }
+
+  getContactByEmail(email, clientId = null) {
+    if (!email) return null;
+    const cleanEmail = email.trim().toLowerCase();
+    return this.contacts.find(c => {
+      const matchEmail = (c.email || '').trim().toLowerCase() === cleanEmail;
+      if (clientId) {
+        return matchEmail && c.client_id === parseInt(clientId, 10);
+      }
+      return matchEmail;
+    }) || null;
+  }
+
+  addContact(clientId, { name, position, email, phone, role = 'technical' }) {
+    const cId = parseInt(clientId, 10);
+    const nextId = this.contacts.length > 0 ? Math.max(...this.contacts.map(c => c.id)) + 1 : 201;
+    const token = 'sec_c_' + crypto.randomBytes(16).toString('hex');
+
+    const newContact = {
+      id: nextId,
+      client_id: cId,
+      name: (name || 'Контактное лицо').trim(),
+      position: (position || 'Представитель клиента').trim(),
+      email: (email || '').trim().toLowerCase(),
+      phone: (phone || '').trim(),
+      role: ['full', 'technical', 'financial'].includes(role) ? role : 'technical',
+      token,
+      created_at: new Date().toISOString(),
+      last_login_at: null
+    };
+
+    this.contacts.push(newContact);
+    this.saveToDisk();
+    return newContact;
+  }
+
+  updateContact(contactId, data = {}) {
+    const contact = this.getContactById(contactId);
+    if (!contact) return null;
+
+    if (data.name !== undefined) contact.name = String(data.name).trim();
+    if (data.position !== undefined) contact.position = String(data.position).trim();
+    if (data.email !== undefined) contact.email = String(data.email).trim().toLowerCase();
+    if (data.phone !== undefined) contact.phone = String(data.phone).trim();
+    if (data.role && ['full', 'technical', 'financial'].includes(data.role)) {
+      contact.role = data.role;
+    }
+
+    this.saveToDisk();
+    return contact;
+  }
+
+  deleteContact(contactId) {
+    const id = parseInt(contactId, 10);
+    const idx = this.contacts.findIndex(c => c.id === id);
+    if (idx !== -1) {
+      const removed = this.contacts.splice(idx, 1)[0];
+      // Also clean up verification codes for this contact
+      this.verificationCodes = this.verificationCodes.filter(v => v.contact_id !== id);
+      this.saveToDisk();
+      return removed;
+    }
+    return null;
+  }
+
+  reissueContactToken(contactId) {
+    const contact = this.getContactById(contactId);
+    if (!contact) return null;
+
+    contact.token = 'sec_c_' + crypto.randomBytes(16).toString('hex');
+    this.saveToDisk();
+    return contact;
+  }
+
+  // --- 2FA Login Verification Codes ---
+  createVerificationCode(contactId) {
+    const cId = parseInt(contactId, 10);
+    // 6-digit numeric OTP
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const now = Date.now();
+    const expiresAt = now + 15 * 60 * 1000; // 15 minutes validity
+
+    // Invalidate prior pending codes for this contact
+    this.verificationCodes.forEach(v => {
+      if (v.contact_id === cId && !v.used) {
+        v.used = true;
+      }
+    });
+
+    const record = {
+      id: Date.now(),
+      contact_id: cId,
+      code,
+      expires_at: expiresAt,
+      used: false,
+      created_at: new Date().toISOString()
+    };
+
+    this.verificationCodes.push(record);
+    this.saveToDisk();
+    return { code, expiresAt };
+  }
+
+  verifyLoginCode(contactId, inputCode) {
+    const cId = parseInt(contactId, 10);
+    const cleaned = String(inputCode || '').replace(/\s+/g, '').trim();
+
+    if (!cleaned || cleaned.length !== 6) {
+      return { ok: false, error: 'Введите корректный 6-значный код подтверждения' };
+    }
+
+    const now = Date.now();
+    const record = this.verificationCodes.find(v => 
+      v.contact_id === cId &&
+      v.code === cleaned &&
+      !v.used &&
+      v.expires_at > now
+    );
+
+    if (!record) {
+      return { ok: false, error: 'Неверный или просроченный проверочный код. Запросите новый код.' };
+    }
+
+    record.used = true;
+    const contact = this.getContactById(cId);
+    if (contact) {
+      contact.last_login_at = new Date().toISOString();
+    }
+    this.saveToDisk();
+
+    return { ok: true, contact };
+  }
+
   // --- Service Events ---
   getServiceEvents(clientId, category = 'all') {
     const cId = parseInt(clientId, 10);
@@ -1490,7 +1717,7 @@ class CrmStore {
   }
 
   // --- Tickets ---
-  createTicket(clientId, { subject, service, priority = 'medium', message = '' }) {
+  createTicket(clientId, { subject, service, priority = 'medium', message = '', contactId = null, authorName = '', authorEmail = '', authorPosition = '' }) {
     const cId = parseInt(clientId, 10);
     const nextId = this.tickets.length > 0 ? Math.max(...this.tickets.map(t => t.id)) + 1 : 1;
     const now = new Date();
@@ -1498,6 +1725,10 @@ class CrmStore {
       id: nextId,
       ticket_number: `TICK-${String(nextId).padStart(4, '0')}`,
       client_id: cId,
+      contact_id: contactId ? parseInt(contactId, 10) : null,
+      author_name: authorName || 'Контактное лицо',
+      author_email: authorEmail || '',
+      author_position: authorPosition || '',
       subject: (subject || 'Новое обращение в техподдержку').trim(),
       service: (service || 'Техническая поддержка').trim(),
       priority,
@@ -1510,16 +1741,17 @@ class CrmStore {
     // Auto-record in service events
     this.addServiceEvent(cId, {
       category: 'work',
-      title: `Обращение ${ticket.ticket_number} зарегистрировано`,
+      title: `Обращение ${ticket.ticket_number} зарегистрировано (${ticket.author_name})`,
       service: ticket.service,
-      detail_label: 'Тема',
-      detail_value: ticket.subject,
+      detail_label: 'Заявитель',
+      detail_value: `${ticket.author_name}${ticket.author_position ? ' — ' + ticket.author_position : ''}`,
       status: 'В работе',
       status_type: 'in_progress',
       group: 'today',
       time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     });
 
+    this.saveToDisk();
     return ticket;
   }
 

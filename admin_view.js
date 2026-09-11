@@ -25,9 +25,10 @@ function formatDateOnly(isoStr) {
   });
 }
 
-export function renderAdminClientPage({ client, activeTab = 'works', flashMessage = null, reqQuery = {} }) {
+export function renderAdminClientPage({ client, activeTab = 'works', flashMessage = null, reqQuery = {}, reqHost = '' }) {
   const cId = client.id;
   const logs = db.getWorkLogs(cId);
+  const contacts = db.getContacts(cId);
   const summary = db.getPortalSummary(cId);
   const sabyDocs = db.getSabyDocs(cId);
   const syncLogs = db.getSabySyncLogs(cId);
@@ -809,6 +810,10 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         <span>💼</span>
         <span>Журнал работ (${logs.length})</span>
       </a>
+      <a href="?tab=contacts" class="tab-btn ${activeTab === 'contacts' ? 'active' : ''}">
+        <span>👥</span>
+        <span>Контакты и 2FA ссылки (${contacts.length})</span>
+      </a>
       <a href="?tab=keys" class="tab-btn ${activeTab === 'keys' ? 'active' : ''}">
         <span>🔑</span>
         <span>Доступы и хостинг</span>
@@ -834,6 +839,128 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         <span>Генерация отчёта</span>
       </a>
     </div>
+
+    <!-- TAB: Contacts & 2FA Access Links -->
+    ${activeTab === 'contacts' ? `
+      <div class="glass-panel" style="padding: 28px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
+          <div>
+            <h2 style="font-size:22px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:10px;">
+              <span>👥</span>
+              <span>Контактные лица и закрытый 2FA доступ в Личный кабинет</span>
+            </h2>
+            <p style="font-size:14px; color:var(--text-secondary); margin-top:4px; max-width:840px; line-height:1.5;">
+              Для каждого контактного лица создаётся отдельная ссылка. При переходе на указанную почту высылается 6-значный одноразовый код подтверждения, чтобы гарантировать, что только уполномоченный сотрудник видит финансовые документы и оставляет заявки.
+            </p>
+          </div>
+          <button type="button" onclick="openAddContactModal()" class="btn btn-primary" style="padding:10px 20px;">
+            <span>+</span> Добавить контактное лицо
+          </button>
+        </div>
+
+        <!-- Security Rule Notice -->
+        <div style="background:rgba(238, 242, 255, 0.85); border:1px solid #c7d2fe; border-radius:14px; padding:16px 20px; margin-bottom:24px; display:flex; gap:14px; align-items:flex-start;">
+          <span style="font-size:26px;">🛡️</span>
+          <div style="font-size:13.5px; line-height:1.55; color:#1e1b4b;">
+            <strong>Двухфакторная защита финансовой информации:</strong><br>
+            В личном кабинете отражаются акты выполненных работ СБИС ЭДО, остатки оплаченных часов и доступы к инфраструктуре. Даже при пересылке ссылки постороннему лицу система затребует подтверждение через почту ответственного лица клиента.
+          </div>
+        </div>
+
+        <!-- Contacts Table / Cards -->
+        ${contacts.length === 0 ? `
+          <div style="text-align:center; padding:48px 20px; background:rgba(248, 250, 252, 0.6); border-radius:16px; border:1px dashed #cbd5e1;">
+            <div style="font-size:40px; margin-bottom:12px;">👤</div>
+            <h3 style="font-size:17px; font-weight:700; color:#1e293b; margin-bottom:6px;">Контактные лица ещё не добавлены</h3>
+            <p style="font-size:13.5px; color:#64748b; margin-bottom:20px;">Добавьте первого представителя (руководителя, бухгалтера или IT-специалиста), чтобы выпустить индивидуальную ссылку доступа.</p>
+            <button type="button" onclick="openAddContactModal()" class="btn btn-primary">
+              <span>+</span> Добавить представителя
+            </button>
+          </div>
+        ` : `
+          <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(380px, 1fr)); gap:20px;">
+            ${contacts.map(c => {
+              const accessLink = (reqHost ? ('https://' + reqHost) : '') + '/portal?token=' + c.token;
+              const roleTitle = c.role === 'full' ? 'Полный доступ (акты + задачи)' : (c.role === 'technical' ? 'Технический (заявки + мониторинг)' : 'Финансовый (акты + счета)');
+              const roleBadgeColor = c.role === 'full' ? 'background:#ede9fe; color:#6d28d9; border:1px solid #ddd6fe;' : (c.role === 'technical' ? 'background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;' : 'background:#fef3c7; color:#92400e; border:1px solid #fde68a;');
+
+              return `
+                <div class="glass-card" style="padding:22px; display:flex; flex-direction:column; justify-content:space-between; border:1px solid rgba(226,232,240,0.9); border-radius:18px;">
+                  <div>
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                      <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="width:44px; height:44px; border-radius:12px; background:linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px;">
+                          ${c.name.split(' ').map(w => w[0]).slice(0, 2).join('')}
+                        </div>
+                        <div>
+                          <div style="font-weight:800; font-size:15.5px; color:#0f172a;">${c.name}</div>
+                          <div style="font-size:12.5px; color:#64748b; margin-top:2px;">${c.position || 'Представитель'}</div>
+                        </div>
+                      </div>
+                      <span class="badge" style="font-size:11px; padding:3px 8px; border-radius:8px; font-weight:700; ${roleBadgeColor}">
+                        ${roleTitle}
+                      </span>
+                    </div>
+
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px 14px; font-size:13px; margin-bottom:14px;">
+                      <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span style="color:#64748b;">Рабочая почта (2FA):</span>
+                        <strong style="color:#0f172a;"><a href="mailto:${c.email}" style="color:#6d28d9; text-decoration:none;">${c.email}</a></strong>
+                      </div>
+                      <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span style="color:#64748b;">Телефон:</span>
+                        <strong style="color:#0f172a;">${c.phone || 'Не указан'}</strong>
+                      </div>
+                      <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#64748b;">Последний вход (2FA):</span>
+                        <span style="font-weight:600; color:${c.last_login_at ? '#166534' : '#94a3b8'};">
+                          ${c.last_login_at ? formatDateRus(c.last_login_at) : 'Ещё не входил'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- Personal Secret Access Link -->
+                    <div style="margin-bottom:14px;">
+                      <label style="display:block; font-size:11.5px; font-weight:700; color:#475569; margin-bottom:4px;">
+                        🔑 Персональная секретная ссылка входа:
+                      </label>
+                      <div style="display:flex; gap:6px;">
+                        <input type="text" readonly value="${accessLink}" id="link-input-${c.id}" style="flex:1; padding:7px 10px; font-size:12px; font-family:monospace; background:#fff; border:1px solid #cbd5e1; border-radius:8px; color:#334155;">
+                        <button type="button" onclick="copyContactLink('${c.id}', '${c.token}')" class="btn btn-glass" style="padding:6px 12px; font-size:12px;" title="Скопировать ссылку">
+                          📋
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Actions for Contact -->
+                  <div style="display:flex; gap:8px; padding-top:14px; border-top:1px solid #f1f5f9; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+                    <div style="display:flex; gap:6px;">
+                      <button type="button" onclick="sendContactInvite('${client.id}', '${c.id}', '${c.email}')" class="btn btn-glass" style="padding:6px 12px; font-size:12px; color:#4338ca;" title="Выслать приглашение и ссылку на рабочую почту">
+                        ✉️ Выслать на email
+                      </button>
+                    </div>
+
+                    <div style="display:flex; gap:6px;">
+                      <form action="/client/${client.id}/contacts/${c.id}/reissue" method="POST" style="margin:0;" onsubmit="return confirm('Перевыпустить секретную ссылку для ${c.name}? Предыдущая ссылка перестанет действовать.');">
+                        <button type="submit" class="btn btn-glass" style="padding:6px 10px; font-size:12px; color:#d97706;" title="Перевыпустить секретный ключ">
+                          🔄 Перевыпустить
+                        </button>
+                      </form>
+                      <form action="/client/${client.id}/contacts/${c.id}/delete" method="POST" style="margin:0;" onsubmit="return confirm('Удалить контактное лицо ${c.name}?');">
+                        <button type="submit" class="btn btn-glass" style="padding:6px 10px; font-size:12px; color:#ef4444;" title="Удалить">
+                          🗑️
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `}
+      </div>
+    ` : ''}
 
     <!-- TAB 1: Works & Incidents (Main Working Desk) -->
     ${activeTab === 'works' ? `
@@ -2145,7 +2272,105 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         alert('Ошибка связи с сервером: ' + e.message);
       }
     }
+
+    // --- Contact & 2FA Access Management ---
+    function openAddContactModal() {
+      document.getElementById('add-contact-modal').style.display = 'flex';
+    }
+
+    function closeAddContactModal() {
+      document.getElementById('add-contact-modal').style.display = 'none';
+    }
+
+    function copyContactLink(contactId, token) {
+      const input = document.getElementById('link-input-' + contactId);
+      let url = input ? input.value : (window.location.origin + '/portal?token=' + token);
+      if (url.startsWith('/')) {
+        url = window.location.origin + url;
+      }
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(() => {
+          showToast('✓ Секретная ссылка контакта скопирована!');
+        });
+      } else {
+        prompt('Секретная ссылка контакта:', url);
+      }
+    }
+
+    async function sendContactInvite(clientId, contactId, email) {
+      if (!confirm('Выслать персональное приглашение и ссылку доступа на почту ' + email + '?')) return;
+      showToast('✉️ Отправка приглашения через почтовый шлюз...');
+      try {
+        const res = await fetch('/api/client/' + clientId + '/contact/' + contactId + '/send_invite', {
+          method: 'POST'
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('✓ Приглашение успешно отправлено на ' + email);
+          alert('✓ Приглашение со ссылкой и инструкцией успешно отправлено сотруднику на ' + email + (data.simulated ? '\n(Использован безопасный режим эмуляции, проверьте логи сервера)' : ''));
+        } else {
+          alert('Ошибка отправки: ' + (data.error || 'Неизвестная ошибка'));
+        }
+      } catch (err) {
+        alert('Ошибка связи: ' + err.message);
+      }
+    }
   </script>
+
+  <!-- Add Contact Modal -->
+  <div id="add-contact-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.5); backdrop-filter:blur(4px); align-items:center; justify-content:center; z-index:2000; padding:20px;">
+    <div style="background:#ffffff; border-radius:18px; max-width:540px; width:100%; padding:26px; box-shadow:0 24px 60px rgba(0,0,0,0.25);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; padding-bottom:12px; border-bottom:1px solid #e2e8f0;">
+        <h3 style="margin:0; font-size:18px; font-weight:800; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
+          <span>👤</span> Новое контактное лицо клиента
+        </h3>
+        <button type="button" onclick="closeAddContactModal()" style="background:transparent; border:none; font-size:24px; cursor:pointer; color:#94a3b8;">&times;</button>
+      </div>
+
+      <p style="font-size:13px; color:#64748b; margin-bottom:16px; line-height:1.5;">
+        Для сотрудника будет автоматически сгенерирован индивидуальный токен. При каждом входе в личный кабинет на его email будет отправляться 6-значный 2FA-код.
+      </p>
+
+      <form action="/client/${client.id}/contacts/add" method="POST">
+        <div style="margin-bottom:12px;">
+          <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:4px;">ФИО сотрудника *</label>
+          <input type="text" name="name" required placeholder="Иванов Иван Иванович" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:10px; font-size:13.5px;">
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:4px;">Должность</label>
+          <input type="text" name="position" placeholder="Генеральный директор / Главный бухгалтер / IT-директор" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:10px; font-size:13.5px;">
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:4px;">Рабочая почта (для 2FA) *</label>
+            <input type="email" name="email" required placeholder="employee@company.ru" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:10px; font-size:13.5px;">
+          </div>
+          <div>
+            <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:4px;">Телефон</label>
+            <input type="tel" name="phone" placeholder="+7 (999) 000-00-00" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:10px; font-size:13.5px;">
+          </div>
+        </div>
+
+        <div style="margin-bottom:18px;">
+          <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:4px;">Уровень доступа</label>
+          <select name="role" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:10px; font-size:13.5px; background:#fff;">
+            <option value="full">Полный доступ (акты СБИС, подача заявок, мониторинг)</option>
+            <option value="technical">Технический доступ (подача заявок и мониторинг сайтов)</option>
+            <option value="financial">Финансовый доступ (акты СБИС, договоры и счета)</option>
+          </select>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" onclick="closeAddContactModal()" class="btn btn-glass" style="padding:9px 16px;">Отмена</button>
+          <button type="submit" class="btn btn-primary" style="padding:9px 20px;">
+            <span>+</span> Добавить и выпустить ссылку
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <!-- GitHub Sync & CI/CD Modal -->
   <div id="admin-gh-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.5); backdrop-filter:blur(4px); align-items:center; justify-content:center; z-index:2000; padding:20px;">

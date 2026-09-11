@@ -1,7 +1,7 @@
 // Apple Liquid Glass Client Portal Generator
 import { db } from './crm_store.js';
 
-export function renderPortalPage({ client, token = '', activeTab = 'home', reqQuery = {} }) {
+export function renderPortalPage({ client, contact = null, token = '', activeTab = 'home', reqQuery = {}, isAdminPreview = false }) {
   const cId = client.id;
   const summary = db.getPortalSummary(cId);
   const events = db.getServiceEvents(cId, 'all');
@@ -1001,32 +1001,58 @@ export function renderPortalPage({ client, token = '', activeTab = 'home', reqQu
 
       <div>
         <div class="sidebar-footer-card">
-          <div style="font-weight:700; color:#1e1b4b; font-size:13px;">Техподдержка 24/7</div>
-          <div style="color:var(--text-secondary); font-size:12px; margin-top:2px;">Инженер: Климов Евгений</div>
-          <span class="support-online-badge">
+          <div style="font-weight:700; color:#1e1b4b; font-size:13px;">${contact ? 'Авторизованный доступ' : 'Техподдержка 24/7'}</div>
+          <div style="color:var(--text-secondary); font-size:12px; margin-top:2px;">
+            ${contact ? contact.name : 'Инженер: Климов Евгений'}
+          </div>
+          <span class="support-online-badge" style="${contact ? 'background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;' : ''}">
             <span style="width:6px; height:6px; background:#10b981; border-radius:50%;"></span>
-            Онлайн
+            ${contact ? '2FA Верифицирован' : 'Онлайн'}
           </span>
         </div>
         <div style="margin-top:10px; text-align:center;">
-          <a href="/" style="font-size:11.5px; color:#64748b; text-decoration:none;">Перейти в панель CRM &rarr;</a>
+          ${contact ? `
+            <a href="/portal/logout" style="font-size:12px; color:#ef4444; font-weight:600; text-decoration:none;">🚪 Завершить сеанс</a>
+          ` : `
+            <a href="/" style="font-size:11.5px; color:#64748b; text-decoration:none;">Перейти в панель CRM &rarr;</a>
+          `}
         </div>
       </div>
     </aside>
 
     <!-- MAIN SCROLLABLE WRAPPER -->
     <div class="main-wrapper">
+      ${isAdminPreview ? `
+        <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); color: #fff; padding: 10px 24px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 16px;">👀</span>
+            <span><strong>Режим предпросмотра администратора CRM (Евгений Климов)</strong>: просмотр личного кабинета <em>${client.company_name}</em></span>
+          </div>
+          <a href="/client/${client.id}?tab=contacts" style="color: #c7d2fe; text-decoration: none; font-weight: 700; font-size: 12.5px; background: rgba(255,255,255,0.12); padding: 4px 10px; border-radius: 6px;">
+            Управление контактами и ссылками &rarr;
+          </a>
+        </div>
+      ` : ''}
+
       <!-- TOP GLASS NAVBAR -->
       <header class="topbar">
         <div class="topbar-left">
-          <div class="client-select-pill">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M9 21V9h6v12M9 5h6"></path></svg>
-            <select onchange="window.location.href='/portal/' + this.value">
-              ${allClients.map(c => `
-                <option value="${c.id}" ${c.id === client.id ? 'selected' : ''}>${c.company_name}</option>
-              `).join('')}
-            </select>
-          </div>
+          ${isAdminPreview ? `
+            <div class="client-select-pill">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M9 21V9h6v12M9 5h6"></path></svg>
+              <select onchange="window.location.href='/portal/' + this.value">
+                ${allClients.map(c => `
+                  <option value="${c.id}" ${c.id === client.id ? 'selected' : ''}>${c.company_name}</option>
+                `).join('')}
+              </select>
+            </div>
+          ` : `
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 18px;">🏢</span>
+              <span style="font-weight: 700; color: #1e1b4b; font-size: 14.5px;">${client.company_name}</span>
+              <span class="badge" style="background: #ede9fe; color: #6d28d9; font-size: 11.5px; padding: 2px 8px; border-radius: 6px; font-weight: 600;">Договор: ${contractNum}</span>
+            </div>
+          `}
         </div>
 
         <div class="topbar-right">
@@ -1040,9 +1066,23 @@ export function renderPortalPage({ client, token = '', activeTab = 'home', reqQu
             <span class="notif-badge"></span>
           </button>
 
-          <div class="user-pill">
-            <div class="user-avatar">${(client.company_name || 'К')[0]}</div>
-            <span class="user-name">${client.company_name}</span>
+          <div class="user-pill" style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: rgba(255,255,255,0.85); border-radius: 30px; border: 1px solid rgba(226,232,240,0.8);">
+            <div class="user-avatar" style="background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); color: #fff; font-weight: 700;">
+              ${contact ? contact.name.split(' ').map(w => w[0]).slice(0, 2).join('') : (client.company_name || 'К')[0]}
+            </div>
+            <div style="display: flex; flex-direction: column; text-align: left;">
+              <span class="user-name" style="font-weight: 700; font-size: 13px; line-height: 1.2; color: #1e1b4b;">
+                ${contact ? contact.name : client.company_name}
+              </span>
+              <span style="font-size: 11px; color: #64748b; line-height: 1.1;">
+                ${contact ? `${contact.position || 'Представитель'} • ${contact.role === 'full' ? 'Полный доступ' : contact.role === 'technical' ? 'Технический' : 'Финансовый'}` : 'Клиентский доступ'}
+              </span>
+            </div>
+            ${contact ? `
+              <a href="/portal/logout" title="Выйти из личного кабинета" style="margin-left: 6px; color: #ef4444; text-decoration: none; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              </a>
+            ` : ''}
           </div>
         </div>
       </header>
@@ -2037,16 +2077,28 @@ export function renderPortalPage({ client, token = '', activeTab = 'home', reqQu
         const res = await fetch('/api/ticket', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clientId, subject, service, priority, message })
+          body: JSON.stringify({
+            clientId,
+            subject,
+            service,
+            priority,
+            message,
+            contactId: ${contact ? contact.id : 'null'},
+            authorName: ${JSON.stringify(contact ? contact.name : 'Представитель клиента')},
+            authorEmail: ${JSON.stringify(contact ? contact.email : '')},
+            authorPosition: ${JSON.stringify(contact ? contact.position : '')}
+          })
         });
         const data = await res.json();
         if (data.ok) {
           closeTicketModal();
-          alert('✅ Обращение успешно зарегистрировано в системе! Инженер уже оповещен.');
+          alert('✅ Обращение ' + (data.ticket?.ticket_number || '') + ' успешно зарегистрировано в системе! Инженер уже оповещен.');
           window.location.reload();
+        } else {
+          alert('Ошибка: ' + (data.error || 'Не удалось создать обращение'));
         }
       } catch (err) {
-        alert('Ошибка при отправке обращения');
+        alert('Ошибка при отправке обращения: ' + err.message);
       }
     }
 
@@ -2072,3 +2124,479 @@ export function renderPortalPage({ client, token = '', activeTab = 'home', reqQu
 </body>
 </html>`;
 }
+
+// --------------------------------------------------------------------------
+// 2FA LOGIN PAGE (Step 1: Contact selects Email or Secret Token)
+// --------------------------------------------------------------------------
+export function renderPortalLoginPage({ error = null, message = null, initialEmail = '' } = {}) {
+  return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход в Личный кабинет — Клиентский портал | Klimov CRM</title>
+  <style>
+    :root {
+      --bg-gradient: radial-gradient(circle at 10% 20%, rgba(235, 238, 255, 0.9) 0%, rgba(244, 240, 255, 0.8) 50%, rgba(247, 249, 254, 0.95) 100%);
+      --glass-bg: rgba(255, 255, 255, 0.82);
+      --glass-border: rgba(255, 255, 255, 0.9);
+      --glass-shadow: 0 16px 40px 0 rgba(31, 38, 135, 0.08), 0 4px 12px 0 rgba(0, 0, 0, 0.03);
+      --primary-purple: #6d28d9;
+      --primary-gradient: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+      --text-main: #1e1b4b;
+      --text-secondary: #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background: var(--bg-gradient);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      color: var(--text-main);
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 480px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 36px 32px;
+      box-shadow: var(--glass-shadow);
+    }
+    .brand-header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .brand-icon {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+      border-radius: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 26px;
+      box-shadow: 0 8px 20px rgba(124, 58, 237, 0.3);
+      margin-bottom: 14px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+    .brand-sub {
+      font-size: 13.5px;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+    .auth-tabs {
+      display: flex;
+      background: rgba(241, 245, 249, 0.8);
+      border-radius: 12px;
+      padding: 4px;
+      margin-bottom: 24px;
+    }
+    .auth-tab-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: transparent;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .auth-tab-btn.active {
+      background: #ffffff;
+      color: #6d28d9;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      font-weight: 700;
+    }
+    .form-group {
+      margin-bottom: 18px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 6px;
+    }
+    input[type="text"], input[type="email"] {
+      width: 100%;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 14px;
+      color: #0f172a;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input[type="text"]:focus, input[type="email"]:focus {
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+    }
+    .btn-submit {
+      width: 100%;
+      padding: 13px;
+      background: var(--primary-gradient);
+      color: #ffffff;
+      border: none;
+      border-radius: 10px;
+      font-size: 14.5px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);
+      transition: all 0.2s ease;
+    }
+    .btn-submit:hover {
+      background: linear-gradient(135deg, #6d28d9 0%, #4f46e5 100%);
+      transform: translateY(-1px);
+    }
+    .security-notice {
+      margin-top: 24px;
+      padding: 12px 14px;
+      background: rgba(241, 245, 249, 0.7);
+      border-radius: 10px;
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.5;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .alert-error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      margin-bottom: 20px;
+      line-height: 1.4;
+      text-align: left;
+    }
+    .alert-success {
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      color: #065f46;
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-card">
+    <div class="brand-header">
+      <div class="brand-icon">🛡️</div>
+      <h1>Закрытый личный кабинет</h1>
+      <div class="brand-sub">IT-сопровождение, мониторинг сайтов и акты СБИС | Евгений Климов</div>
+    </div>
+
+    ${error ? `<div class="alert-error">⚠️ ${error}</div>` : ''}
+    ${message ? `<div class="alert-success">✓ ${message}</div>` : ''}
+
+    <div class="auth-tabs">
+      <button type="button" class="auth-tab-btn active" id="tab-btn-email" onclick="showTab('email')">
+        ✉️ По рабочей почте
+      </button>
+      <button type="button" class="auth-tab-btn" id="tab-btn-token" onclick="showTab('token')">
+        🔑 По секретной ссылке
+      </button>
+    </div>
+
+    <!-- Email Tab -->
+    <form id="form-email" action="/portal/send_code" method="POST">
+      <div class="form-group">
+        <label for="inp-email">Рабочая электронная почта представителя:</label>
+        <input type="email" id="inp-email" name="email" required placeholder="director@alpha-service.pro" value="${initialEmail}">
+        <div style="font-size: 11.5px; color: #64748b; margin-top: 5px;">
+          На указанную почту поступит одноразовый 6-значный код подтверждения
+        </div>
+      </div>
+      <button type="submit" class="btn-submit">
+        Получить проверочный код &rarr;
+      </button>
+    </form>
+
+    <!-- Token Tab -->
+    <form id="form-token" action="/portal/send_code" method="POST" style="display: none;">
+      <div class="form-group">
+        <label for="inp-token">Секретная ссылка или персональный ключ:</label>
+        <input type="text" id="inp-token" name="token" placeholder="sec_alpha_dir_8f29d10e или ссылка целиком">
+        <div style="font-size: 11.5px; color: #64748b; margin-top: 5px;">
+          Вставьте индивидуальную ссылку, выданную вашим инженером
+        </div>
+      </div>
+      <button type="submit" class="btn-submit">
+        Продолжить вход &rarr;
+      </button>
+    </form>
+
+    <div class="security-notice">
+      <span style="font-size: 18px;">🔒</span>
+      <div>
+        <strong>Двухфакторная защита данных:</strong> Личный кабинет содержит финансовую информацию, закрывающие документы СБИС и параметры хостинга. Доступ предоставляется только авторизованным контактным лицам компаний.
+      </div>
+    </div>
+
+    <div style="margin-top: 20px; text-align: center; font-size: 12px; color: #94a3b8;">
+      Вопросы по доступу: <a href="mailto:info@e-klimov.ru" style="color: #6d28d9; text-decoration: none; font-weight: 600;">info@e-klimov.ru</a> | +7 (921) 980-44-12
+    </div>
+  </div>
+
+  <script>
+    function showTab(type) {
+      if (type === 'email') {
+        document.getElementById('form-email').style.display = 'block';
+        document.getElementById('form-token').style.display = 'none';
+        document.getElementById('tab-btn-email').classList.add('active');
+        document.getElementById('tab-btn-token').classList.remove('active');
+      } else {
+        document.getElementById('form-email').style.display = 'none';
+        document.getElementById('form-token').style.display = 'block';
+        document.getElementById('tab-btn-email').classList.remove('active');
+        document.getElementById('tab-btn-token').classList.add('active');
+      }
+    }
+  </script>
+</body>
+</html>`;
+}
+
+// --------------------------------------------------------------------------
+// 2FA VERIFICATION PAGE (Step 2: 6-digit OTP code verification)
+// --------------------------------------------------------------------------
+export function renderPortalVerifyPage({ contact, client, token = '', error = null, simulatedCode = null }) {
+  const maskEmail = (email) => {
+    if (!email) return '';
+    const parts = email.split('@');
+    if (parts.length !== 2) return email;
+    const name = parts[0];
+    const domain = parts[1];
+    if (name.length <= 2) return name[0] + '***@' + domain;
+    return name[0] + '•••••' + name.slice(-1) + '@' + domain;
+  };
+
+  const maskedEmail = maskEmail(contact.email);
+
+  return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Подтверждение входа — ${client.company_name} | Klimov CRM</title>
+  <style>
+    :root {
+      --bg-gradient: radial-gradient(circle at 10% 20%, rgba(235, 238, 255, 0.9) 0%, rgba(244, 240, 255, 0.8) 50%, rgba(247, 249, 254, 0.95) 100%);
+      --glass-bg: rgba(255, 255, 255, 0.85);
+      --glass-border: rgba(255, 255, 255, 0.9);
+      --glass-shadow: 0 16px 40px 0 rgba(31, 38, 135, 0.08), 0 4px 12px 0 rgba(0, 0, 0, 0.03);
+      --primary-gradient: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+      --text-main: #1e1b4b;
+      --text-secondary: #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background: var(--bg-gradient);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      color: var(--text-main);
+    }
+    .verify-card {
+      width: 100%;
+      max-width: 480px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 36px 32px;
+      box-shadow: var(--glass-shadow);
+      text-align: center;
+    }
+    .shield-badge {
+      width: 60px;
+      height: 60px;
+      background: #ede9fe;
+      color: #7c3aed;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 14px rgba(124, 58, 237, 0.15);
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+    .user-target-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin: 18px 0;
+      text-align: left;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .user-target-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .user-target-label {
+      color: #64748b;
+    }
+    .user-target-val {
+      font-weight: 700;
+      color: #1e293b;
+    }
+    .code-input-wrapper {
+      margin: 22px 0;
+    }
+    .code-input {
+      width: 100%;
+      max-width: 300px;
+      padding: 12px 10px;
+      background: #ffffff;
+      border: 2px solid #7c3aed;
+      border-radius: 12px;
+      font-size: 30px;
+      font-weight: 800;
+      font-family: monospace;
+      letter-spacing: 10px;
+      text-align: center;
+      color: #0f172a;
+      outline: none;
+      box-shadow: 0 4px 16px rgba(124, 58, 237, 0.12);
+    }
+    .btn-verify {
+      width: 100%;
+      padding: 14px;
+      background: var(--primary-gradient);
+      color: #ffffff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);
+      transition: all 0.2s ease;
+    }
+    .btn-verify:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(124, 58, 237, 0.4);
+    }
+    .alert-error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      line-height: 1.4;
+      text-align: left;
+    }
+    .simulated-banner {
+      background: #eff6ff;
+      border: 1px dashed #3b82f6;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 12px;
+      color: #1e40af;
+      margin-top: 18px;
+      line-height: 1.4;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <div class="verify-card">
+    <div class="shield-badge">🔐</div>
+    <h1>Подтверждение личности</h1>
+    <p style="font-size: 13.5px; color: var(--text-secondary); margin-top: 4px;">
+      Мы отправили одноразовый проверочный код на вашу рабочую почту
+    </p>
+
+    <div class="user-target-box">
+      <div class="user-target-row">
+        <span class="user-target-label">Организация:</span>
+        <span class="user-target-val">${client.company_name}</span>
+      </div>
+      <div class="user-target-row">
+        <span class="user-target-label">Контактное лицо:</span>
+        <span class="user-target-val">${contact.name}</span>
+      </div>
+      <div class="user-target-row">
+        <span class="user-target-label">Должность:</span>
+        <span class="user-target-val">${contact.position || 'Представитель'}</span>
+      </div>
+      <div class="user-target-row" style="margin-bottom: 0;">
+        <span class="user-target-label">Email для кода:</span>
+        <span class="user-target-val" style="color: #6d28d9;">${maskedEmail}</span>
+      </div>
+    </div>
+
+    ${error ? `<div class="alert-error">⚠️ ${error}</div>` : ''}
+
+    <form action="/portal/do_verify" method="POST">
+      <input type="hidden" name="contact_id" value="${contact.id}">
+      <input type="hidden" name="token" value="${token}">
+
+      <div class="code-input-wrapper">
+        <label style="display: block; font-size: 12.5px; font-weight: 600; color: #475569; margin-bottom: 8px;">
+          Введите 6-значный проверочный код:
+        </label>
+        <input type="text" name="code" class="code-input" maxlength="6" pattern="[0-9]{6}" required autofocus placeholder="••••••" autocomplete="one-time-code">
+      </div>
+
+      <button type="submit" class="btn-verify">
+        Войти в Личный кабинет &rarr;
+      </button>
+    </form>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; font-size: 12.5px;">
+      <form action="/portal/send_code" method="POST" style="display: inline;">
+        <input type="hidden" name="email" value="${contact.email}">
+        <button type="submit" style="background: none; border: none; color: #6d28d9; cursor: pointer; text-decoration: underline; font-size: 12.5px; font-weight: 600;">
+          Отправить код повторно
+        </button>
+      </form>
+      <a href="/portal/login" style="color: #64748b; text-decoration: none;">Войти другим контактом</a>
+    </div>
+
+    ${simulatedCode ? `
+      <div class="simulated-banner">
+        💡 <strong>Журнал сервера CRM:</strong><br>
+        Одноразовый проверочный код: <code style="font-size: 15px; font-weight: 800; background: #dbeafe; padding: 2px 8px; border-radius: 4px; letter-spacing: 2px;">${simulatedCode}</code><br>
+        <em>(Если SMTP ещё не настроен, используйте этот код для входа)</em>
+      </div>
+    ` : ''}
+  </div>
+</body>
+</html>`;
+}
+

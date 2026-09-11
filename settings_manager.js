@@ -37,6 +37,16 @@ class SettingsManager {
       backup_alert_email: process.env.BACKUP_ALERT_EMAIL || 'EKlimov84@gmail.com',
       backup_retention_days: 30,
 
+      // Corporate Mail / SMTP settings
+      smtp_host: process.env.SMTP_HOST || 'smtp.beget.com',
+      smtp_port: parseInt(process.env.SMTP_PORT, 10) || 465,
+      smtp_secure: process.env.SMTP_SECURE !== 'false',
+      smtp_user: process.env.SMTP_USER || 'info@e-klimov.ru',
+      smtp_password: process.env.SMTP_PASSWORD || '',
+      smtp_from_name: process.env.SMTP_FROM_NAME || 'Евгений Климов | IT-сопровождение',
+      smtp_from_email: process.env.SMTP_FROM_EMAIL || 'info@e-klimov.ru',
+      admin_notify_email: process.env.ADMIN_NOTIFY_EMAIL || 'EKlimov84@gmail.com',
+
       // GitHub CI/CD
       github_token: process.env.GITHUB_TOKEN || '',
       github_repo: process.env.GITHUB_REPO || 'EKlimov84/crm-beget-saby',
@@ -95,6 +105,14 @@ class SettingsManager {
 
     if (this.settings.github_token) process.env.GITHUB_TOKEN = this.settings.github_token;
     if (this.settings.backup_webhook_secret) process.env.BACKUP_WEBHOOK_SECRET = this.settings.backup_webhook_secret;
+
+    if (this.settings.smtp_host) process.env.SMTP_HOST = this.settings.smtp_host;
+    if (this.settings.smtp_port) process.env.SMTP_PORT = String(this.settings.smtp_port);
+    if (this.settings.smtp_user) process.env.SMTP_USER = this.settings.smtp_user;
+    if (this.settings.smtp_password) process.env.SMTP_PASSWORD = this.settings.smtp_password;
+    if (this.settings.smtp_from_email) process.env.SMTP_FROM_EMAIL = this.settings.smtp_from_email;
+    if (this.settings.smtp_from_name) process.env.SMTP_FROM_NAME = this.settings.smtp_from_name;
+    if (this.settings.admin_notify_email) process.env.ADMIN_NOTIFY_EMAIL = this.settings.admin_notify_email;
   }
 
   saveSettings(newValues) {
@@ -130,6 +148,16 @@ class SettingsManager {
     updateSecret('backup_webhook_secret', newValues.backup_webhook_secret);
     if (newValues.backup_alert_email) s.backup_alert_email = String(newValues.backup_alert_email).trim();
     if (newValues.backup_retention_days) s.backup_retention_days = parseInt(newValues.backup_retention_days, 10) || 30;
+
+    // SMTP Mailer
+    if (newValues.smtp_host) s.smtp_host = String(newValues.smtp_host).trim();
+    if (newValues.smtp_port) s.smtp_port = parseInt(newValues.smtp_port, 10) || 465;
+    if (newValues.smtp_secure !== undefined) s.smtp_secure = !!newValues.smtp_secure;
+    if (newValues.smtp_user) s.smtp_user = String(newValues.smtp_user).trim();
+    updateSecret('smtp_password', newValues.smtp_password);
+    if (newValues.smtp_from_name) s.smtp_from_name = String(newValues.smtp_from_name).trim();
+    if (newValues.smtp_from_email) s.smtp_from_email = String(newValues.smtp_from_email).trim();
+    if (newValues.admin_notify_email) s.admin_notify_email = String(newValues.admin_notify_email).trim();
 
     s.updated_at = new Date().toISOString();
 
@@ -200,6 +228,17 @@ class SettingsManager {
       backup_webhook_secret: this.settings.backup_webhook_secret,
       backup_alert_email: this.settings.backup_alert_email,
       backup_retention_days: this.settings.backup_retention_days,
+
+      // SMTP Mailer
+      smtp_host: this.settings.smtp_host,
+      smtp_port: this.settings.smtp_port,
+      smtp_secure: this.settings.smtp_secure,
+      smtp_user: this.settings.smtp_user,
+      has_smtp_password: !!this.settings.smtp_password,
+      smtp_password_masked: mask(this.settings.smtp_password),
+      smtp_from_name: this.settings.smtp_from_name,
+      smtp_from_email: this.settings.smtp_from_email,
+      admin_notify_email: this.settings.admin_notify_email,
 
       github_token_masked: mask(this.settings.github_token),
       has_github_token: !!this.settings.github_token,

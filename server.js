@@ -5,7 +5,8 @@ import { fileURLToPath } from 'url';
 import { db } from './crm_store.js';
 import { settingsManager } from './settings_manager.js';
 import { checkInnChecksum, suggestCompany, getContracts } from './inn_helper.js';
-import { renderPortalPage } from './portal_view.js';
+import { renderPortalPage, renderPortalLoginPage, renderPortalVerifyPage } from './portal_view.js';
+import { mailer } from './mailer.js';
 import { renderAdminClientPage, renderNewClientPage } from './admin_view.js';
 import { getGitStatus, getGitHubConfig, testGitHubApi, syncToGitHub } from './github_sync.js';
 import { testSabyConnection, authenticateSaby, searchSabyCompany, fetchSabyContracts } from './saby_client.js';
@@ -481,6 +482,53 @@ app.get('/', (req, res) => {
         </div>
       </div>
 
+      <!-- Corporate SMTP Notification Mailbox Group -->
+      <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+        <h4 style="margin: 0 0 12px; font-size: 14.5px; color: #4338ca; display: flex; align-items: center; gap: 6px;">
+          <span>✉️</span> Основная корпоративная почта для рассылок и 2FA кодов (Beget SMTP)
+        </h4>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">SMTP Сервер:</label>
+            <input type="text" id="cfg-smtp-host" placeholder="smtp.beget.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Порт:</label>
+            <input type="number" id="cfg-smtp-port" placeholder="465" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Логин / Email ящика:</label>
+            <input type="email" id="cfg-smtp-user" placeholder="info@e-klimov.ru" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Пароль от почты:</label>
+            <input type="password" id="cfg-smtp-pass" placeholder="••••••••••••" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Имя отправителя (From Name):</label>
+            <input type="text" id="cfg-smtp-from-name" placeholder="IT-сопровождение | Климов Евгений" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Email оповещений администратора:</label>
+            <input type="email" id="cfg-admin-notify-email" placeholder="EKlimov84@gmail.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
+          <button type="button" id="cfg-test-smtp-btn" onclick="testSmtpFromModal()" style="background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; padding: 8px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; cursor: pointer;">
+            ✉️ Проверить отправку тестового письма
+          </button>
+          <span style="font-size: 12px; color: #64748b;">Отправит проверочный 2FA-тест на почту администратора</span>
+        </div>
+      </div>
+
       <!-- Action Buttons -->
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
         <div style="display: flex; gap: 8px;">
@@ -659,6 +707,14 @@ app.get('/', (req, res) => {
           document.getElementById('cfg-saby-password').value = s.has_saby_password ? '••••••••' : '';
           document.getElementById('cfg-backup-secret').value = s.backup_webhook_secret || '';
           document.getElementById('cfg-backup-email').value = s.backup_alert_email || '';
+
+          // SMTP
+          document.getElementById('cfg-smtp-host').value = s.smtp_host || 'smtp.beget.com';
+          document.getElementById('cfg-smtp-port').value = s.smtp_port || 465;
+          document.getElementById('cfg-smtp-user').value = s.smtp_user || 'info@e-klimov.ru';
+          document.getElementById('cfg-smtp-pass').value = s.has_smtp_password ? '••••••••' : '';
+          document.getElementById('cfg-smtp-from-name').value = s.smtp_from_name || 'IT-сопровождение | Климов Евгений';
+          document.getElementById('cfg-admin-notify-email').value = s.admin_notify_email || 'EKlimov84@gmail.com';
         }
       } catch (err) {
         console.error('Ошибка загрузки настроек:', err);
@@ -683,7 +739,13 @@ app.get('/', (req, res) => {
         saby_login: document.getElementById('cfg-saby-login').value,
         saby_password: document.getElementById('cfg-saby-password').value,
         backup_webhook_secret: document.getElementById('cfg-backup-secret').value,
-        backup_alert_email: document.getElementById('cfg-backup-email').value
+        backup_alert_email: document.getElementById('cfg-backup-email').value,
+        smtp_host: document.getElementById('cfg-smtp-host').value,
+        smtp_port: document.getElementById('cfg-smtp-port').value,
+        smtp_user: document.getElementById('cfg-smtp-user').value,
+        smtp_password: document.getElementById('cfg-smtp-pass').value,
+        smtp_from_name: document.getElementById('cfg-smtp-from-name').value,
+        admin_notify_email: document.getElementById('cfg-admin-notify-email').value
       };
 
       try {
@@ -697,8 +759,8 @@ app.get('/', (req, res) => {
         if (data.ok) {
           box.style.background = '#ecfdf5';
           box.style.color = '#065f46';
-          box.textContent = '✓ Настройки шлюза Saby CRM и бэкапов успешно сохранены!';
-          showToast('✓ Настройки Saby успешно сохранены!');
+          box.textContent = '✓ Настройки Saby CRM, бэкапов и почтового шлюза успешно сохранены!';
+          showToast('✓ Настройки успешно сохранены!');
         } else {
           box.style.background = '#fef2f2';
           box.style.color = '#991b1b';
@@ -712,6 +774,51 @@ app.get('/', (req, res) => {
       } finally {
         btn.disabled = false;
         btn.textContent = '💾 Сохранить параметры';
+      }
+    }
+
+    async function testSmtpFromModal() {
+      const btn = document.getElementById('cfg-test-smtp-btn');
+      const box = document.getElementById('cfg-result-box');
+      btn.disabled = true;
+      btn.textContent = 'Отправка...';
+      box.style.display = 'block';
+      box.style.background = '#eff6ff';
+      box.style.color = '#1e3a8a';
+      box.textContent = 'Проверка подключения к SMTP серверу и отправка проверочного письма...';
+
+      const payload = {
+        recipient: document.getElementById('cfg-admin-notify-email').value,
+        smtp_host: document.getElementById('cfg-smtp-host').value,
+        smtp_port: document.getElementById('cfg-smtp-port').value,
+        smtp_user: document.getElementById('cfg-smtp-user').value,
+        smtp_password: document.getElementById('cfg-smtp-pass').value,
+        smtp_from_name: document.getElementById('cfg-smtp-from-name').value
+      };
+
+      try {
+        const res = await fetch('/api/settings/smtp/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.ok) {
+          box.style.background = '#ecfdf5';
+          box.style.color = '#065f46';
+          box.textContent = '✓ ' + data.message + (data.simulated ? ' (Режим безопасной эмуляции, код записан в логи)' : '');
+        } else {
+          box.style.background = '#fffbeb';
+          box.style.color = '#92400e';
+          box.textContent = 'SMTP статус: ' + data.message;
+        }
+      } catch (err) {
+        box.style.background = '#fef2f2';
+        box.style.color = '#991b1b';
+        box.textContent = 'Сетевая ошибка: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '✉️ Проверить отправку тестового письма';
       }
     }
 
@@ -809,7 +916,8 @@ app.get('/client/:id', (req, res) => {
     client,
     activeTab: req.query.tab || 'works',
     flashMessage: res.locals.flash || req.query.msg,
-    reqQuery: req.query
+    reqQuery: req.query,
+    reqHost: req.get('host')
   }));
 });
 
@@ -1223,9 +1331,226 @@ app.post('/client/:id/create-access-link', (req, res) => {
 </html>`);
 });
 
-// Public client portal (Apple Liquid Glass design)
-app.get('/public/client/:token', (req, res) => {
+// --- Contact Persons & 2FA Access Management Routes ---
+app.post('/client/:id/contacts/add', (req, res) => {
+  const clientId = req.params.id;
+  const { name, position, email, phone, role } = req.body;
+  if (!name || !email) {
+    return res.redirect(`/client/${clientId}?tab=contacts&msg=${encodeURIComponent('Укажите ФИО и рабочий email')}`);
+  }
+  const contact = db.addContact(clientId, { name, position, email, phone, role });
+  res.redirect(`/client/${clientId}?tab=contacts&msg=${encodeURIComponent('Контактное лицо ' + contact.name + ' успешно добавлено! Персональная 2FA ссылка создана.')}`);
+});
+
+app.post('/client/:id/contacts/:contactId/delete', (req, res) => {
+  const { id, contactId } = req.params;
+  db.deleteContact(contactId);
+  res.redirect(`/client/${id}?tab=contacts&msg=${encodeURIComponent('Контактное лицо удалено')}`);
+});
+
+app.post('/client/:id/contacts/:contactId/reissue', (req, res) => {
+  const { id, contactId } = req.params;
+  const contact = db.reissueContactToken(contactId);
+  res.redirect(`/client/${id}?tab=contacts&msg=${encodeURIComponent('Секретная ссылка для ' + (contact ? contact.name : '') + ' перевыпущена!')}`);
+});
+
+app.post('/api/client/:id/contact/:contactId/send_invite', async (req, res) => {
+  try {
+    const { id, contactId } = req.params;
+    const contact = db.getContactById(contactId);
+    const client = db.getClientById(id);
+    if (!contact || !client) {
+      return res.json({ ok: false, error: 'Контакт или организация не найдены' });
+    }
+    const host = req.get('host') || 'localhost:3000';
+    const proto = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+    const accessUrl = `${proto}://${host}/portal?token=${contact.token}`;
+    const mailRes = await mailer.sendContactInvite({
+      toEmail: contact.email,
+      contactName: contact.name,
+      companyName: client.company_name,
+      accessUrl
+    });
+    res.json({ ok: true, simulated: !!mailRes.simulated, messageId: mailRes.messageId });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+// SMTP Mailer Test Route
+app.post('/api/settings/smtp/test', async (req, res) => {
+  try {
+    const { recipient, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_password, smtp_from_name, smtp_from_email } = req.body || {};
+    if (smtp_host) {
+      settingsManager.saveSettings({
+        smtp_host,
+        smtp_port,
+        smtp_secure,
+        smtp_user,
+        smtp_password,
+        smtp_from_name,
+        smtp_from_email,
+        admin_notify_email: recipient
+      });
+    }
+    const testRes = await mailer.testConnection(recipient, req.body);
+    res.json(testRes);
+  } catch (err) {
+    res.json({ ok: false, message: err.message });
+  }
+});
+
+// --- Portal Authentication & 2FA Flow ---
+app.get('/portal/login', (req, res) => {
+  res.send(renderPortalLoginPage({
+    error: req.query.error,
+    initialEmail: req.query.email
+  }));
+});
+
+app.get('/portal/logout', (req, res) => {
+  req.session.portalContactId = null;
+  req.session.portalClientId = null;
+  res.redirect('/portal/login');
+});
+
+// Request 6-digit 2FA code via email or secret token
+app.post('/portal/send_code', async (req, res) => {
+  const { email, token } = req.body || {};
+  let contact = null;
+  if (token) {
+    contact = db.getContactByToken(token);
+  } else if (email) {
+    contact = db.getContactByEmail(email);
+  }
+
+  if (!contact) {
+    return res.send(renderPortalLoginPage({
+      error: 'Контактное лицо не найдено в реестре уполномоченных представителей. Проверьте правильность email или обратитесь к вашему IT-инженеру.',
+      initialEmail: email || ''
+    }));
+  }
+
+  const client = db.getClientById(contact.client_id);
+  if (!client) {
+    return res.send(renderPortalLoginPage({
+      error: 'Организация контрагента не найдена в базе данных.',
+      initialEmail: email || ''
+    }));
+  }
+
+  // Generate 6-digit OTP code and dispatch via SMTP
+  const { code } = db.createVerificationCode(contact.id);
+  const mailRes = await mailer.sendLoginVerificationCode({
+    toEmail: contact.email,
+    contactName: contact.name,
+    companyName: client.company_name,
+    code
+  });
+
+  res.send(renderPortalVerifyPage({
+    contact,
+    client,
+    token: contact.token,
+    simulatedCode: mailRes.simulated ? code : null
+  }));
+});
+
+// Verify 6-digit code and establish authenticated session
+app.post('/portal/do_verify', (req, res) => {
+  const { contact_id, code, token } = req.body || {};
+  if (!contact_id || !code) {
+    return res.redirect('/portal/login');
+  }
+
+  const verifyRes = db.verifyLoginCode(contact_id, code);
+  if (!verifyRes.ok) {
+    const contact = db.getContactById(contact_id);
+    const client = contact ? db.getClientById(contact.client_id) : null;
+    return res.send(renderPortalVerifyPage({
+      contact,
+      client,
+      token,
+      error: verifyRes.error
+    }));
+  }
+
+  // 2FA code verified successfully! Set session
+  req.session.portalContactId = verifyRes.contact.id;
+  req.session.portalClientId = verifyRes.contact.client_id;
+  res.redirect('/portal');
+});
+
+// Main Protected Portal Route
+app.get('/portal', async (req, res) => {
+  // If user entered via secret link (?token=...)
+  if (req.query.token) {
+    const contact = db.getContactByToken(req.query.token);
+    if (contact) {
+      const client = db.getClientById(contact.client_id);
+      const { code } = db.createVerificationCode(contact.id);
+      const mailRes = await mailer.sendLoginVerificationCode({
+        toEmail: contact.email,
+        contactName: contact.name,
+        companyName: client ? client.company_name : 'Контрагент',
+        code
+      });
+      return res.send(renderPortalVerifyPage({
+        contact,
+        client,
+        token: contact.token,
+        simulatedCode: mailRes.simulated ? code : null
+      }));
+    } else {
+      return res.send(renderPortalLoginPage({
+        error: 'Предоставленная ссылка доступа недействительна или была перевыпущена администратором. Введите рабочий email для получения кода.'
+      }));
+    }
+  }
+
+  // If verified contact session exists
+  if (req.session.portalContactId) {
+    const contact = db.getContactById(req.session.portalContactId);
+    if (contact) {
+      const client = db.getClientById(contact.client_id);
+      if (client) {
+        const activeTab = req.query.tab || 'home';
+        return res.send(renderPortalPage({
+          client,
+          contact,
+          token: contact.token,
+          activeTab,
+          reqQuery: req.query
+        }));
+      }
+    }
+  }
+
+  // Not authenticated: prompt login
+  res.redirect('/portal/login');
+});
+
+// Public client portal (Apple Liquid Glass design) - legacy token redirection
+app.get('/public/client/:token', async (req, res) => {
   const token = req.params.token;
+  const contact = db.getContactByToken(token);
+  if (contact) {
+    const client = db.getClientById(contact.client_id);
+    const { code } = db.createVerificationCode(contact.id);
+    const mailRes = await mailer.sendLoginVerificationCode({
+      toEmail: contact.email,
+      contactName: contact.name,
+      companyName: client ? client.company_name : 'Контрагент',
+      code
+    });
+    return res.send(renderPortalVerifyPage({
+      contact,
+      client,
+      token: contact.token,
+      simulatedCode: mailRes.simulated ? code : null
+    }));
+  }
+
   const client = db.getClientByToken(token);
   if (!client) {
     return res.status(404).send(`<!doctype html>
@@ -1239,30 +1564,74 @@ app.get('/public/client/:token', (req, res) => {
       </html>`);
   }
 
-  const activeTab = req.query.tab || 'home';
-  res.send(renderPortalPage({ client, token, activeTab, reqQuery: req.query }));
+  res.redirect(`/portal/${client.id}`);
 });
 
-// Direct Client Portal Preview (for Admin or Demo, defaults to Client 2)
-app.get('/portal/:id?', (req, res) => {
-  const clientId = req.params.id || 2; // Default to Client 2 (ООО "Альфа-Сервис")
-  const client = db.getClientById(clientId) || db.getClientById(2) || db.getClientById(4) || db.getClients()[0];
+// Client Portal Direct / Admin Preview Route
+app.get('/portal/:id', (req, res) => {
+  const clientId = req.params.id;
+  const client = db.getClientById(clientId);
   if (!client) {
     return res.status(404).send('Клиент не найден');
   }
 
+  // If user is already authenticated as a contact
+  if (req.session.portalContactId) {
+    const contact = db.getContactById(req.session.portalContactId);
+    if (contact && String(contact.client_id) === String(clientId)) {
+      return res.send(renderPortalPage({
+        client,
+        contact,
+        token: contact.token,
+        activeTab: req.query.tab || 'home',
+        reqQuery: req.query
+      }));
+    }
+  }
+
+  // Admin Preview Mode (opened from CRM control panel)
   const token = client.active_token || db.createAccessLink(client.id);
   const activeTab = req.query.tab || 'home';
-  res.send(renderPortalPage({ client, token, activeTab, reqQuery: req.query }));
+  res.send(renderPortalPage({
+    client,
+    contact: null,
+    isAdminPreview: true,
+    token,
+    activeTab,
+    reqQuery: req.query
+  }));
 });
 
-// API endpoint to create ticket from client portal
-app.post('/api/ticket', (req, res) => {
-  const { clientId, subject, service, priority, message } = req.body;
+// API endpoint to create ticket from client portal (with contact attribution & admin email alert)
+app.post('/api/ticket', async (req, res) => {
+  const { clientId, subject, service, priority, message, contactId, authorName, authorEmail, authorPosition } = req.body;
   if (!clientId || !subject) {
     return res.status(400).json({ ok: false, error: 'Укажите тему обращения' });
   }
-  const ticket = db.createTicket(clientId, { subject, service, priority, message });
+
+  const activeContactId = contactId || req.session?.portalContactId || null;
+  const contact = activeContactId ? db.getContactById(activeContactId) : null;
+
+  const ticket = db.createTicket(clientId, {
+    subject,
+    service,
+    priority,
+    message,
+    contactId: activeContactId,
+    authorName: (contact ? contact.name : authorName) || 'Уполномоченный сотрудник',
+    authorEmail: (contact ? contact.email : authorEmail) || '',
+    authorPosition: (contact ? contact.position : authorPosition) || ''
+  });
+
+  const client = db.getClientById(clientId);
+
+  // Send email alert to admin
+  try {
+    await mailer.sendTicketNotificationToAdmin({ ticket, client, contact });
+  } catch (err) {
+    console.error('Ошибка отправки email администратору:', err);
+  }
+
   res.json({ ok: true, ticket });
 });
 
