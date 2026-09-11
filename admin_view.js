@@ -25,7 +25,7 @@ function formatDateOnly(isoStr) {
   });
 }
 
-export function renderAdminClientPage({ client, activeTab = 'works', flashMessage = null, reqQuery = {}, reqHost = '' }) {
+export function renderAdminClientPage({ client, activeTab = 'works', flashMessage = null, reqQuery = {}, reqHost = '', hostingAccounts = [], clientSites = [] }) {
   const cId = client.id;
   const logs = db.getWorkLogs(cId);
   const contacts = db.getContacts(cId);
@@ -35,8 +35,9 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
   const backups = db.getBackups(cId);
   const snapshot = db.getLastSnapshot(cId);
   const creds = db.getClientCredentials(cId, { mask: false });
-  const clientSites = db.getClientSites(cId);
-
+  const localHostingAccounts = db.getHostingAccounts ? db.getHostingAccounts(cId) : localHostingAccounts;
+  const localClientSites = db.getSites ? db.getSites(cId) : localClientSites;
+  
   const planHours = client.plan_hours || 15;
   const totalHoursUsed = logs.reduce((sum, l) => sum + (parseFloat(l.hours) || 0), 0);
   const percentUsed = Math.min(Math.round((totalHoursUsed / planHours) * 100), 100);
@@ -1122,7 +1123,7 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
             <h3 style="font-size:17px; font-weight:800; color:var(--text-main); margin-bottom:14px; display:flex; align-items:center; gap:8px;">
               <span>⚡</span> Быстрое добавление работы
             </h3>
-            <form action="/client/${client.id}/add_log_advanced" method="POST">
+            <form id="add_work" action="/client/${client.id}/add_log_advanced" method="POST">
               <div class="form-group">
                 <label>Описание выполненной работы / инцидента:</label>
                 <textarea name="description" class="form-control" placeholder="Например: Обновление плагинов, тюнинг MySQL, настройка резервного копирования..." required></textarea>
@@ -1283,39 +1284,102 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
 
           <hr style="border:none; border-top:1px solid #e2e8f0; margin: 24px 0;">
 
-          <!-- 3. Infrastructure & Beget Cloud -->
+          <!-- 3. Infrastructure & Hostings -->
           <div style="margin-bottom:28px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
               <h3 style="font-size:16px; font-weight:700; color:#5b21b6; display:flex; align-items:center; gap:8px; margin:0;">
-                <span>☁️</span> Инфраструктура хостинга Beget и сайты
+                <span>☁️</span> Инфраструктура: Хостинги и Сайты
               </h3>
-              <button type="button" onclick="refreshBegetData(${client.id})" class="btn btn-glass" style="font-size:12.5px; padding:6px 14px;">
-                <span>🌐</span> Запросить актуальные данные с Beget API
+              <button type="button" onclick="openAddHostingModal()" class="btn btn-glass" style="font-size:12.5px; padding:6px 14px;">
+                <span>+</span> Добавить хостинг
               </button>
             </div>
 
-            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px;">
-              <div class="form-group">
-                <label>Логин Beget:</label>
-                <input type="text" name="beget_login" value="${client.beget_login || ''}" class="form-control" placeholder="alphaserv">
-              </div>
-              <div class="form-group">
-                <label>Пароль Beget:</label>
-                <input type="password" name="beget_password" value="${client.beget_password || ''}" class="form-control" placeholder="••••••••">
-              </div>
-              <div class="form-group">
-                <label>API-ключ Beget:</label>
-                <input type="text" name="beget_api_key" value="${client.beget_api_key || ''}" class="form-control" placeholder="bg_sec_••••">
-              </div>
-            </div>
+            <div id="hostings_list" style="display:flex; flex-direction:column; gap:20px;">
+              ${localHostingAccounts.length === 0 ? '<div style="color:#64748b; font-size:14px; padding:20px; background:#f8fafc; border-radius:8px; text-align:center;">Хостинги не добавлены</div>' : ''}
+              
+              ${localHostingAccounts.map(host => `
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;">
+                  <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                    <div>
+                      <h4 style="margin:0 0 4px 0; font-size:16px; color:#1e293b;">${host.provider_name}</h4>
+                      <a href="${host.provider_url}" target="_blank" style="color:#3b82f6; font-size:13px; display:inline-block; margin-bottom:8px;">${host.provider_url}</a>
+                    </div>
+                    <button type="button" onclick="deleteHosting(${host.id})" style="background:none; border:none; color:#ef4444; cursor:pointer;" title="Удалить хостинг">🗑️</button>
+                  </div>
+                  
+                  <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; margin-bottom: 16px; background:#fff; padding:12px; border-radius:6px; border:1px solid #f1f5f9;">
+                    <div>
+                      <div style="font-size:12px; color:#64748b; margin-bottom:4px;">Логин:</div>
+                      <div style="font-size:14px; font-family:monospace;">${host.login || '—'}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:12px; color:#64748b; margin-bottom:4px;">Пароль:</div>
+                      <div style="font-size:14px; font-family:monospace;">${host.password || '—'}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:12px; color:#64748b; margin-bottom:4px;">API-ключ:</div>
+                      <div style="font-size:14px; font-family:monospace;">${host.api_key || '—'}</div>
+                    </div>
+                  </div>
 
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
-              <div class="form-group">
-                <label>Обслуживаемые сайты и домены (через запятую):</label>
-                <input type="text" id="setting_sites" name="sites" value="${client.sites || ''}" class="form-control" placeholder="alpha-service.pro, dev.alpha-service.pro">
+                  <div style="margin-top: 16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                      <strong style="font-size:14px; color:#334155;">Сайты на этом хостинге:</strong>
+                      <button type="button" onclick="openAddSiteModal(${host.id})" style="background:#e0e7ff; color:#4338ca; border:none; padding:4px 10px; border-radius:4px; font-size:12px; cursor:pointer; font-weight:600;">+ Добавить сайт</button>
+                    </div>
+                    
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                      ${localClientSites.filter(s => s.hosting_account_id === host.id).length === 0 ? '<div style="font-size:13px; color:#94a3b8;">Нет привязанных сайтов</div>' : ''}
+                      
+                      ${localClientSites.filter(s => s.hosting_account_id === host.id).map(site => `
+                        <div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:12px; display:flex; justify-content:space-between; align-items:center;">
+                          <div style="flex:1;">
+                            <a href="https://${site.url}" target="_blank" style="font-weight:600; color:#0f172a; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+                              🌐 ${site.url}
+                            </a>
+                            <span class="badge" style="margin-left:8px; background:#f1f5f9; color:#475569;">${site.cms_type}</span>
+                            <div style="margin-top:6px; font-size:12px; color:#64748b; display:flex; gap:16px;">
+                              <span>CMS: ${site.cms_login} / ${site.cms_password || '—'}</span>
+                              <span>SSH: ${site.ssh_host ? `${site.ssh_user}@${site.ssh_host}` : '—'}</span>
+                            </div>
+                          </div>
+                          <div>
+                            <button type="button" onclick="deleteSite(${site.id})" style="background:none; border:none; color:#ef4444; cursor:pointer;" title="Удалить сайт">✖️</button>
+                          </div>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            
+            <!-- Sites without hosting -->
+            ${localClientSites.filter(s => !s.hosting_account_id).length > 0 ? `
+              <div style="margin-top: 20px;">
+                <h4 style="font-size: 14px; color: #64748b; margin-bottom: 12px;">Сайты без привязки к хостингу:</h4>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  ${localClientSites.filter(s => !s.hosting_account_id).map(site => `
+                        <div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:12px; display:flex; justify-content:space-between; align-items:center;">
+                          <div style="flex:1;">
+                            <a href="https://${site.url}" target="_blank" style="font-weight:600; color:#0f172a; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+                              🌐 ${site.url}
+                            </a>
+                            <span class="badge" style="margin-left:8px; background:#f1f5f9; color:#475569;">${site.cms_type}</span>
+                          </div>
+                          <div>
+                            <button type="button" onclick="deleteSite(${site.id})" style="background:none; border:none; color:#ef4444; cursor:pointer;" title="Удалить сайт">✖️</button>
+                          </div>
+                        </div>
+                  `).join('')}
+                </div>
               </div>
+            ` : ''}
+            
+            <div style="margin-top: 24px; padding-top: 16px; border-top: 1px dashed #cbd5e1;">
               <div class="form-group">
-                <label>Email адреса для отчётов:</label>
+                <label>Email адреса для отчётов (через запятую):</label>
                 <input type="text" id="setting_emails" name="emails" value="${client.email_reports || client.emails || ''}" class="form-control" placeholder="client@company.ru">
               </div>
             </div>
@@ -1695,7 +1759,7 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
               <div class="form-group">
                 <label>URL административной панели (/bitrix/admin/):</label>
                 <div style="display:flex; gap:8px;">
-                  <input type="text" name="cred_bitrix_admin_url" id="inp_bitrix_url" value="${creds.bitrix_admin_url || (clientSites[0] ? clientSites[0].bitrix_admin_url : '')}" class="form-control" placeholder="https://site.ru/bitrix/admin/">
+                  <input type="text" name="cred_bitrix_admin_url" id="inp_bitrix_url" value="${creds.bitrix_admin_url || (localClientSites[0] ? localClientSites[0].bitrix_admin_url : '')}" class="form-control" placeholder="https://site.ru/bitrix/admin/">
                   ${creds.bitrix_admin_url ? `<a href="${creds.bitrix_admin_url}" target="_blank" class="btn btn-glass" style="padding:8px 12px; background:#dc2626; color:#fff;" title="Войти в Битрикс">Войти ↗</a>` : ''}
                 </div>
               </div>
@@ -1882,7 +1946,7 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
                     <span>🤖</span> Агент автоматического сбора бэкапов со всех сайтов контрагента
                   </h3>
                   <p style="font-size:13px; color:#475569; margin:0; line-height:1.5;">
-                    Единый скрипт автоматически сканирует архивы 1С-Битрикс по всем доменам клиента (${clientSites.map(s => s.domain).join(', ') || 'главный сайт'}), вычисляет размер, статус и передает отчет в CRM.
+                    Единый скрипт автоматически сканирует архивы 1С-Битрикс по всем доменам клиента (${localClientSites.map(s => s.url).join(', ') || 'главный сайт'}), вычисляет размер, статус и передает отчет в CRM.
                   </p>
                 </div>
                 <div style="display:flex; gap:6px;">
@@ -1900,7 +1964,7 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
                 <div style="margin-bottom:8px;">
                   <strong>1. Размещение скрипта на сервере:</strong> Скачайте или скопируйте файл <code>crm_backup_agent.php</code> и загрузите его в корень сайта:
                   <div style="margin:4px 0; color:#4338ca; font-family:monospace; font-size:12px;">
-                    &bull; Для Beget: <code>/home/${creds.hosting_login || client.beget_login || 'username'}/${clientSites[0]?.domain || 'site.ru'}/public_html/crm_backup_agent.php</code><br>
+                    &bull; Для Beget: <code>/home/${creds.hosting_login || client.beget_login || 'username'}/${localClientSites[0]?.domain || 'site.ru'}/public_html/crm_backup_agent.php</code><br>
                     &bull; Для BitrixVM (сервер VPS): <code>/home/bitrix/www/crm_backup_agent.php</code>
                   </div>
                   <div style="margin-top:6px; display:flex; gap:8px;">
@@ -1967,12 +2031,12 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
 
         <!-- Cards for monitored sites -->
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px; margin-bottom:24px;">
-          ${clientSites.map(s => `
+          ${localClientSites.map(s => `
             <div style="background:rgba(248,250,252,0.9); border:1px solid #e2e8f0; border-radius:14px; padding:18px; border-left: 4px solid #10b981;">
               <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
                 <div>
-                  <div style="font-size:16px; font-weight:800; color:#1e1b4b;">${s.domain}</div>
-                  <div style="font-size:12px; color:#64748b;">${s.cms} (${s.cms_version}) &bull; PHP ${s.php_version}</div>
+                  <div style="font-size:16px; font-weight:800; color:#1e1b4b;">${s.url}</div>
+                  <div style="font-size:12px; color:#64748b;">${s.cms_type} (${s.cms_type_version}) &bull; PHP ${'PHP 8.2'}</div>
                 </div>
                 <span class="badge badge-success" style="font-size:11px;">В сети</span>
               </div>
@@ -2017,7 +2081,7 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
             </p>
 
             <div style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:12px; font-size:12.5px; line-height:1.6; margin-bottom:12px;">
-              <div><strong>Папка на Beget:</strong> <code>/home/${creds.hosting_login || client.beget_login || 'user'}/${clientSites[0]?.domain || 'domain.ru'}/public_html/</code></div>
+              <div><strong>Папка на Beget:</strong> <code>/home/${creds.hosting_login || client.beget_login || 'user'}/${localClientSites[0]?.domain || 'domain.ru'}/public_html/</code></div>
               <div><strong>Папка на VPS:</strong> <code>/home/bitrix/www/</code></div>
               <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
                 <a href="${creds.hosting_url ? creds.hosting_url + (creds.hosting_url.includes('beget') ? '/fm' : '') : 'https://cp.beget.com/fm'}" target="_blank" class="btn btn-glass" style="font-size:11.5px; padding:4px 10px;">
@@ -2058,8 +2122,8 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
                 <div class="form-group">
                   <label>Сайт:</label>
                   <select name="site_domain" class="form-control">
-                    ${clientSites.map(s => `<option value="${s.domain}">${s.domain}</option>`).join('')}
-                    ${clientSites.length === 0 ? '<option value="site.ru">site.ru</option>' : ''}
+                    ${localClientSites.map(s => `<option value="${s.url}">${s.url}</option>`).join('')}
+                    ${localClientSites.length === 0 ? '<option value="site.ru">site.ru</option>' : ''}
                   </select>
                 </div>
                 <div class="form-group">
@@ -2120,7 +2184,7 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
               ${backups.length > 0 ? backups.map(b => `
                 <tr style="border-bottom:1px solid #f1f5f9;">
                   <td style="padding:10px 14px; font-weight:600; color:#1e1b4b;">${b.date || b.created_at || 'Сегодня 03:15'}</td>
-                  <td style="padding:10px 14px; font-weight:700;">${b.site || b.domain || clientSites[0]?.domain || 'Сайт клиента'}</td>
+                  <td style="padding:10px 14px; font-weight:700;">${b.site || b.domain || localClientSites[0]?.domain || 'Сайт клиента'}</td>
                   <td style="padding:10px 14px; color:#475569;">${b.type || 'Полный архив'}</td>
                   <td style="padding:10px 14px; font-family:monospace;">${b.size_mb ? b.size_mb + ' МБ' : '3 840 МБ'}</td>
                   <td style="padding:10px 14px;">
@@ -2141,6 +2205,99 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
 
       </div>
     ` : ''}
+  </div>
+
+  
+  <!-- Modal: Add Hosting -->
+  <div id="add-hosting-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
+        <h3 style="margin: 0; font-size: 18px; color: #1e1b4b; display: flex; align-items: center; gap: 8px;">
+          <span>☁️</span> Добавить хостинг
+        </h3>
+        <button type="button" onclick="closeAddHostingModal()" style="background: transparent; border: none; font-size: 22px; cursor: pointer; color: #94a3b8;">&times;</button>
+      </div>
+      <form id="add-hosting-form">
+        <div class="form-group">
+          <label>Провайдер (напр. Beget, Timeweb):</label>
+          <input type="text" id="host_provider_name" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label>Ссылка на панель управления:</label>
+          <input type="text" id="host_provider_url" class="form-control" placeholder="https://cp.beget.com">
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+          <div class="form-group">
+            <label>Логин:</label>
+            <input type="text" id="host_login" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>Пароль:</label>
+            <input type="text" id="host_password" class="form-control">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>API-ключ:</label>
+          <input type="text" id="host_api_key" class="form-control">
+        </div>
+        <div style="text-align: right; margin-top: 20px;">
+          <button type="button" onclick="closeAddHostingModal()" class="btn" style="background: #e2e8f0; color: #475569; margin-right: 8px;">Отмена</button>
+          <button type="button" onclick="submitAddHosting(${client.id})" class="btn" style="background: #10b981; color: #fff;">Добавить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Site -->
+  <div id="add-site-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
+        <h3 style="margin: 0; font-size: 18px; color: #1e1b4b; display: flex; align-items: center; gap: 8px;">
+          <span>🌐</span> Добавить сайт
+        </h3>
+        <button type="button" onclick="closeAddSiteModal()" style="background: transparent; border: none; font-size: 22px; cursor: pointer; color: #94a3b8;">&times;</button>
+      </div>
+      <form id="add-site-form">
+        <input type="hidden" id="site_hosting_id">
+        <div class="form-group">
+          <label>URL сайта (домен):</label>
+          <input type="text" id="site_url" class="form-control" placeholder="example.com" required>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+          <div class="form-group">
+            <label>Тип CMS:</label>
+            <input type="text" id="site_cms_type" class="form-control" value="1C-Bitrix">
+          </div>
+          <div class="form-group"></div>
+          <div class="form-group">
+            <label>Логин CMS:</label>
+            <input type="text" id="site_cms_login" class="form-control" value="admin">
+          </div>
+          <div class="form-group">
+            <label>Пароль CMS:</label>
+            <input type="text" id="site_cms_password" class="form-control">
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; margin-top:16px;">
+          <div class="form-group">
+            <label>SSH Хост:</label>
+            <input type="text" id="site_ssh_host" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>SSH Пользователь:</label>
+            <input type="text" id="site_ssh_user" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>SSH Пароль:</label>
+            <input type="text" id="site_ssh_password" class="form-control">
+          </div>
+        </div>
+        <div style="text-align: right; margin-top: 20px;">
+          <button type="button" onclick="closeAddSiteModal()" class="btn" style="background: #e2e8f0; color: #475569; margin-right: 8px;">Отмена</button>
+          <button type="button" onclick="submitAddSite(${client.id})" class="btn" style="background: #10b981; color: #fff;">Добавить</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- Modal: Edit Work Log -->
@@ -2279,11 +2436,26 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
     }
 
     // Quick Add Work Modal
+    
+    document.addEventListener("DOMContentLoaded", function() {
+      if(window.location.hash === '#add_work') {
+        const el = document.querySelector('textarea[name="description"]');
+        if(el) {
+          setTimeout(() => {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.focus();
+          }, 300);
+        }
+      }
+    });
+
     function openAddWorkModal() {
       const el = document.querySelector('textarea[name="description"]');
       if (el) {
-        el.scrollIntoView({ behavior: 'smooth' });
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         el.focus();
+      } else {
+        window.location.href = "?tab=works#add_work";
       }
     }
 
@@ -2962,11 +3134,11 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
       </div>
 
       <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;">
-        ${clientSites.map(s => `
+        ${localClientSites.map(s => `
           <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center;">
             <div>
-              <div style="font-weight:700; color:#1e1b4b; font-size:14px;">${s.domain}</div>
-              <div style="font-size:12px; color:#64748b;">${s.cms} &bull; PHP ${s.php_version}</div>
+              <div style="font-weight:700; color:#1e1b4b; font-size:14px;">${s.url}</div>
+              <div style="font-size:12px; color:#64748b;">${s.cms_type} &bull; PHP ${'PHP 8.2'}</div>
             </div>
             <div style="text-align:right;">
               <span class="badge badge-success" style="font-size:11px;">✓ ${s.last_backup?.status || 'Успешно'}</span>
@@ -3080,7 +3252,7 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         <div style="margin-bottom:12px;">
           <strong>Шаг 1. Разместите файл в корне сайта:</strong>
           <div style="margin:4px 0; color:#4338ca; font-family:monospace; font-size:12px;">
-            &bull; Папка Beget: <code>/home/${creds.hosting_login || client.beget_login || 'login'}/${clientSites[0]?.domain || 'site.ru'}/public_html/crm_backup_agent.php</code><br>
+            &bull; Папка Beget: <code>/home/${creds.hosting_login || client.beget_login || 'login'}/${localClientSites[0]?.domain || 'site.ru'}/public_html/crm_backup_agent.php</code><br>
             &bull; Папка BitrixVM: <code>/home/bitrix/www/crm_backup_agent.php</code>
           </div>
           <div style="margin-top:6px;">
