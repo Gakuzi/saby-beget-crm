@@ -1,8 +1,24 @@
-import nodemailer from 'nodemailer';
 import { settingsManager } from './settings_manager.js';
 
+let nodemailerInstance = null;
+async function getNodemailer() {
+  if (!nodemailerInstance) {
+    try {
+      const mod = await import('nodemailer');
+      nodemailerInstance = mod.default || mod;
+    } catch (err) {
+      console.warn('[Mailer] nodemailer is not installed or failed to load:', err.message);
+      return null;
+    }
+  }
+  return nodemailerInstance;
+}
+
 class MailerService {
-  getTransporter(overrideConfig = null) {
+  async getTransporter(overrideConfig = null) {
+    const nm = await getNodemailer();
+    if (!nm) return null;
+
     const raw = settingsManager.getRawSettings();
     const host = overrideConfig?.smtp_host || raw.smtp_host || process.env.SMTP_HOST || 'smtp.beget.com';
     const port = parseInt(overrideConfig?.smtp_port || raw.smtp_port || process.env.SMTP_PORT || 465, 10);
@@ -16,7 +32,7 @@ class MailerService {
       return null;
     }
 
-    return nodemailer.createTransport({
+    return nm.createTransport({
       host,
       port,
       secure,
@@ -38,11 +54,11 @@ class MailerService {
 
   // Verify SMTP server credentials and optionally send test mail
   async testConnection(testToEmail = null, customConfig = null) {
-    const transporter = this.getTransporter(customConfig);
+    const transporter = await this.getTransporter(customConfig);
     if (!transporter) {
       return { 
         ok: false, 
-        error: 'Не заполнены обязательные параметры SMTP (сервер, логин или пароль) в настройках.' 
+        error: 'Не заполнены обязательные параметры SMTP (сервер, логин или пароль) в настройках или библиотека nodemailer не загружена.' 
       };
     }
 
@@ -88,7 +104,7 @@ class MailerService {
     if (directLink) console.log(`[PORTAL 2FA CODE] Прямая ссылка: ${directLink}`);
     console.log(`======================================================\n`);
 
-    const transporter = this.getTransporter();
+    const transporter = await this.getTransporter();
     if (!transporter) {
       return {
         ok: true,
@@ -158,9 +174,9 @@ class MailerService {
 
   // Send onboarding invitation email with direct secret link
   async sendContactInvite({ toEmail, contactName, companyName, accessUrl }) {
-    const transporter = this.getTransporter();
+    const transporter = await this.getTransporter();
     if (!transporter) {
-      return { ok: false, error: 'Почтовый сервер не настроен в CRM.' };
+      return { ok: false, error: 'Почтовый сервер не настроен в CRM или библиотека nodemailer отсутствует.' };
     }
 
     try {
@@ -201,7 +217,7 @@ class MailerService {
   async sendTicketNotificationToAdmin({ ticket, client, contact }) {
     const raw = settingsManager.getRawSettings();
     const adminEmail = raw.admin_notify_email || 'EKlimov84@gmail.com';
-    const transporter = this.getTransporter();
+    const transporter = await this.getTransporter();
     if (!transporter) return;
 
     try {

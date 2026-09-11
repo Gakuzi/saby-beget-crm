@@ -134,10 +134,17 @@ def main():
         time.sleep(3)
         return 1
 
-    # Ensure express and session dependencies are installed
+    # Configure git safe.directory to prevent dubious ownership errors
+    try:
+        subprocess.run(["git", "config", "--global", "--add", "safe.directory", "*"], timeout=5, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+    # Ensure express, session and nodemailer dependencies are installed
     express_pkg = os.path.join(base_dir, "node_modules", "express")
-    if not os.path.isdir(express_pkg):
-        print("[CRM Supervisor] node_modules missing. Installing npm dependencies...")
+    nodemailer_pkg = os.path.join(base_dir, "node_modules", "nodemailer")
+    if not os.path.isdir(express_pkg) or not os.path.isdir(nodemailer_pkg):
+        print("[CRM Supervisor] Dependencies missing. Installing npm packages (express, nodemailer, etc.)...")
         npm_bin = shutil.which("npm") or "/usr/bin/npm"
         if os.path.isfile(npm_bin):
             try:

@@ -2,6 +2,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { settingsManager } from './settings_manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,10 +27,17 @@ function saveSyncHistory() {
   }
 }
 
+// Global ensure for git safe.directory to avoid dubious ownership errors on VPS
+try {
+  execSync('git config --global --add safe.directory "*"', { stdio: 'pipe' });
+} catch (e) {
+  // ignore
+}
+
 // Helper to run git command safely
 function runGit(args, cwd = __dirname) {
   try {
-    const cmd = `git ${args}`;
+    const cmd = `git config --global --add safe.directory "*" 2>/dev/null; git ${args}`;
     const output = execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
     return { ok: true, output: output ? output.trim() : '' };
   } catch (err) {
@@ -47,8 +55,9 @@ export function sanitizeUrl(url) {
 }
 
 export function getGitHubConfig() {
-  const token = (process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '').trim();
-  let repo = (process.env.GITHUB_REPO || process.env.GITHUB_REPOSITORY || '').trim();
+  const raw = settingsManager.getRawSettings();
+  const token = (raw.github_token || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '').trim();
+  let repo = (raw.github_repo || process.env.GITHUB_REPO || process.env.GITHUB_REPOSITORY || '').trim();
   
   // Clean repo format if full URL provided
   if (repo.startsWith('http://') || repo.startsWith('https://')) {
@@ -72,7 +81,7 @@ export function getGitHubConfig() {
     repo = `${owner}/crm-beget-saby`;
   }
 
-  const branch = (process.env.GITHUB_BRANCH || 'main').trim();
+  const branch = (raw.github_branch || process.env.GITHUB_BRANCH || 'main').trim();
   const committerName = (process.env.GIT_COMMITTER_NAME || 'Eugene Klimov').trim();
   const committerEmail = (process.env.GIT_COMMITTER_EMAIL || process.env.GITHUB_EMAIL || 'EKlimov84@gmail.com').trim();
 
@@ -399,3 +408,58 @@ export async function syncToGitHub(options = {}) {
     log: logItem
   };
 }
+
+export async function pullFromGitHub() {
+  initGitRepoIfNeeded();
+  const cfg = getGitHubConfig();
+  const remoteUrl = cfg.authRemoteUrl || cfg.remoteUrl;
+
+  const fetchRes = runGit(`fetch "${remoteUrl}" ${cfg.branch}`);
+  if (!fetchRes.ok) {
+    const logItem = {
+      id: Date.now(),
+      timestamp: new Date().toISOString(),
+      status: 'error',
+      action: 'pull',
+      message: `Ошибка получения данных с GitHub (${cfg.branch}): ${fetchRes.error}`
+    };
+    syncHistory.unshift(logItem);
+    saveSyncHistory();
+    return { ok: false, error: logItem.message, log: logItem };
+  }
+
+  const resetRes = runGit(`reset --hard FETCH_HEAD`);
+  if (!resetRes.ok) {
+    const logItem = {
+      id: Date.now(),
+      timestamp: new Date().toISOString(),
+      status: 'error',
+      action: 'reset',
+      message: `Ошибка применения изменений ветки ${cfg.branch}: ${resetRes.error}`
+    };
+    syncHistory.unshift(logItem);
+    saveSyncHistory();
+    return { ok: false, error: logItem.message, log: logItem };
+  }
+
+  // Get new commit hash
+  const logRes = runGit('log -1 --format="%h|||%s"');
+  let commitHash = '';
+  if (logRes.ok && logRes.output) {
+    commitHash = logRes.output.split('|||')[0];
+  }
+
+  const logItem = {
+    id: Date.now(),
+    timestamp: new Date().toISOString(),
+    status: 'success',
+    action: 'pull',
+    commitHash,
+    message: `Код и состояние успешно обновлены до последнего коммита ${commitHash} из ветки ${cfg.branch}!`
+  };
+  syncHistory.unshift(logItem);
+  saveSyncHistory();
+
+  return { ok: true, commitHash, log: logItem, message: logItem.message };
+}
+

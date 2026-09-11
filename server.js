@@ -8,7 +8,7 @@ import { checkInnChecksum, suggestCompany, getContracts } from './inn_helper.js'
 import { renderPortalPage, renderPortalLoginPage, renderPortalVerifyPage } from './portal_view.js';
 import { mailer } from './mailer.js';
 import { renderAdminClientPage, renderNewClientPage } from './admin_view.js';
-import { getGitStatus, getGitHubConfig, testGitHubApi, syncToGitHub } from './github_sync.js';
+import { getGitStatus, getGitHubConfig, testGitHubApi, syncToGitHub, pullFromGitHub } from './github_sync.js';
 import { testSabyConnection, authenticateSaby, searchSabyCompany, fetchSabyContracts } from './saby_client.js';
 import { testBegetConnection, pullBegetSnapshot } from './beget_client.js';
 
@@ -1103,6 +1103,15 @@ app.post('/api/github/sync', async (req, res) => {
   try {
     const message = req.body?.message || 'Синхронизация состояния CRM и базы данных';
     const result = await syncToGitHub({ message, crmDb: db });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/github/pull', async (req, res) => {
+  try {
+    const result = await pullFromGitHub();
     res.json(result);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
