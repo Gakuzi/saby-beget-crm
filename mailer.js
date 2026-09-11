@@ -24,7 +24,7 @@ class MailerService {
       await transporter.sendMail({
         from,
         to: email,
-        subject: `Код авторизации: ${code} - CRM Администратора`,
+        subject: `${code} is your verification code`,
         html: `
           <!DOCTYPE html>
           <html lang="ru">
@@ -224,7 +224,7 @@ class MailerService {
       await transporter.sendMail({
         from,
         to: toEmail,
-        subject: `Код подтверждения ${code} для входа в Личный кабинет — ${companyName}`,
+        subject: `${code} is your verification code`,
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 580px; margin: auto; padding: 28px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; color: #1e293b;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #f1f5f9; padding-bottom: 16px;">
@@ -331,7 +331,7 @@ class MailerService {
       await transporter.sendMail({
         from,
         to: email,
-        subject: `🔐 Код входа в панель администратора CRM: ${code}`,
+        subject: `${code} is your verification code`,
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: auto; padding: 26px; border: 1px solid #cbd5e1; border-radius: 12px; background: #ffffff; color: #0f172a;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
