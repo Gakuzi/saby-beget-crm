@@ -8,6 +8,9 @@ class CrmStore {
     this.backups = [];
     this.hostEvents = [];
     this.accessLinks = [];
+    this.serviceEvents = [];
+    this.tickets = [];
+    this.sabyDocs = [];
     this.adminUser = {
       username: 'admin',
       passwordHash: this.hashPassword('admin123'),
@@ -50,22 +53,30 @@ class CrmStore {
       report_start_day: 1
     });
 
-    // Client 2: ООО "Альфа-Сервис"
+    // Client 2: ООО "Альфа-Сервис" (URL: /client/2)
     this.clients.push({
       id: 2,
       inn: '7801234567',
       company_name: 'ООО "Альфа-Сервис"',
-      emails: 'office@alpha-service.pro',
+      emails: 'office@alpha-service.pro, director@alpha-service.pro',
       email_reports: 'office@alpha-service.pro',
-      sites: 'alpha-service.pro',
+      sites: 'alpha-service.pro, crm.alpha-service.pro, dev.alpha-service.pro',
       saby_contract_id: 'cnt-201',
       saby_contract_number: 'АС-2024/05',
+      saby_contract_title: 'Договор комплексного технического сопровождения сайтов и серверов',
+      client_since: 'Февраль 2024',
+      plan_hours: 15,
+      hours_used: 11.5,
       beget_login: 'alphaserv',
       beget_password: '••••••••',
-      beget_api_key: '',
-      report_schedule: 'weekly',
-      report_sections: 'backups,account,certs',
-      report_start_day: 5
+      beget_api_key: 'bg_alpha_mock_key_2024',
+      report_schedule: 'monthly',
+      report_sections: 'backups,host_events,mailboxes,account,certs',
+      report_start_day: 1,
+      sla_target: 99.5,
+      sla_actual: 99.8,
+      avg_reaction_time: '14 мин',
+      avg_resolution_time: '2 ч 10 мин'
     });
 
     // Client 3: ИП Климов Е.В.
@@ -78,12 +89,45 @@ class CrmStore {
       sites: 'klimov-dev.ru, crm.klimov-dev.ru',
       saby_contract_id: 'cnt-301',
       saby_contract_number: 'КЛ-01/24',
+      saby_contract_title: 'Комплексное сопровождение доменов, почты и хостинга',
+      client_since: 'Январь 2024',
+      plan_hours: 20,
       beget_login: 'klimov_beget',
       beget_password: '••••••••',
       beget_api_key: 'bg_klimov_token_2024',
       report_schedule: 'monthly',
       report_sections: 'backups,host_events,mailboxes,account,certs',
-      report_start_day: 1
+      report_start_day: 1,
+      sla_target: 99.5,
+      sla_actual: 99.9,
+      avg_reaction_time: '12 мин',
+      avg_resolution_time: '1 ч 30 мин'
+    });
+
+    // Client 4: ООО "Северный Вектор" (from reference mockups)
+    this.clients.push({
+      id: 4,
+      inn: '7724890123',
+      company_name: 'ООО "Северный Вектор"',
+      emails: 'it@sever-vector.ru, director@sever-vector.ru',
+      email_reports: 'it@sever-vector.ru',
+      sites: 'sever-vector.ru, shop.sever-vector.ru, blog.sever-vector.ru, test.sever-vector.ru',
+      saby_contract_id: 'cnt-601',
+      saby_contract_number: 'Д-2024/017',
+      saby_contract_title: 'Договор комплексного технического сопровождения сайтов и серверов',
+      client_since: 'Декабрь 2023',
+      plan_hours: 15,
+      hours_used: 12,
+      beget_login: 'severvec',
+      beget_password: '••••••••',
+      beget_api_key: 'bg_live_sv_9948127',
+      report_schedule: 'monthly',
+      report_sections: 'backups,host_events,mailboxes,account,certs',
+      report_start_day: 1,
+      sla_target: 99.5,
+      sla_actual: 99.6,
+      avg_reaction_time: '18 мин',
+      avg_resolution_time: '2 ч 47 мин'
     });
 
     // Seed Work Logs
@@ -245,6 +289,338 @@ class CrmStore {
       event_type: 'beget_snapshot',
       details: snap3
     });
+
+    // Client 4: ООО "Северный Вектор" (Reference Mockups)
+    const snap4 = {
+      account: { user_balance: '14 350.00', plan: 'VIP-Ultra', disk_used_mb: 34200, disk_total_mb: 100000 },
+      snapshot: {
+        domains: [
+          { fqdn: 'sever-vector.ru', ssl_status: 'active', date_expire: '12.08.2026' },
+          { fqdn: 'shop.sever-vector.ru', ssl_status: 'active', date_expire: '21.07.2026' },
+          { fqdn: 'blog.sever-vector.ru', ssl_status: 'active', date_expire: '03.06.2026' },
+          { fqdn: 'test.sever-vector.ru', ssl_status: 'inactive', date_expire: '—' }
+        ]
+      }
+    };
+    this.hostEvents.push({
+      id: 4,
+      client_id: 4,
+      event_time: Math.floor(now.getTime() / 1000) - 900,
+      source: 'beget_api',
+      event_type: 'beget_snapshot',
+      details: snap4
+    });
+
+    // Seed Backups for Client 4 (Matching Mockup 2: 100% successful daily backups)
+    const bDates = [
+      { d: 0, time: '03:15', mb: 3820.5, name: 'sever-vector.ru (Bitrix + MySQL)' },
+      { d: 1, time: '03:15', mb: 3810.0, name: 'sever-vector.ru (Bitrix + MySQL)' },
+      { d: 2, time: '03:15', mb: 3795.2, name: 'sever-vector.ru (Bitrix + MySQL)' },
+      { d: 3, time: '03:15', mb: 3780.0, name: 'sever-vector.ru (Bitrix + MySQL)' },
+      { d: 4, time: '03:15', mb: 3765.4, name: 'sever-vector.ru (Bitrix + MySQL)' },
+      { d: 5, time: '03:15', mb: 3750.1, name: 'sever-vector.ru (Bitrix + MySQL)' },
+      { d: 6, time: '03:15', mb: 3740.8, name: 'sever-vector.ru (Bitrix + MySQL)' }
+    ];
+    bDates.forEach((b, idx) => {
+      const dt = new Date(now.getTime() - b.d * 86400000);
+      const ds = dt.toISOString().slice(0, 10);
+      this.backups.push({
+        id: this.backups.length + 1,
+        client_id: 4,
+        site_name: b.name,
+        site_domain: 'sever-vector.ru',
+        backup_date: `${ds} ${b.time}:00`,
+        size_mb: b.mb,
+        status: 'Успешно',
+        source: 'Bitrix Core Cloud / Beget S3'
+      });
+    });
+
+    // Seed Service Events for Client 4 (Exact match to Mockup 1: "События сервиса")
+    this.serviceEvents.push(
+      {
+        id: 1,
+        client_id: 4,
+        category: 'backup', // 'backup' | 'cert' | 'work' | 'incident'
+        title: 'Резервная копия выполнена',
+        service: 'Резервное копирование',
+        detail_label: 'Сервер',
+        detail_value: 'CRM-DB-01',
+        status: 'Готово',
+        status_type: 'done', // 'done' | 'in_progress'
+        group: 'today', // 'today' | 'yesterday' | 'earlier'
+        time: '09:41',
+        created_at: new Date(now.getTime() - 15 * 60000).toISOString()
+      },
+      {
+        id: 2,
+        client_id: 4,
+        category: 'cert',
+        title: 'Сертификат продлён',
+        service: 'SSL-сертификат',
+        detail_label: 'Домен',
+        detail_value: 'crm.klimov.ru',
+        status: 'Готово',
+        status_type: 'done',
+        group: 'today',
+        time: '09:15',
+        created_at: new Date(now.getTime() - 45 * 60000).toISOString()
+      },
+      {
+        id: 3,
+        client_id: 4,
+        category: 'work',
+        title: 'Работа по договору закрыта',
+        service: 'Договор: № Д-2024/017',
+        detail_label: 'Тема',
+        detail_value: 'Настройка интеграции',
+        status: 'Готово',
+        status_type: 'done',
+        group: 'today',
+        time: '08:47',
+        created_at: new Date(now.getTime() - 75 * 60000).toISOString()
+      },
+      {
+        id: 4,
+        client_id: 4,
+        category: 'work',
+        title: 'Выполняются работы по задаче',
+        service: 'Техническая поддержка',
+        detail_label: 'Тема',
+        detail_value: 'Настройка почтового сервера',
+        status: 'В работе',
+        status_type: 'in_progress',
+        group: 'yesterday',
+        time: '17:32',
+        created_at: new Date(now.getTime() - 86400000 + 3600000).toISOString()
+      },
+      {
+        id: 5,
+        client_id: 4,
+        category: 'backup',
+        title: 'Резервная копия выполнена',
+        service: 'Резервное копирование',
+        detail_label: 'Сервер',
+        detail_value: 'CRM-FS-02',
+        status: 'Готово',
+        status_type: 'done',
+        group: 'yesterday',
+        time: '11:06',
+        created_at: new Date(now.getTime() - 86400000).toISOString()
+      },
+      {
+        id: 6,
+        client_id: 4,
+        category: 'incident',
+        title: 'Инцидент зарегистрирован',
+        service: 'Инфраструктура',
+        detail_label: 'Тема',
+        detail_value: 'Недоступность сервиса',
+        status: 'В работе',
+        status_type: 'in_progress',
+        group: 'earlier',
+        time: '15:22',
+        group_date: '20 мая',
+        created_at: new Date(now.getTime() - 4 * 86400000).toISOString()
+      }
+    );
+
+    // Seed Saby Documents for Client 4
+    this.sabyDocs.push(
+      {
+        id: 1,
+        client_id: 4,
+        doc_type: 'contract',
+        number: 'Д-2024/017',
+        date: '15.12.2023',
+        title: 'Договор комплексного технического сопровождения сайтов и серверов',
+        status: 'Действует',
+        amount: '45 000 ₽ / мес',
+        edo_status: 'Подписан обеими сторонами в СБИС'
+      },
+      {
+        id: 2,
+        client_id: 4,
+        doc_type: 'act',
+        number: 'А-05/24',
+        date: '31.05.2024',
+        title: 'Акт выполненных работ по сопровождению за Май 2024',
+        status: 'Подписан',
+        amount: '45 000 ₽',
+        edo_status: 'Утвержден в СБИС ЭДО'
+      },
+      {
+        id: 3,
+        client_id: 4,
+        doc_type: 'act',
+        number: 'А-04/24',
+        date: '30.04.2024',
+        title: 'Акт выполненных работ по сопровождению за Апрель 2024',
+        status: 'Подписан',
+        amount: '45 000 ₽',
+        edo_status: 'Утвержден в СБИС ЭДО'
+      },
+      {
+        id: 4,
+        client_id: 4,
+        doc_type: 'reconciliation',
+        number: 'АС-24/01',
+        date: '01.06.2024',
+        title: 'Акт сверки взаимных расчетов за 1 полугодие 2024 г.',
+        status: 'Сформирован',
+        amount: 'Сальдо: 0.00 ₽ (Задолженность отсутствует)',
+        edo_status: 'Готов к отправке в СБИС'
+      },
+      {
+        id: 5,
+        client_id: 4,
+        doc_type: 'invoice',
+        number: 'СЧ-06/24',
+        date: '01.06.2024',
+        title: 'Счет на оплату услуг технического сопровождения за Июнь 2024',
+        status: 'Оплачен',
+        amount: '45 000 ₽',
+        edo_status: 'Оплачено п/п №184 от 03.06.2024'
+      }
+    );
+
+    // Seed Work Logs for Client 4
+    this.workLogs.push(
+      {
+        id: 7,
+        client_id: 4,
+        category: 'development',
+        category_name: 'Разработка',
+        description: 'Интеграция каталога 1С-Битрикс с API СБИС (синхронизация остатков и заказов).',
+        hours: 5.5,
+        work_date: new Date(now.getTime() - 2 * 86400000).toISOString().replace('T', ' ').slice(0, 19),
+        saby_synced: true,
+        saby_task_id: 'SBIS-ORD-4921',
+        saby_sync_date: new Date(now.getTime() - 2 * 86400000 + 3600000).toISOString(),
+        source: 'crm'
+      },
+      {
+        id: 8,
+        client_id: 4,
+        category: 'support',
+        category_name: 'Поддержка',
+        description: 'Диагностика доставки почтовых сообщений через корпоративный SMTP и настройка DKIM/DMARC.',
+        hours: 2.5,
+        work_date: new Date(now.getTime() - 4 * 86400000).toISOString().replace('T', ' ').slice(0, 19),
+        saby_synced: true,
+        saby_task_id: 'SBIS-ORD-4902',
+        saby_sync_date: new Date(now.getTime() - 4 * 86400000 + 3600000).toISOString(),
+        source: 'crm'
+      },
+      {
+        id: 9,
+        client_id: 4,
+        category: 'admin',
+        category_name: 'Администрирование',
+        description: 'Обновление SSL-сертификатов Let\'s Encrypt для shop.sever-vector.ru и аудит безопасности nginx.',
+        hours: 2.0,
+        work_date: new Date(now.getTime() - 7 * 86400000).toISOString().replace('T', ' ').slice(0, 19),
+        saby_synced: true,
+        saby_task_id: 'SBIS-ORD-4889',
+        saby_sync_date: new Date(now.getTime() - 7 * 86400000 + 3600000).toISOString(),
+        source: 'crm'
+      },
+      {
+        id: 10,
+        client_id: 4,
+        category: 'consult',
+        category_name: 'Консультации',
+        description: 'Консультация специалистов заказчика по работе с актами сверки и счетами в СБИС.',
+        hours: 2.0,
+        work_date: new Date(now.getTime() - 10 * 86400000).toISOString().replace('T', ' ').slice(0, 19),
+        saby_synced: true,
+        saby_task_id: 'SBIS-ORD-4850',
+        saby_sync_date: new Date(now.getTime() - 10 * 86400000 + 3600000).toISOString(),
+        source: 'saby'
+      },
+      {
+        id: 11,
+        client_id: 2,
+        category: 'dev',
+        category_name: 'Разработка',
+        description: 'Оптимизация скорости загрузки каталога услуг alpha-service.pro. Настройка кэширования Redis.',
+        hours: 4.0,
+        work_date: new Date(now.getTime() - 3 * 86400000).toISOString().replace('T', ' ').slice(0, 19),
+        saby_synced: true,
+        saby_task_id: 'SBIS-ORD-3120',
+        saby_sync_date: new Date(now.getTime() - 3 * 86400000 + 3600000).toISOString(),
+        source: 'crm'
+      },
+      {
+        id: 12,
+        client_id: 2,
+        category: 'admin',
+        category_name: 'Администрирование',
+        description: 'Настройка автоматических ежедневных бэкапов MySQL и файлов на внешнее хранилище S3 Beget.',
+        hours: 3.0,
+        work_date: new Date(now.getTime() - 6 * 86400000).toISOString().replace('T', ' ').slice(0, 19),
+        saby_synced: true,
+        saby_task_id: 'SBIS-ORD-3098',
+        saby_sync_date: new Date(now.getTime() - 6 * 86400000 + 3600000).toISOString(),
+        source: 'crm'
+      },
+      {
+        id: 13,
+        client_id: 2,
+        category: 'support',
+        category_name: 'Техподдержка',
+        description: 'Устранение ошибки 502 Bad Gateway при пиковой нагрузке, тюнинг параметров php-fpm и worker_processes.',
+        hours: 3.0,
+        work_date: new Date(now.getTime() - 9 * 86400000).toISOString().replace('T', ' ').slice(0, 19),
+        saby_synced: true,
+        saby_task_id: 'SBIS-ORD-3045',
+        saby_sync_date: new Date(now.getTime() - 9 * 86400000 + 3600000).toISOString(),
+        source: 'saby'
+      },
+      {
+        id: 14,
+        client_id: 2,
+        category: 'consult',
+        category_name: 'Консультации',
+        description: 'Обращение СБИС #2814: консультация по настройке выгрузки отчетов в формате PDF/Excel.',
+        hours: 1.5,
+        work_date: new Date(now.getTime() - 1 * 86400000).toISOString().replace('T', ' ').slice(0, 19),
+        saby_synced: true,
+        saby_task_id: 'SBIS-REQ-2814',
+        saby_sync_date: new Date(now.getTime() - 1 * 86400000 + 1800000).toISOString(),
+        source: 'saby'
+      }
+    );
+
+    // Initial Saby sync logs
+    this.sabySyncLogs = [
+      {
+        id: 1,
+        client_id: 2,
+        direction: 'two_way',
+        synced_out_count: 3,
+        synced_in_count: 1,
+        status: 'Успешно',
+        message: 'Выгружено 3 заказ-наряда в СБИС, импортировано обращение #2814',
+        timestamp: new Date(now.getTime() - 2 * 3600000).toISOString()
+      },
+      {
+        id: 2,
+        client_id: 4,
+        direction: 'two_way',
+        synced_out_count: 4,
+        synced_in_count: 1,
+        status: 'Успешно',
+        message: 'Синхронизированы трудозатраты по договору Д-2024/017',
+        timestamp: new Date(now.getTime() - 4 * 3600000).toISOString()
+      }
+    ];
+
+    // Pre-seed active access links for clients so public links work immediately
+    this.clients.forEach(c => {
+      const token = this.createAccessLink(c.id);
+      c.active_token = token;
+    });
   }
 
   // --- Clients CRUD ---
@@ -297,6 +673,41 @@ class CrmStore {
     return client;
   }
 
+  updateClientFull(id, data) {
+    const client = this.getClientById(id);
+    if (!client) return null;
+
+    if (data.company_name !== undefined && data.company_name.trim()) client.company_name = data.company_name.trim();
+    if (data.inn !== undefined && data.inn.trim()) client.inn = data.inn.trim();
+    if (data.kpp !== undefined) client.kpp = data.kpp.trim();
+    if (data.ogrn !== undefined) client.ogrn = data.ogrn.trim();
+    if (data.director !== undefined) client.director = data.director.trim();
+    if (data.address !== undefined) client.address = data.address.trim();
+
+    if (data.saby_contract_id !== undefined) client.saby_contract_id = data.saby_contract_id.trim();
+    if (data.saby_contract_number !== undefined) client.saby_contract_number = data.saby_contract_number.trim();
+    if (data.saby_contract_title !== undefined) client.saby_contract_title = data.saby_contract_title.trim();
+    if (data.plan_hours !== undefined) client.plan_hours = parseFloat(data.plan_hours) || 15;
+    if (data.tariff !== undefined) client.tariff = data.tariff.trim();
+
+    if (data.sites !== undefined) client.sites = data.sites.trim();
+    if (data.emails !== undefined) {
+      client.emails = data.emails.trim();
+      client.email_reports = data.emails.trim();
+    }
+
+    if (data.beget_login !== undefined) client.beget_login = data.beget_login.trim();
+    if (data.beget_password !== undefined) client.beget_password = data.beget_password.trim();
+    if (data.beget_api_key !== undefined) client.beget_api_key = data.beget_api_key.trim();
+
+    if (data.report_schedule !== undefined) client.report_schedule = data.report_schedule;
+    if (data.report_sections !== undefined) client.report_sections = data.report_sections;
+    if (data.report_start_day !== undefined) client.report_start_day = parseInt(data.report_start_day, 10) || 1;
+    if (data.sla_target !== undefined) client.sla_target = parseFloat(data.sla_target) || 99.5;
+
+    return client;
+  }
+
   // --- Work Logs ---
   getWorkLogs(clientId) {
     return this.workLogs
@@ -304,30 +715,110 @@ class CrmStore {
       .sort((a, b) => new Date(b.work_date).getTime() - new Date(a.work_date).getTime());
   }
 
-  addWorkLog(clientId, description, hours, workDate) {
+  addWorkLog(clientId, dataOrDesc, hours = 1.0, workDate = null) {
     const nextId = this.workLogs.length > 0 ? Math.max(...this.workLogs.map(l => l.id)) + 1 : 1;
-    let finalDate = workDate;
+    let description = '';
+    let category = 'support';
+    let categoryName = 'Техподдержка';
+    let syncToSaby = true;
+    let finalDate = null;
+    let source = 'crm';
+
+    if (typeof dataOrDesc === 'object' && dataOrDesc !== null) {
+      description = (dataOrDesc.description || '').trim();
+      hours = parseFloat(dataOrDesc.hours) || 1.0;
+      finalDate = dataOrDesc.workDate || dataOrDesc.work_date;
+      category = dataOrDesc.category || 'support';
+      categoryName = dataOrDesc.category_name || (
+        category === 'dev' || category === 'development' ? 'Разработка' :
+        category === 'admin' ? 'Администрирование' :
+        category === 'consult' ? 'Консультации' : 'Техподдержка'
+      );
+      syncToSaby = dataOrDesc.syncToSaby !== false && dataOrDesc.saby_synced !== false;
+      source = dataOrDesc.source || 'crm';
+    } else {
+      description = (dataOrDesc || '').trim();
+      hours = parseFloat(hours) || 1.0;
+      finalDate = workDate;
+    }
+
     if (!finalDate) {
       const now = new Date();
       finalDate = now.toISOString().replace('T', ' ').slice(0, 19);
     }
+
+    const taskId = syncToSaby ? `SBIS-ORD-${Math.floor(2000 + Math.random() * 7900)}` : null;
+
     const log = {
       id: nextId,
       client_id: parseInt(clientId, 10),
-      description: (description || '').trim(),
-      hours: parseFloat(hours) || 1.0,
-      work_date: finalDate
+      category,
+      category_name: categoryName,
+      description,
+      hours,
+      work_date: finalDate,
+      saby_synced: !!syncToSaby,
+      saby_task_id: taskId,
+      saby_sync_date: syncToSaby ? new Date().toISOString() : null,
+      source
     };
     this.workLogs.push(log);
+
+    // Also register in service events
+    const cId = parseInt(clientId, 10);
+    this.serviceEvents.unshift({
+      id: 5000 + nextId,
+      client_id: cId,
+      category: 'work',
+      title: `${categoryName}: ${description.slice(0, 45)}${description.length > 45 ? '...' : ''}`,
+      service: `Трудозатраты: ${hours} ч. (${taskId ? 'СБИС ' + taskId : 'CRM'})`,
+      detail_label: 'Специалист',
+      detail_value: 'Климов Евгений (CRM)',
+      status: 'Готово',
+      status_type: 'done',
+      group: 'today',
+      time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+      created_at: new Date().toISOString()
+    });
+
+    if (syncToSaby) {
+      this.sabySyncLogs.unshift({
+        id: this.sabySyncLogs.length + 1,
+        client_id: cId,
+        direction: 'outbound',
+        synced_out_count: 1,
+        synced_in_count: 0,
+        status: 'Успешно',
+        message: `Выгружен заказ-наряд ${taskId} (${hours} ч.) в СБИС ЭДО`,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     return log;
   }
 
-  updateWorkLog(logId, description, hours, workDate) {
+  updateWorkLog(logId, dataOrDesc, hours, workDate) {
     const log = this.workLogs.find(l => l.id === parseInt(logId, 10));
     if (!log) return null;
-    log.description = (description || '').trim();
-    log.hours = parseFloat(hours) || 1.0;
-    if (workDate) log.work_date = workDate;
+
+    if (typeof dataOrDesc === 'object' && dataOrDesc !== null) {
+      if (dataOrDesc.description !== undefined) log.description = (dataOrDesc.description || '').trim();
+      if (dataOrDesc.hours !== undefined) log.hours = parseFloat(dataOrDesc.hours) || 1.0;
+      if (dataOrDesc.workDate || dataOrDesc.work_date) log.work_date = dataOrDesc.workDate || dataOrDesc.work_date;
+      if (dataOrDesc.category) {
+        log.category = dataOrDesc.category;
+        log.category_name = (
+          log.category === 'dev' || log.category === 'development' ? 'Разработка' :
+          log.category === 'admin' ? 'Администрирование' :
+          log.category === 'consult' ? 'Консультации' : 'Техподдержка'
+        );
+      }
+      if (dataOrDesc.saby_synced !== undefined) log.saby_synced = !!dataOrDesc.saby_synced;
+    } else {
+      log.description = (dataOrDesc || '').trim();
+      log.hours = parseFloat(hours) || 1.0;
+      if (workDate) log.work_date = workDate;
+    }
     return log;
   }
 
@@ -338,6 +829,118 @@ class CrmStore {
       return true;
     }
     return false;
+  }
+
+  // --- Bidirectional Saby (СБИС) Synchronization ---
+  getSabySyncLogs(clientId) {
+    const cId = parseInt(clientId, 10);
+    return (this.sabySyncLogs || [])
+      .filter(s => s.client_id === cId)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }
+
+  syncWithSaby(clientId) {
+    const cId = parseInt(clientId, 10);
+    const client = this.getClientById(cId);
+    if (!client) return { ok: false, error: 'Контрагент не найден' };
+
+    let syncedOutCount = 0;
+    // 1. Outbound: Sync unsynced work logs from CRM to Saby
+    const unsyncedLogs = this.workLogs.filter(l => l.client_id === cId && !l.saby_synced);
+    unsyncedLogs.forEach(log => {
+      log.saby_synced = true;
+      log.saby_task_id = `SBIS-ORD-${Math.floor(3000 + Math.random() * 6000)}`;
+      log.saby_sync_date = new Date().toISOString();
+      syncedOutCount++;
+    });
+
+    // 2. Inbound: Pull service tickets/requests from Saby for this contractor
+    let importedInCount = 0;
+    const sabyTicketPool = [
+      {
+        subject: 'Заявка СБИС #3105: Проверка журнала ошибок PHP и ускорение индексации страниц',
+        category: 'dev',
+        category_name: 'Разработка',
+        hours: 2.5
+      },
+      {
+        subject: 'Обращение СБИС #3188: Настройка резервного канала DNS и проверка SPF-записи',
+        category: 'admin',
+        category_name: 'Администрирование',
+        hours: 1.5
+      },
+      {
+        subject: 'Консультация СБИС #3210: Согласование закрывающих актов за текущий расчетный период',
+        category: 'consult',
+        category_name: 'Консультации',
+        hours: 1.0
+      }
+    ];
+
+    // Pick an un-imported ticket from the pool
+    const existingDescriptions = this.workLogs.filter(l => l.client_id === cId).map(l => l.description.toLowerCase());
+    for (const item of sabyTicketPool) {
+      if (!existingDescriptions.some(d => d.includes(item.subject.toLowerCase().slice(0, 30)))) {
+        const nextId = this.workLogs.length > 0 ? Math.max(...this.workLogs.map(l => l.id)) + 1 : 1;
+        const taskId = `SBIS-REQ-${Math.floor(3100 + Math.random() * 800)}`;
+        const now = new Date();
+        this.workLogs.unshift({
+          id: nextId,
+          client_id: cId,
+          category: item.category,
+          category_name: item.category_name,
+          description: item.subject,
+          hours: item.hours,
+          work_date: now.toISOString().replace('T', ' ').slice(0, 19),
+          saby_synced: true,
+          saby_task_id: taskId,
+          saby_sync_date: now.toISOString(),
+          source: 'saby'
+        });
+
+        this.serviceEvents.unshift({
+          id: 6000 + nextId,
+          client_id: cId,
+          category: 'work',
+          title: `Импорт из СБИС: ${item.category_name}`,
+          service: `${item.subject} (${taskId})`,
+          detail_label: 'Источник',
+          detail_value: 'Сервис-деск Saby / СБИС ЭДО',
+          status: 'Готово',
+          status_type: 'done',
+          group: 'today',
+          time: now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+          created_at: now.toISOString()
+        });
+
+        importedInCount++;
+        break; // import 1 fresh per sync button click for realistic progressive behavior
+      }
+    }
+
+    const logEntry = {
+      id: (this.sabySyncLogs || []).length + 1,
+      client_id: cId,
+      direction: 'two_way',
+      synced_out_count: syncedOutCount,
+      synced_in_count: importedInCount,
+      status: 'Успешно',
+      message: syncedOutCount > 0 || importedInCount > 0
+        ? `Двусторонняя синхронизация завершена: передано в СБИС: ${syncedOutCount} наряд(ов), получено из СБИС: ${importedInCount} обращение.`
+        : 'Все данные уже полностью синхронизированы со СБИС (расхождений нет).',
+      timestamp: new Date().toISOString()
+    };
+    if (!this.sabySyncLogs) this.sabySyncLogs = [];
+    this.sabySyncLogs.unshift(logEntry);
+
+    return {
+      ok: true,
+      syncedOutCount,
+      importedInCount,
+      logEntry,
+      clientName: client.company_name,
+      contractNumber: client.saby_contract_number
+    };
   }
 
   // --- Backups & Host Events ---
@@ -388,6 +991,8 @@ class CrmStore {
       revoked_at: null
     };
     this.accessLinks.push(linkRecord);
+    const client = this.getClientById(cId);
+    if (client) client.active_token = token;
     return token;
   }
 
@@ -398,6 +1003,322 @@ class CrmStore {
     if (!link) return null;
     link.last_used_at = new Date().toISOString();
     return this.getClientById(link.client_id);
+  }
+
+  // --- Service Events ---
+  getServiceEvents(clientId, category = 'all') {
+    const cId = parseInt(clientId, 10);
+    let events = this.serviceEvents.filter(e => e.client_id === cId);
+    if (events.length === 0) {
+      const client = this.getClientById(cId) || { company_name: 'Клиент', sites: 'alpha-service.pro', saby_contract_number: 'АС-2024/05' };
+      const mainDomain = (client.sites ? client.sites.split(',')[0].trim() : 'alpha-service.pro');
+      const now = new Date();
+      events = [
+        {
+          id: 501,
+          client_id: cId,
+          category: 'backup',
+          title: 'Резервная копия создана',
+          service: 'Резервное копирование Beget Cloud S3',
+          detail_label: 'Сервер',
+          detail_value: 'DB-MYSQL-' + (client.beget_login || 'srv'),
+          status: 'Готово',
+          status_type: 'done',
+          group: 'today',
+          time: '04:15',
+          created_at: new Date(now.getTime() - 2 * 3600000).toISOString()
+        },
+        {
+          id: 502,
+          client_id: cId,
+          category: 'cert',
+          title: 'Сертификат активен (Let\'s Encrypt TLS)',
+          service: 'SSL-сертификат',
+          detail_label: 'Домен',
+          detail_value: mainDomain,
+          status: 'Готово',
+          status_type: 'done',
+          group: 'today',
+          time: '08:00',
+          created_at: new Date(now.getTime() - 4 * 3600000).toISOString()
+        },
+        {
+          id: 503,
+          client_id: cId,
+          category: 'work',
+          title: 'Регламентные работы по договору выполнены',
+          service: 'Договор: ' + (client.saby_contract_number || '№ АС-2024/05'),
+          detail_label: 'Тема',
+          detail_value: 'Проверка отказоустойчивости и аудит безопасности',
+          status: 'Готово',
+          status_type: 'done',
+          group: 'today',
+          time: '10:30',
+          created_at: new Date(now.getTime() - 6 * 3600000).toISOString()
+        },
+        {
+          id: 504,
+          client_id: cId,
+          category: 'work',
+          title: 'Плановое сопровождение и мониторинг',
+          service: 'Техническая поддержка',
+          detail_label: 'Тема',
+          detail_value: 'Контроль дискового пространства и кэша',
+          status: 'В работе',
+          status_type: 'in_progress',
+          group: 'yesterday',
+          time: '16:45',
+          created_at: new Date(now.getTime() - 86400000).toISOString()
+        },
+        {
+          id: 505,
+          client_id: cId,
+          category: 'incident',
+          title: 'Мониторинг отклика сервисов (100% аптайм)',
+          service: 'Мониторинг доступности',
+          detail_label: 'Статус',
+          detail_value: 'Все веб-узлы работают в штатном режиме',
+          status: 'Готово',
+          status_type: 'done',
+          group: 'earlier',
+          time: '12:00',
+          created_at: new Date(now.getTime() - 172800000).toISOString()
+        }
+      ];
+    }
+    return events
+      .filter(e => {
+        if (category && category !== 'all') {
+          if (category === 'works' && e.category !== 'work') return false;
+          if (category === 'backups' && e.category !== 'backup') return false;
+          if (category === 'incidents' && e.category !== 'incident') return false;
+          if (category === 'certs' && e.category !== 'cert') return false;
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  addServiceEvent(clientId, data) {
+    const nextId = this.serviceEvents.length > 0 ? Math.max(...this.serviceEvents.map(e => e.id)) + 1 : 1;
+    const now = new Date();
+    const event = {
+      id: nextId,
+      client_id: parseInt(clientId, 10),
+      category: data.category || 'work',
+      title: (data.title || 'Событие сервиса').trim(),
+      service: (data.service || 'Техническая поддержка').trim(),
+      detail_label: data.detail_label || 'Тема',
+      detail_value: (data.detail_value || '').trim(),
+      status: data.status || 'Готово',
+      status_type: data.status_type || 'done',
+      group: data.group || 'today',
+      time: data.time || `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+      created_at: now.toISOString()
+    };
+    this.serviceEvents.unshift(event);
+    return event;
+  }
+
+  // --- Saby Documents ---
+  getSabyDocs(clientId, docType = null) {
+    const cId = parseInt(clientId, 10);
+    let docs = this.sabyDocs.filter(d => d.client_id === cId);
+    if (docs.length === 0) {
+      const client = this.getClientById(cId) || { saby_contract_number: 'АС-2024/05' };
+      docs = [
+        {
+          id: 301,
+          client_id: cId,
+          doc_type: 'contract',
+          number: client.saby_contract_number || 'АС-2024/05',
+          date: '01.02.2024',
+          title: 'Договор комплексного технического сопровождения сайтов и серверов',
+          status: 'Действует',
+          amount: '18 000 ₽ / мес',
+          edo_status: 'Подписан в СБИС'
+        },
+        {
+          id: 302,
+          client_id: cId,
+          doc_type: 'act',
+          number: 'А-04/24',
+          date: '30.04.2024',
+          title: 'Акт сдачи-приемки выполненных работ за апрель 2024',
+          status: 'Подписан',
+          amount: '18 000 ₽',
+          edo_status: 'Документ доставлен и подписан контрагентом'
+        },
+        {
+          id: 303,
+          client_id: cId,
+          doc_type: 'invoice',
+          number: 'СЧ-05/24',
+          date: '15.05.2024',
+          title: 'Счет на оплату услуг технической поддержки',
+          status: 'Оплачен',
+          amount: '18 000 ₽',
+          edo_status: 'Оплата подтверждена выпиской банка'
+        }
+      ];
+    }
+    return docs
+      .filter(d => {
+        if (docType && d.doc_type !== docType) return false;
+        return true;
+      })
+      .sort((a, b) => b.id - a.id);
+  }
+
+  createSabyAct(clientId, { monthName = 'Июнь 2026', amount = 45000 }) {
+    const cId = parseInt(clientId, 10);
+    const client = this.getClientById(cId);
+    const nextId = this.sabyDocs.length > 0 ? Math.max(...this.sabyDocs.map(d => d.id)) + 1 : 1;
+    const actNumber = `А-${String(nextId).padStart(2, '0')}/26`;
+    const doc = {
+      id: nextId,
+      client_id: cId,
+      doc_type: 'act',
+      number: actNumber,
+      date: new Date().toLocaleDateString('ru-RU'),
+      title: `Акт выполненных работ по сопровождению за ${monthName}`,
+      status: 'Сформирован',
+      amount: `${Number(amount).toLocaleString('ru-RU')} ₽`,
+      edo_status: 'Подготовлен к отправке в СБИС'
+    };
+    this.sabyDocs.unshift(doc);
+
+    // Also log service event
+    this.addServiceEvent(cId, {
+      category: 'work',
+      title: `Сформирован акт выполненных работ ${actNumber}`,
+      service: `Договор: ${client ? client.saby_contract_number : 'Основной'}`,
+      detail_label: 'Сумма',
+      detail_value: `${Number(amount).toLocaleString('ru-RU')} ₽ (СБИС ЭДО)`,
+      status: 'Готово',
+      status_type: 'done',
+      group: 'today'
+    });
+
+    return doc;
+  }
+
+  // --- Tickets ---
+  createTicket(clientId, { subject, service, priority = 'medium', message = '' }) {
+    const cId = parseInt(clientId, 10);
+    const nextId = this.tickets.length > 0 ? Math.max(...this.tickets.map(t => t.id)) + 1 : 1;
+    const now = new Date();
+    const ticket = {
+      id: nextId,
+      ticket_number: `TICK-${String(nextId).padStart(4, '0')}`,
+      client_id: cId,
+      subject: (subject || 'Новое обращение в техподдержку').trim(),
+      service: (service || 'Техническая поддержка').trim(),
+      priority,
+      message: (message || '').trim(),
+      status: 'В работе',
+      created_at: now.toISOString()
+    };
+    this.tickets.unshift(ticket);
+
+    // Auto-record in service events
+    this.addServiceEvent(cId, {
+      category: 'work',
+      title: `Обращение ${ticket.ticket_number} зарегистрировано`,
+      service: ticket.service,
+      detail_label: 'Тема',
+      detail_value: ticket.subject,
+      status: 'В работе',
+      status_type: 'in_progress',
+      group: 'today',
+      time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    });
+
+    return ticket;
+  }
+
+  getTickets(clientId) {
+    const cId = parseInt(clientId, 10);
+    return this.tickets.filter(t => t.client_id === cId);
+  }
+
+  // --- Portal Aggregate Summary ---
+  getPortalSummary(clientId) {
+    const cId = parseInt(clientId, 10);
+    const client = this.getClientById(cId);
+    if (!client) return null;
+
+    const workLogs = this.getWorkLogs(cId);
+    const totalHoursLogged = workLogs.reduce((acc, w) => acc + (parseFloat(w.hours) || 0), 0);
+    const planHours = client.plan_hours || 15;
+    const hoursUsed = client.hours_used !== undefined ? client.hours_used : Math.min(totalHoursLogged, planHours);
+    const hoursRemaining = Math.max(0, planHours - hoursUsed);
+    const hoursPercentage = Math.round((hoursUsed / planHours) * 100);
+
+    const backups = this.getBackups(cId);
+    const latestBackup = backups[0] || null;
+
+    const hostSnapshot = this.getLastSnapshot(cId);
+    const domains = (hostSnapshot && hostSnapshot.details && hostSnapshot.details.snapshot && hostSnapshot.details.snapshot.domains) || [];
+    const activeDomainsCount = domains.length || (client.sites ? client.sites.split(',').length : 1);
+
+    const sabyDocs = this.getSabyDocs(cId);
+    const acts = sabyDocs.filter(d => d.doc_type === 'act');
+
+    return {
+      client,
+      hours: {
+        plan: planHours,
+        used: hoursUsed,
+        remaining: hoursRemaining,
+        percent: hoursPercentage,
+        total_logged: totalHoursLogged
+      },
+      reports_count: acts.length > 0 ? acts.length : 3,
+      latest_backup: latestBackup ? {
+        date: latestBackup.backup_date,
+        status: latestBackup.status,
+        size_mb: latestBackup.size_mb,
+        site_name: latestBackup.site_name
+      } : {
+        date: '28.05.2026 03:15',
+        status: 'Успешно',
+        size_mb: 3820.5,
+        site_name: 'Основной сайт + БД'
+      },
+      domains: {
+        count: activeDomainsCount,
+        list: domains,
+        all_ssl_active: true
+      },
+      sla: {
+        availability: client.sla_actual || 99.6,
+        target: client.sla_target || 99.5,
+        incidents_count: 2,
+        avg_reaction: client.avg_reaction_time || '18 мин',
+        avg_resolution: client.avg_resolution_time || '2 ч 47 мин'
+      },
+      active_works: [
+        {
+          id: 'aw-1',
+          service: 'Техническая поддержка',
+          topic: 'Настройка почтового сервера',
+          status: 'В работе'
+        },
+        {
+          id: 'aw-2',
+          service: 'Инфраструктура',
+          topic: 'Обновление ПО и ядра 1С-Битрикс',
+          status: 'В работе'
+        }
+      ],
+      upcoming_maintenance: {
+        date_str: '02.06.2026',
+        time_str: 'с 02:00 до 04:00 МСК',
+        server: 'CRM-DB-01',
+        title: 'Плановое обслуживание и оптимизация индексов БД'
+      }
+    };
   }
 }
 

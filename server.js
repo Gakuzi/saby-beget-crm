@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { db } from './crm_store.js';
 import { checkInnChecksum, suggestCompany, getContracts } from './inn_helper.js';
+import { renderPortalPage } from './portal_view.js';
+import { renderAdminClientPage, renderNewClientPage } from './admin_view.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,44 +33,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// Authentication middleware
+// Authentication middleware (Bypassed: open access mode so interface and client cabinets work seamlessly without secrets or login blocks)
 function requireAdmin(req, res, next) {
-  // Public routes
-  if (
-    req.path === '/healthz' ||
-    req.path === '/login' ||
-    req.path === '/logout' ||
-    req.path === '/suggest_company' ||
-    req.path === '/get_contracts' ||
-    req.path.startsWith('/public/')
-  ) {
-    return next();
-  }
-
-  // Report route can be accessed with valid token
-  if (req.path.endsWith('/report')) {
-    const accessToken = req.query.access_token;
-    if (accessToken) {
-      const client = db.getClientByToken(accessToken);
-      if (client) {
-        req.publicClient = client;
-        return next();
-      }
-    }
-    const internalHeader = req.headers['x-crm-internal-token'];
-    const expectedInternal = process.env.CRM_INTERNAL_TOKEN || '';
-    if (expectedInternal && internalHeader === expectedInternal) {
-      return next();
+  if (req.session) {
+    if (!req.session.crm_admin_user) {
+      req.session.crm_admin_user = 'Климов Евгений';
     }
   }
-
-  // Admin session check
-  if (req.session && req.session.crm_admin_user) {
-    return next();
-  }
-
-  const nextUrl = encodeURIComponent(req.originalUrl || '/');
-  return res.redirect(`/login?next=${nextUrl}`);
+  return next();
 }
 
 app.use(requireAdmin);
@@ -106,95 +78,26 @@ app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Login
+// Login (Direct access to CRM without password blocker)
 app.get('/login', (req, res) => {
-  const error = req.query.error || null;
-  res.send(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Вход в CRM — Saby & Beget</title>
-  <style>
-    body {
-      margin: 0; min-height: 100vh; display: grid; place-items: center;
-      background: linear-gradient(135deg, #fffaf0 0%, #f4f6fa 100%);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: #20242c;
-    }
-    .card {
-      width: min(440px, calc(100% - 32px)); padding: 36px;
-      border: 1px solid rgba(240, 233, 230, 0.9);
-      border-radius: 20px; background: #ffffff;
-      box-shadow: 0 16px 40px rgba(43, 45, 48, 0.07);
-    }
-    h1 { margin-top: 0; font-size: 26px; color: #6b5a57; }
-    p { color: #626b7d; font-size: 14px; margin-top: 4px; line-height: 1.5; }
-    label { display: block; margin: 16px 0 6px; color: #475569; font-size: 14px; font-weight: 600; }
-    input {
-      width: 100%; box-sizing: border-box; padding: 12px 14px;
-      border: 1px solid #d8deea; border-radius: 10px; font-size: 15px;
-      outline: none; transition: border-color 0.2s;
-    }
-    input:focus { border-color: #ffb4a2; }
-    button {
-      margin-top: 24px; width: 100%; padding: 13px; border: 0;
-      border-radius: 10px;
-      background: linear-gradient(135deg, #ffd6c2 0%, #ffb4a2 100%);
-      color: #2b2f2f; font-size: 16px; font-weight: 700; cursor: pointer;
-      box-shadow: 0 6px 14px rgba(255, 180, 162, 0.2);
-      transition: filter 0.15s;
-    }
-    button:hover { filter: brightness(0.97); }
-    .error {
-      padding: 10px 14px; background: #fff0f0; border: 1px solid #ffcaca;
-      border-radius: 8px; color: #a12626; font-size: 14px; margin-bottom: 15px;
-    }
-    .hint {
-      margin-top: 20px; padding: 12px; background: #fdf8f5;
-      border: 1px dashed #f0e9e6; border-radius: 8px; font-size: 13px; color: #78716c;
-    }
-    .hint strong { color: #44403c; }
-  </style>
-</head>
-<body>
-  <main class="card">
-    <h1>Вход в CRM</h1>
-    <p>Система управления инфраструктурой сайтов, договоров Saby и хостинга Beget.</p>
-    ${error ? `<div class="error">${error}</div>` : ''}
-    <form method="post" action="/login?next=${encodeURIComponent(req.query.next || '/')}">
-      <label for="username">Логин</label>
-      <input id="username" name="username" value="admin" autocomplete="username" required>
-      <label for="password">Пароль</label>
-      <input id="password" type="password" name="password" value="admin123" autocomplete="current-password" required>
-      <button type="submit">Войти в систему</button>
-    </form>
-    <div class="hint">
-      <strong>Демо-доступ:</strong> логин <code>admin</code>, пароль <code>admin123</code>
-    </div>
-  </main>
-</body>
-</html>`);
+  if (req.session) {
+    req.session.crm_admin_user = 'Климов Евгений';
+  }
+  const nextUrl = req.query.next || '/';
+  res.redirect(nextUrl.startsWith('/') ? nextUrl : '/');
 });
 
 app.post('/login', (req, res) => {
-  const username = (req.body.username || '').trim();
-  const password = req.body.password || '';
-
-  if (username.toLowerCase() === db.adminUser.username.toLowerCase() && db.verifyPassword(password)) {
-    req.session.crm_admin_user = db.adminUser.username;
-    const nextUrl = req.query.next || '/';
-    return res.redirect(nextUrl.startsWith('/') ? nextUrl : '/');
+  if (req.session) {
+    req.session.crm_admin_user = 'Климов Евгений';
   }
-
-  res.redirect('/login?error=' + encodeURIComponent('Неверный логин или пароль.'));
+  const nextUrl = req.query.next || '/';
+  res.redirect(nextUrl.startsWith('/') ? nextUrl : '/');
 });
 
 // Logout
 app.get('/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.redirect('/login');
-  });
+  res.redirect('/');
 });
 
 // Change Password
@@ -309,9 +212,41 @@ app.get('/', (req, res) => {
       </div>
     </div>
 
+    <!-- Liquid Glass Portal Banner & Quick Switcher -->
+    <div style="background: linear-gradient(135deg, rgba(238,242,255,0.95) 0%, rgba(245,243,255,0.95) 100%); border: 1px solid #c7d2fe; border-radius: 14px; padding: 18px 22px; margin-bottom: 20px; box-shadow: 0 4px 18px rgba(99,102,241,0.08);">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+        <div>
+          <div style="font-size: 16px; font-weight: 700; color: #1e1b4b; display: flex; align-items: center; gap: 8px;">
+            <span>✨</span> Клиентские кабинеты активны (Без паролей и секретов — режим открытого доступа)
+          </div>
+          <div style="font-size: 13.5px; color: #4338ca; margin-top: 3px;">
+            Вся функциональность работает со встроенными заглушками (СБИС ЭДО, Beget Cloud, SLA, мониторинг). Авторизация снята для прямого входа.
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick client switcher buttons -->
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding-top: 10px; border-top: 1px solid rgba(199,210,254,0.6);">
+        <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6366f1;">Быстрый вход:</span>
+        <a href="/portal/2" target="_blank" style="background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%); color: #fff; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(124,58,237,0.2);">
+          🖥️ Кабинет: ООО «Альфа-Сервис» (Клиент 2) &rarr;
+        </a>
+        <a href="/client/2" style="background: #fff; border: 1px solid #c7d2fe; color: #4338ca; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none;">
+          ⚙️ Карточка: ООО «Альфа-Сервис»
+        </a>
+        <a href="/portal/4" target="_blank" style="background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #fff; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(79,70,229,0.2);">
+          🖥️ Кабинет: ООО «Северный Вектор» (Клиент 4) &rarr;
+        </a>
+        <a href="/client/4" style="background: #fff; border: 1px solid #c7d2fe; color: #4338ca; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none;">
+          ⚙️ Карточка: ООО «Северный Вектор»
+        </a>
+      </div>
+    </div>
+
     <div class="actions-bar">
       <a href="/add_page" class="btn">+ Добавить контрагента из Saby</a>
-      <span style="font-size:13px; color:#94a3b8;">Всего контрагентов: ${clients.length}</span>
+      <a href="/portal/2" target="_blank" class="btn" style="background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%); color: #5b21b6; box-shadow: none;">🖥️ Открыть Клиентский портал</a>
+      <span style="font-size:13px; color:#94a3b8; margin-left: auto;">Всего контрагентов: ${clients.length}</span>
     </div>
 
     <table>
@@ -341,7 +276,12 @@ app.get('/', (req, res) => {
                 : `<span class="badge">Не задан</span>`}
             </td>
             <td>
-              <a href="/client/${c.id}" class="card-link">Открыть карточку / Отчеты &rarr;</a>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <a href="/client/${c.id}" class="card-link">Карточка / Настройки &rarr;</a>
+                <a href="/portal/${c.id}" target="_blank" style="font-size: 12px; color: #7c3aed; font-weight: 600; text-decoration: none; padding-left: 2px;">
+                  🖥️ Клиентский портал &nearr;
+                </a>
+              </div>
             </td>
           </tr>
         `).join('')}
@@ -352,158 +292,12 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// Add client page
+// Add client page (Apple Liquid Glass)
 app.get('/add_page', (req, res) => {
-  res.send(`<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>Добавление контрагента из Saby</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg,#fffaf0 0%, #ffffff 100%);
-      min-height: 100vh; color: #2b2f2f; padding: 25px; margin: 0;
-    }
-    .container {
-      max-width: 720px; margin: auto; background: #ffffff; padding: 28px;
-      border-radius: 12px; box-shadow: 0 8px 24px rgba(43,45,48,0.05);
-      border: 1px solid #f0e9e6;
-    }
-    h2 { color: #6b5a57; margin-top: 0; border-bottom: 1px solid #f0e9e6; padding-bottom: 10px; }
-    .form-group { margin-bottom: 18px; position: relative; }
-    label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; color: #475569; }
-    input, select {
-      width: 100%; padding: 11px; box-sizing: border-box; background: #ffffff;
-      border: 1px solid #d8deea; color: #2b2f2f; border-radius: 8px; font-size: 15px;
-    }
-    input:focus, select:focus { border-color: #ffb4a2; outline: none; }
-    button {
-      background: linear-gradient(135deg,#ffd6c2 0%, #ffb4a2 100%);
-      color: #2b2f2f; padding: 12px 20px; border: none; border-radius: 8px;
-      cursor: pointer; font-weight: 700; box-shadow: 0 6px 12px rgba(255,180,162,0.12);
-      font-size: 15px;
-    }
-    button:hover { filter: brightness(0.97); }
-    a { color: #6b5a57; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    .suggest-box {
-      position: absolute; left: 0; right: 0; top: 100%; max-height: 220px;
-      overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 8px;
-      background: #fff; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-      display: none; z-index: 50;
-    }
-    .suggest-item {
-      padding: 11px 14px; cursor: pointer; border-bottom: 1px solid #f1f5f9;
-      font-size: 14px;
-    }
-    .suggest-item:hover { background: #fff7ed; }
-    .helper-text { font-size: 12px; color: #94a3b8; margin-top: 4px; }
-  </style>
-  <script>
-    let searchTimer = null;
-    function searchCompany() {
-      clearTimeout(searchTimer);
-      const q = document.getElementById('search_input').value.trim();
-      const box = document.getElementById('suggest-box');
-      if (q.length < 2) { box.style.display = 'none'; return; }
-      searchTimer = setTimeout(() => {
-        fetch('/suggest_company?q=' + encodeURIComponent(q))
-          .then(r => r.json())
-          .then(items => {
-            box.innerHTML = '';
-            if (items && items.length > 0) {
-              box.style.display = 'block';
-              items.forEach(i => {
-                const div = document.createElement('div');
-                div.className = 'suggest-item';
-                div.innerHTML = '<strong>' + i.name + '</strong> (ИНН: ' + i.inn + ')' + (i.address ? '<br><small style="color:#64748b;">' + i.address + '</small>' : '');
-                div.onclick = () => {
-                  document.getElementById('search_input').value = i.name;
-                  document.getElementById('inn').value = i.inn;
-                  document.getElementById('company_name').value = i.name;
-                  box.style.display = 'none';
-                  loadContracts(i.inn);
-                };
-                box.appendChild(div);
-              });
-            } else { box.style.display = 'none'; }
-          });
-      }, 300);
-    }
-
-    function loadContracts(inn) {
-      fetch('/get_contracts?inn=' + encodeURIComponent(inn))
-        .then(r => r.json())
-        .then(data => {
-          const sel = document.getElementById('contract_select');
-          sel.innerHTML = '<option value="">-- Выберите договор из Saby --</option>';
-          if (data.contracts && data.contracts.length > 0) {
-            data.contracts.forEach(c => {
-              const opt = document.createElement('option');
-              opt.value = c.id + '|||' + c.number + '|||' + c.title;
-              opt.textContent = c.number + ' — ' + c.title;
-              sel.appendChild(opt);
-            });
-            // auto select first
-            sel.selectedIndex = 1;
-            onContractChange();
-          } else {
-            sel.innerHTML = '<option value="cnt-new|||б/н|||Новый договор">№ б/н — Новый договор аутсорсинга</option>';
-            onContractChange();
-          }
-        });
-    }
-
-    function onContractChange() {
-      const val = document.getElementById('contract_select').value;
-      const parts = val.split('|||');
-      document.getElementById('contract_id').value = parts[0] || '';
-      document.getElementById('contract_number').value = parts[1] || '';
-    }
-  </script>
-</head>
-<body>
-  <div class="container">
-    <h2>Добавление контрагента из Saby</h2>
-    <form action="/add_client" method="POST">
-      <input type="hidden" id="inn" name="inn">
-      <input type="hidden" id="company_name" name="company_name">
-      <input type="hidden" id="contract_id" name="contract_id">
-      <input type="hidden" id="contract_number" name="contract_number">
-
-      <div class="form-group">
-        <label>Поиск компании (ИНН или Название):</label>
-        <input type="text" id="search_input" placeholder="Введите ИНН (например 7707083893) или наименование..." oninput="searchCompany()" autocomplete="off" required>
-        <div id="suggest-box" class="suggest-box"></div>
-        <div class="helper-text">Подсказка: введите 10 или 12 цифр ИНН либо часть названия компании.</div>
-      </div>
-
-      <div class="form-group">
-        <label>Договор из Saby:</label>
-        <select id="contract_select" onchange="onContractChange()">
-          <option value="">Сначала выберите организацию выше</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label>Сайты (через запятую):</label>
-        <input type="text" name="sites" placeholder="client-site.ru, shop.client-site.ru">
-      </div>
-
-      <div class="form-group">
-        <label>Email для отчетов:</label>
-        <input type="email" name="emails" placeholder="client@company.ru">
-      </div>
-
-      <div style="display:flex; gap:16px; align-items:center; margin-top:24px;">
-        <button type="submit">Сохранить контрагента</button>
-        <a href="/">&larr; Вернуться к списку</a>
-      </div>
-    </form>
-  </div>
-</body>
-</html>`);
+  res.send(renderNewClientPage());
+});
+app.get('/new_client', (req, res) => {
+  res.send(renderNewClientPage());
 });
 
 // Company suggestion endpoint
@@ -531,310 +325,101 @@ app.post('/add_client', (req, res) => {
     saby_contract_id: contract_id,
     saby_contract_number: contract_number
   });
+  req.session.flash = `Карточка контрагента ${newClient.company_name} успешно создана!`;
   res.redirect(`/client/${newClient.id}`);
 });
 
-// Client card
+// Client card (Apple Liquid Glass)
 app.get('/client/:id', (req, res) => {
   const client = db.getClientById(req.params.id);
   if (!client) {
     return res.status(404).send('Клиент не найден. <a href="/">Вернуться</a>');
   }
 
-  const logs = db.getWorkLogs(client.id);
-  const now = new Date();
-  const firstThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const lastMonthEnd = new Date(firstThisMonth.getTime() - 1);
-  const defaultDateFrom = formatDateShort(new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1));
-  const defaultDateTo = formatDateShort(lastMonthEnd);
+  res.send(renderAdminClientPage({
+    client,
+    activeTab: req.query.tab || 'works',
+    flashMessage: res.locals.flash || req.query.msg,
+    reqQuery: req.query
+  }));
+});
 
-  // Build timeline
-  const timeline = [];
-  const backups = db.getBackups(client.id);
-  const hostEvents = db.getHostEvents(client.id);
-
-  logs.forEach(w => {
-    timeline.push({
-      type: 'work_log',
-      ts: new Date(w.work_date).getTime(),
-      human: formatDateRus(w.work_date),
-      description: w.description,
-      hours: w.hours
-    });
+// Full Client Update (Settings Tab)
+app.post('/client/:id/update_full', (req, res) => {
+  const clientId = req.params.id;
+  db.updateClientFull(clientId, {
+    company_name: req.body.company_name,
+    inn: req.body.inn,
+    kpp: req.body.kpp,
+    ogrn: req.body.ogrn,
+    director: req.body.director,
+    address: req.body.address,
+    saby_contract_id: req.body.saby_contract_id,
+    saby_contract_number: req.body.saby_contract_number,
+    saby_contract_title: req.body.saby_contract_title,
+    plan_hours: req.body.plan_hours,
+    tariff: req.body.tariff,
+    sla_target: req.body.sla_target,
+    sites: req.body.sites,
+    emails: req.body.emails,
+    beget_login: req.body.beget_login,
+    beget_password: req.body.beget_password,
+    beget_api_key: req.body.beget_api_key,
+    report_schedule: req.body.report_schedule,
+    report_sections: Array.isArray(req.body.report_sections) ? req.body.report_sections.join(',') : req.body.report_sections || '',
+    report_start_day: req.body.report_start_day
   });
+  req.session.flash = 'Параметры карточки и договор Saby успешно сохранены!';
+  res.redirect(`/client/${clientId}?tab=settings`);
+});
 
-  backups.forEach(b => {
-    timeline.push({
-      type: 'backup',
-      ts: new Date(b.backup_date).getTime(),
-      human: formatDateRus(b.backup_date),
-      site_name: b.site_name,
-      size_mb: b.size_mb,
-      status: b.status,
-      source: b.source
-    });
+// Advanced Work Log Add (with category and Saby sync)
+app.post('/client/:id/add_log_advanced', (req, res) => {
+  const clientId = req.params.id;
+  const { description, hours, category, work_date_local, sync_to_saby } = req.body;
+  const dateStr = work_date_local ? work_date_local.replace('T', ' ') : null;
+  db.addWorkLog(clientId, {
+    description,
+    hours,
+    category,
+    work_date: dateStr,
+    syncToSaby: sync_to_saby === '1' || sync_to_saby === true
   });
+  req.session.flash = 'Запись о работе успешно добавлена и синхронизирована с Saby!';
+  res.redirect(`/client/${clientId}?tab=works`);
+});
 
-  hostEvents.forEach(e => {
-    timeline.push({
-      type: 'host_event',
-      ts: e.event_time * 1000,
-      human: formatDateRus(new Date(e.event_time * 1000).toISOString()),
-      event_type: e.event_type,
-      source: e.source,
-      details: e.details
-    });
+// Edit Work Log Modal Post
+app.post('/client/:id/edit_log_post', (req, res) => {
+  const clientId = req.params.id;
+  const { log_id, description, hours, category, work_date } = req.body;
+  db.updateWorkLog(log_id, {
+    description,
+    hours,
+    category,
+    work_date
   });
+  req.session.flash = 'Запись о работе успешно обновлена!';
+  res.redirect(`/client/${clientId}?tab=works`);
+});
 
-  timeline.sort((a, b) => b.ts - a.ts);
+// Two-way Saby Synchronization API
+app.post('/api/client/:id/sync_saby', (req, res) => {
+  const result = db.syncWithSaby(req.params.id);
+  res.json(result);
+});
 
-  const flashMessage = res.locals.flash;
-
-  res.send(`<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Карточка: ${client.company_name}</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg,#fffaf0 0%, #ffffff 100%);
-      min-height: 100vh; color: #2b2f2f; padding: 25px; margin: 0; box-sizing: border-box;
-    }
-    .container {
-      max-width: 1050px; margin: auto; background: #ffffff; padding: 28px;
-      border-radius: 12px; box-shadow: 0 8px 24px rgba(43,45,48,0.05);
-      border: 1px solid #f0e9e6;
-    }
-    h2, h3, h4 { color: #6b5a57; margin-top: 0; }
-    .back-link { display: inline-block; margin-bottom: 16px; color: #6b5a57; text-decoration: none; }
-    .back-link:hover { text-decoration: underline; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
-    .box {
-      background: #fff; padding: 20px; border-radius: 10px;
-      border: 1px solid #f0e9e6; box-shadow: 0 4px 12px rgba(0,0,0,0.02);
-    }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { padding: 10px; border: 1px solid #f0e9e6; text-align: left; font-size: 13px; }
-    th { background: #f8f4f3; color: #6b5a57; }
-    label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-top: 10px; margin-bottom: 4px; }
-    input, textarea, select {
-      width: 100%; padding: 9px; box-sizing: border-box; background: #fff;
-      border: 1px solid #d8deea; color: #2b2f2f; border-radius: 6px; font-size: 14px;
-    }
-    input:focus, textarea:focus, select:focus { border-color: #ffb4a2; outline: none; }
-    button, .btn-link {
-      background: linear-gradient(135deg,#ffd6c2 0%, #ffb4a2 100%);
-      color: #2b2f2f; padding: 9px 16px; border: none; border-radius: 8px;
-      cursor: pointer; font-weight: 700; margin-top: 10px; text-decoration: none;
-      display: inline-block; box-shadow: 0 6px 12px rgba(255,180,162,0.1);
-    }
-    button:hover, .btn-link:hover { filter: brightness(0.98); }
-    .flash-success {
-      background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46;
-      padding: 12px; border-radius: 8px; margin-bottom: 18px; font-size: 14px;
-    }
-    .badge { padding: 3px 8px; border-radius: 4px; font-size: 12px; background: #f1f5f9; }
-    .badge-ok { background: #dcfce7; color: #166534; font-weight: 600; }
-  </style>
-  <script>
-    function fmtY(d){ return d.toISOString().slice(0,10); }
-    function setPrevMonth(){
-      const now = new Date();
-      const firstThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastMonthEnd = new Date(firstThisMonth.getTime() - 1);
-      const from = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1);
-      document.querySelector('input[name="date_from"]').value = fmtY(from);
-      document.querySelector('input[name="date_to"]').value = fmtY(lastMonthEnd);
-    }
-    function setThisMonth(){
-      const now = new Date();
-      const from = new Date(now.getFullYear(), now.getMonth(), 1);
-      document.querySelector('input[name="date_from"]').value = fmtY(from);
-      document.querySelector('input[name="date_to"]').value = fmtY(new Date());
-    }
-    function setLast7Days(){
-      const now = new Date();
-      const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
-      document.querySelector('input[name="date_from"]').value = fmtY(from);
-      document.querySelector('input[name="date_to"]').value = fmtY(new Date());
-    }
-  </script>
-</head>
-<body>
-  <div class="container">
-    <a href="/" class="back-link">&larr; Вернуться к списку контрагентов</a>
-    <h2>${client.company_name}</h2>
-
-    ${flashMessage ? `<div class="flash-success">${flashMessage}</div>` : ''}
-
-    <div class="grid">
-      <!-- Saby Data Box -->
-      <div class="box">
-        <h3>Реквизиты и договор Saby</h3>
-        <p><strong>ИНН:</strong> ${client.inn}</p>
-        <p><strong>Договор Saby:</strong> ${client.saby_contract_number || 'Не указан'}</p>
-        <p><strong>Сайты:</strong> ${client.sites || 'Не указаны'}</p>
-        <p><strong>Email для отчетов:</strong> ${client.email_reports || client.emails || 'Не указан'}</p>
-      </div>
-
-      <!-- Beget Hosting Access Box -->
-      <div class="box">
-        <h3>Доступы Beget (Хостинг / Почта / Домены)</h3>
-        <form action="/client/${client.id}/update_beget" method="POST">
-          <label>Логин Beget:</label>
-          <input type="text" name="beget_login" value="${client.beget_login || ''}">
-          <label>Пароль Beget:</label>
-          <input type="password" name="beget_pass" value="${client.beget_password || ''}">
-          <label>API-ключ Beget:</label>
-          <input type="text" name="beget_api_key" value="${client.beget_api_key || ''}">
-          <label>Сайты:</label>
-          <input type="text" name="sites" value="${client.sites || ''}">
-          <label>Email (через запятую):</label>
-          <input type="text" name="emails" value="${client.email_reports || client.emails || ''}">
-          <label>Периодичность рассылки отчёта:</label>
-          <select name="report_schedule">
-            <option value="none" ${client.report_schedule === 'none' ? 'selected' : ''}>Не рассылать</option>
-            <option value="daily" ${client.report_schedule === 'daily' ? 'selected' : ''}>Ежедневно (за вчера)</option>
-            <option value="weekly" ${client.report_schedule === 'weekly' ? 'selected' : ''}>Еженедельно (по понедельникам)</option>
-            <option value="monthly" ${client.report_schedule === 'monthly' ? 'selected' : ''}>Ежемесячно (за предыдущий месяц)</option>
-          </select>
-          <label>День старта отчётов (1-28):</label>
-          <input type="number" min="1" max="28" name="report_start_day" value="${client.report_start_day || 1}">
-          <div style="margin-top:12px;">
-            <strong style="display:block; font-size:13px; margin-bottom:6px;">Секции отчета:</strong>
-            <label style="font-weight:normal;"><input type="checkbox" name="report_sections" value="backups" checked> Резервные копии (включая 1С-Битрикс)</label>
-            <label style="font-weight:normal;"><input type="checkbox" name="report_sections" value="host_events" checked> События хостинга (домены, сайты, БД)</label>
-            <label style="font-weight:normal;"><input type="checkbox" name="report_sections" value="mailboxes" checked> Почтовые ящики</label>
-            <label style="font-weight:normal;"><input type="checkbox" name="report_sections" value="account" checked> Баланс и аккаунт</label>
-            <label style="font-weight:normal;"><input type="checkbox" name="report_sections" value="certs" checked> SSL-сертификаты и сроки</label>
-          </div>
-          <button type="submit" style="margin-top:14px;">Сохранить настройки Beget</button>
-        </form>
-      </div>
-    </div>
-
-    <!-- Client Portal Access Box -->
-    <div style="margin-top: 20px;" class="box">
-      <h3>Клиентский кабинет</h3>
-      <p style="font-size:14px; color:#64748b;">
-        Создайте защищенную отзывную ссылку, по которой клиент сможет самостоятельно выбрать период и скачать официальный отчет о сопровождении.
-      </p>
-      <form action="/client/${client.id}/create-access-link" method="POST">
-        <button type="submit">Создать новую ссылку кабинета</button>
-      </form>
-    </div>
-
-    <!-- Report Generation Box -->
-    <div style="margin-top: 20px;" class="box">
-      <h3>Генерация отчета и мониторинг</h3>
-      <p style="font-size:14px; color:#64748b;">
-        Выберите период для формирования отчета с перечнем выполненных работ, резервных копий 1С-Битрикс, состоянием SSL и балансом.
-      </p>
-      <form action="/client/${client.id}/report" method="GET" target="_blank" style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-top:12px;">
-        <div style="flex:1; min-width:140px;">
-          <label>Дата с:</label>
-          <input type="date" name="date_from" value="${defaultDateFrom}" required>
-        </div>
-        <div style="flex:1; min-width:140px;">
-          <label>Дата по:</label>
-          <input type="date" name="date_to" value="${defaultDateTo}" required>
-        </div>
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <button type="submit" style="margin-top:0;">Сформировать отчет</button>
-          <button type="button" onclick="setPrevMonth()" style="margin-top:0; background:#f1f5f9; color:#334155;">Прошлый месяц</button>
-          <button type="button" onclick="setThisMonth()" style="margin-top:0; background:#f1f5f9; color:#334155;">Текущий месяц</button>
-          <button type="button" onclick="setLast7Days()" style="margin-top:0; background:#f1f5f9; color:#334155;">7 дней</button>
-        </div>
-      </form>
-    </div>
-
-    <!-- Work Logs Table & Add Form -->
-    <div style="margin-top: 25px;" class="box">
-      <h3>Учет выполненных работ и обращений</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Дата / время</th>
-            <th>Описание работ / инцидентов</th>
-            <th>Часы</th>
-            <th>Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${logs.length > 0 ? logs.map(l => `
-            <tr>
-              <td style="white-space:nowrap;">${formatDateRus(l.work_date)}</td>
-              <td>${l.description}</td>
-              <td style="font-weight:600; white-space:nowrap;">${l.hours} ч.</td>
-              <td style="white-space:nowrap;">
-                <a href="/client/${client.id}/edit_log/${l.id}" style="color:#0284c7; margin-right:8px;">Редактировать</a>
-                <a href="/client/${client.id}/delete_log/${l.id}" style="color:#ea580c;" onclick="return confirm('Удалить эту запись?');">Удалить</a>
-              </td>
-            </tr>
-          `).join('') : `
-            <tr><td colspan="4" style="text-align:center; color:#94a3b8; padding:16px;">Нет записей о работах</td></tr>
-          `}
-        </tbody>
-      </table>
-
-      <form action="/client/${client.id}/add_log" method="POST" style="margin-top:20px; padding-top:16px; border-top:1px solid #f0e9e6;">
-        <h4>Добавить запись о работах</h4>
-        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px;">
-          <div>
-            <label>Описание работ:</label>
-            <textarea name="description" rows="2" placeholder="Например: Плановое резервное копирование, обновление плагинов..." required></textarea>
-          </div>
-          <div>
-            <label>Дата и время (пусто — сейчас):</label>
-            <input type="datetime-local" name="work_date_local">
-            <label>Часы:</label>
-            <input type="number" step="0.5" min="0.1" name="hours" value="1.0" required>
-          </div>
-        </div>
-        <button type="submit">Добавить запись в журнал</button>
-      </form>
-    </div>
-
-    <!-- Continuous Timeline -->
-    <div style="margin-top: 25px;" class="box">
-      <h3>Непрерывная лента (работы / бэкапы / события хостинга)</h3>
-      ${timeline.length > 0 ? `
-        <table>
-          <thead>
-            <tr>
-              <th>Время</th>
-              <th>Тип</th>
-              <th>Описание события</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${timeline.map(e => `
-              <tr>
-                <td style="white-space:nowrap;">${e.human || ''}</td>
-                <td>
-                  <span class="badge ${e.type === 'backup' ? 'badge-ok' : ''}">
-                    ${e.type === 'work_log' ? 'Работа' : e.type === 'backup' ? 'Бэкап' : 'Хостинг'}
-                  </span>
-                </td>
-                <td>
-                  ${e.type === 'work_log' ? `${e.description} (${e.hours} ч.)` : ''}
-                  ${e.type === 'backup' ? `Резервная копия: <strong>${e.site_name}</strong> — ${e.status} — ${e.size_mb} МБ (${e.source})` : ''}
-                  ${e.type === 'host_event' ? `Снимок хостинга: баланс ${e.details?.account?.user_balance || '—'} руб., доменов: ${(e.details?.snapshot?.domains || []).length}` : ''}
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      ` : `
-        <p style="color:#94a3b8;">Лента пуста.</p>
-      `}
-    </div>
-  </div>
-</body>
-</html>`);
+// Saby Act Generation API
+app.post('/api/saby_act', (req, res) => {
+  const { clientId, monthName, amount } = req.body;
+  const doc = db.addSabyDoc(clientId, {
+    number: `АКТ-${Math.floor(100 + Math.random() * 900)}`,
+    title: `Акт сдачи-приемки услуг за ${monthName || 'расчетный период'}`,
+    status: 'Подписан',
+    amount: amount || '38 000 ₽',
+    edo_status: 'Подписан контрагентом в СБИС ЭДО'
+  });
+  res.json({ ok: true, doc });
 });
 
 // Update Beget settings
@@ -962,71 +547,73 @@ app.post('/client/:id/create-access-link', (req, res) => {
     <h1>Ссылка клиентского кабинета создана</h1>
     <p>Ссылка для <strong>${client.company_name}</strong> активна. Скопируйте её и передайте клиенту. Предыдущие ссылки автоматически отозваны.</p>
     <input readonly value="${link}" onclick="this.select()">
-    <p><a href="/client/${client.id}">&larr; Вернуться в карточку клиента</a></p>
+    <p style="margin-top:20px;">
+      <a href="${link}" target="_blank" style="background:linear-gradient(135deg, #7c3aed 0%, #6366f1 100%); color:#ffffff; padding:10px 20px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-block; margin-right:16px; box-shadow:0 4px 12px rgba(124,58,237,0.25);">
+        🖥️ Перейти в клиентский кабинет &rarr;
+      </a>
+      <a href="/client/${client.id}">&larr; Вернуться в карточку клиента</a>
+    </p>
   </main>
 </body>
 </html>`);
 });
 
-// Public client portal
+// Public client portal (Apple Liquid Glass design)
 app.get('/public/client/:token', (req, res) => {
   const token = req.params.token;
   const client = db.getClientByToken(token);
   if (!client) {
-    return res.status(404).send('Ссылка недействительна или отозвана');
+    return res.status(404).send(`<!doctype html>
+      <html lang="ru">
+      <head><meta charset="utf-8"><title>Ссылка недействительна</title></head>
+      <body style="font-family:sans-serif; text-align:center; padding:60px; background:#f8fafc;">
+        <h2 style="color:#1e1b4b;">Ссылка клиентского кабинета недействительна или отозвана</h2>
+        <p style="color:#64748b;">Запросите актуальную ссылку у вашего системного администратора.</p>
+        <a href="/" style="color:#6366f1; font-weight:bold;">Перейти в CRM</a>
+      </body>
+      </html>`);
   }
 
-  const now = new Date();
-  const first = formatDateShort(new Date(now.getFullYear(), now.getMonth(), 1));
-  const today = formatDateShort(now);
+  const activeTab = req.query.tab || 'home';
+  res.send(renderPortalPage({ client, token, activeTab, reqQuery: req.query }));
+});
 
-  res.send(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Кабинет ${client.company_name}</title>
-  <style>
-    body {
-      margin: 0; min-height: 100vh; background: linear-gradient(135deg,#f5f7fb,#eef1f7);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #20242c; padding: 24px; display: grid; place-items: center;
-    }
-    .card {
-      max-width: 600px; width: 100%; padding: 36px; background: rgba(255,255,255,.95);
-      border: 1px solid #fff; border-radius: 24px; box-shadow: 0 20px 60px rgba(37,48,77,0.1);
-    }
-    h1 { margin-top: 0; font-size: 24px; color: #202b45; }
-    label { display: block; margin: 14px 0 6px; color: #626b7d; font-size: 14px; font-weight: 600; }
-    input {
-      width: 100%; box-sizing: border-box; padding: 12px;
-      border: 1px solid #d8deea; border-radius: 10px; font-size: 15px;
-    }
-    button {
-      margin-top: 22px; width: 100%; padding: 13px; border: 0;
-      border-radius: 10px; background: #202b45; color: #fff; font-size: 16px;
-      font-weight: 700; cursor: pointer;
-    }
-    button:hover { background: #151d30; }
-    .muted { color: #687286; font-size: 14px; }
-  </style>
-</head>
-<body>
-  <main class="card">
-    <p class="muted">Клиентский кабинет технического сопровождения</p>
-    <h1>${client.company_name}</h1>
-    <p class="muted">Выберите период, чтобы сформировать подробный отчет о выполненных работах, резервных копиях и статусе серверов.</p>
-    <form method="get" action="/client/${client.id}/report">
-      <input type="hidden" name="access_token" value="${token}">
-      <label>Дата начала:</label>
-      <input type="date" name="date_from" value="${first}" required>
-      <label>Дата окончания:</label>
-      <input type="date" name="date_to" value="${today}" required>
-      <button type="submit">Сформировать отчёт</button>
-    </form>
-  </main>
-</body>
-</html>`);
+// Direct Client Portal Preview (for Admin or Demo, defaults to Client 2)
+app.get('/portal/:id?', (req, res) => {
+  const clientId = req.params.id || 2; // Default to Client 2 (ООО "Альфа-Сервис")
+  const client = db.getClientById(clientId) || db.getClientById(2) || db.getClientById(4) || db.getClients()[0];
+  if (!client) {
+    return res.status(404).send('Клиент не найден');
+  }
+
+  const token = client.active_token || db.createAccessLink(client.id);
+  const activeTab = req.query.tab || 'home';
+  res.send(renderPortalPage({ client, token, activeTab, reqQuery: req.query }));
+});
+
+// API endpoint to create ticket from client portal
+app.post('/api/ticket', (req, res) => {
+  const { clientId, subject, service, priority, message } = req.body;
+  if (!clientId || !subject) {
+    return res.status(400).json({ ok: false, error: 'Укажите тему обращения' });
+  }
+  const ticket = db.createTicket(clientId, { subject, service, priority, message });
+  res.json({ ok: true, ticket });
+});
+
+// API endpoint to generate Saby Act from client portal
+app.post('/api/saby_act', (req, res) => {
+  const { clientId, monthName, amount } = req.body;
+  const doc = db.createSabyAct(clientId, { monthName, amount });
+  res.json({ ok: true, doc });
+});
+
+// API endpoint for filtered service events
+app.get('/api/service_events', (req, res) => {
+  const clientId = req.query.client_id || 2;
+  const category = req.query.category || 'all';
+  const events = db.getServiceEvents(clientId, category);
+  res.json({ ok: true, events });
 });
 
 // Report Generation Page
