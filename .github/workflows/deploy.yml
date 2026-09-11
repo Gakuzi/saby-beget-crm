@@ -47,8 +47,11 @@ jobs:
 
       - name: Check deployment secrets
         id: check_secrets
+        env:
+          HAS_SERVER_HOST: ${{ secrets.SERVER_HOST != '' }}
+          HAS_SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY != '' }}
         run: |
-          if [ -n "${{ secrets.SERVER_HOST }}" ] && [ -n "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+          if [ "$HAS_SERVER_HOST" = "true" ] && [ "$HAS_SSH_KEY" = "true" ]; then
             echo "can_deploy=true" >> "$GITHUB_OUTPUT"
             echo "Secrets configured. Proceeding with remote deployment to ${{ env.DEPLOY_TARGET }}."
           else
