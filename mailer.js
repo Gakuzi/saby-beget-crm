@@ -20,13 +20,26 @@ class MailerService {
     if (!nm) return null;
 
     const raw = settingsManager.getRawSettings();
-    const host = overrideConfig?.smtp_host || raw.smtp_host || process.env.SMTP_HOST || 'smtp.beget.com';
+    const host = (overrideConfig?.smtp_host || raw.smtp_host || process.env.SMTP_HOST || 'smtp.beget.com').trim();
     const port = parseInt(overrideConfig?.smtp_port || raw.smtp_port || process.env.SMTP_PORT || 465, 10);
-    const secure = overrideConfig?.smtp_secure !== undefined 
-      ? overrideConfig.smtp_secure 
-      : (port === 465);
-    const user = overrideConfig?.smtp_user || raw.smtp_user || process.env.SMTP_USER || '';
-    const pass = overrideConfig?.smtp_password || raw.smtp_password || process.env.SMTP_PASSWORD || '';
+    
+    // In overrideConfig or raw settings: explicit secure flag or default by port (465 = SSL, 587/25 = STARTTLS)
+    let secure = port === 465;
+    if (overrideConfig?.smtp_secure !== undefined && overrideConfig?.smtp_secure !== '') {
+      secure = overrideConfig.smtp_secure === true || overrideConfig.smtp_secure === 'true' || overrideConfig.smtp_secure === 1;
+    } else if (raw.smtp_secure !== undefined) {
+      secure = !!raw.smtp_secure;
+    }
+
+    const user = (overrideConfig?.smtp_user || raw.smtp_user || process.env.SMTP_USER || '').trim();
+
+    // CRITICAL FIX: If overrideConfig sends empty or masked password (e.g. •••••••• or ***), fall back to saved password
+    let pass = overrideConfig?.smtp_password;
+    if (!pass || String(pass).trim().startsWith('••••') || String(pass).includes('***')) {
+      pass = raw.smtp_password || process.env.SMTP_PASSWORD || '';
+    } else {
+      pass = String(pass).trim();
+    }
 
     if (!host || !user || !pass) {
       return null;
@@ -40,36 +53,56 @@ class MailerService {
       tls: {
         rejectUnauthorized: false
       },
-      connectionTimeout: 8000,
-      greetingTimeout: 8000
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000
     });
   }
 
   getFromAddress(overrideConfig = null) {
     const raw = settingsManager.getRawSettings();
-    const name = overrideConfig?.smtp_from_name || raw.smtp_from_name || process.env.SMTP_FROM_NAME || 'Евгений Климов | IT-сопровождение';
-    const email = overrideConfig?.smtp_from_email || raw.smtp_from_email || raw.smtp_user || process.env.SMTP_FROM_EMAIL || 'info@e-klimov.ru';
+    const user = (overrideConfig?.smtp_user || raw.smtp_user || process.env.SMTP_USER || 'info@e-klimov.ru').trim();
+    const name = (overrideConfig?.smtp_from_name || raw.smtp_from_name || process.env.SMTP_FROM_NAME || 'Евгений Климов | IT-сопровождение').trim();
+    
+    // For Beget and many hosting providers, from email MUST match the auth mailbox user unless specific alias is permitted
+    let email = (overrideConfig?.smtp_from_email || raw.smtp_from_email || '').trim();
+    if (!email || email.startsWith('••••') || email.includes('***')) {
+      email = user;
+    }
     return `"${name}" <${email}>`;
   }
 
   // Verify SMTP server credentials and optionally send test mail
   async testConnection(testToEmail = null, customConfig = null) {
+    const raw = settingsManager.getRawSettings();
     const transporter = await this.getTransporter(customConfig);
-    if (!transporter) {
+    
+    const host = (customConfig?.smtp_host || raw.smtp_host || 'smtp.beget.com').trim();
+    const port = parseInt(customConfig?.smtp_port || raw.smtp_port || 465, 10);
+    const user = (customConfig?.smtp_user || raw.smtp_user || '').trim();
+    let pass = customConfig?.smtp_password;
+    if (!pass || String(pass).startsWith('••••') || String(pass).includes('***')) {
+      pass = raw.smtp_password || '';
+    }
+
+    if (!host || !user || !pass) {
       return { 
         ok: false, 
-        error: 'Не заполнены обязательные параметры SMTP (сервер, логин или пароль) в настройках или библиотека nodemailer не загружена.' 
+        error: 'Не заполнены обязательные параметры SMTP (сервер, логин или пароль) в настройках.',
+        hint: 'Укажите хост сервера (например, smtp.beget.com), адрес почты и действующий пароль.'
       };
     }
 
     try {
+      // Step 1: Verify SMTP handshake and authentication
       await transporter.verify();
 
-      if (testToEmail) {
+      const targetEmail = (testToEmail || raw.admin_notify_email || user).trim();
+      if (targetEmail) {
         const from = this.getFromAddress(customConfig);
         const info = await transporter.sendMail({
           from,
-          to: testToEmail,
+          to: targetEmail,
           subject: '✓ Проверка почтового шлюза CRM | Евгений Климов',
           html: `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
@@ -78,20 +111,43 @@ class MailerService {
                 Это тестовое сообщение подтверждает, что основная почта настроена верно. Информационные письма, одноразовые коды входа для контактных лиц и уведомления по заявкам будут отправляться с этого адреса.
               </p>
               <div style="background: #f8fafc; padding: 14px 18px; border-radius: 8px; border-left: 4px solid #0284c7; font-size: 13.5px; color: #475569; margin: 18px 0;">
-                <strong>Отправитель:</strong> ${from}<br>
+                <strong>SMTP Сервер:</strong> ${host}:${port}<br>
+                <strong>Авторизованный ящик:</strong> ${user}<br>
+                <strong>Отправитель (From):</strong> ${from}<br>
+                <strong>Получатель:</strong> ${targetEmail}<br>
                 <strong>Дата отправки:</strong> ${new Date().toLocaleString('ru-RU')}
               </div>
               <p style="font-size: 13px; color: #94a3b8; margin-bottom: 0;">Saby & Beget CRM — Евгений Климов</p>
             </div>
           `
         });
-        return { ok: true, message: `Соединение с SMTP установлено, тестовое письмо отправлено на ${testToEmail}! (ID: ${info.messageId})` };
+        return { 
+          ok: true, 
+          message: `Соединение с SMTP установлено, проверочное письмо успешно отправлено на ${targetEmail}! (MessageId: ${info.messageId})` 
+        };
       }
 
-      return { ok: true, message: 'Соединение с SMTP-сервером успешно проверено (Ready to send).' };
+      return { ok: true, message: `Соединение с SMTP-сервером ${host}:${port} успешно проверено (Аутентификация пройдена).` };
     } catch (err) {
-      console.error('[Mailer] Ошибка проверки SMTP:', err.message);
-      return { ok: false, error: err.message };
+      console.error('[Mailer] Ошибка проверки SMTP:', err);
+      let hint = 'Проверьте реквизиты почты.';
+      const msg = err.message || '';
+
+      if (msg.includes('Invalid login') || msg.includes('535') || err.code === 'EAUTH') {
+        hint = `Сервер ${host} отклонил логин или пароль для ящика ${user}. Проверьте правильность пароля почтового ящика в панели хостинга Beget.`;
+      } else if (msg.includes('Sender address rejected') || msg.includes('553')) {
+        hint = `Хостинг требует, чтобы адрес отправителя (From) строго совпадал с ящиком авторизации (${user}).`;
+      } else if (err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED') {
+        hint = `Таймаут или сброс соединения к ${host}:${port}. Попробуйте сменить порт на 465 (SSL) или 587 (STARTTLS).`;
+      } else if (err.code === 'ESOCKET' || msg.includes('greeting')) {
+        hint = `Ошибка протокола TLS/SSL. Для порта 465 используйте SSL=Вкл, для 587 или 25 — SSL=Выкл.`;
+      }
+
+      return { 
+        ok: false, 
+        error: `${err.message} (${err.code || 'SMTP_ERR'})`,
+        hint
+      };
     }
   }
 

@@ -803,12 +803,27 @@ class CrmStore {
     if (data.bitrix_version !== undefined) client.credentials.bitrix_version = data.bitrix_version.trim();
     if (data.php_version !== undefined) client.credentials.php_version = data.php_version.trim();
 
-    // SSH & Database
+    // SSH, SFTP & Key
     if (data.ssh_host !== undefined) client.credentials.ssh_host = data.ssh_host.trim();
     if (data.ssh_port !== undefined) client.credentials.ssh_port = parseInt(data.ssh_port, 10) || 22;
     if (data.ssh_user !== undefined) client.credentials.ssh_user = data.ssh_user.trim();
     if (data.ssh_password !== undefined && data.ssh_password && !data.ssh_password.startsWith('••••')) {
       client.credentials.ssh_password = data.ssh_password.trim();
+    }
+    if (data.ssh_key !== undefined) {
+      // Don't overwrite with masked string
+      if (!data.ssh_key.startsWith('••••')) {
+        client.credentials.ssh_key = data.ssh_key.trim();
+      }
+    }
+    if (data.web_root_dir !== undefined) client.credentials.web_root_dir = data.web_root_dir.trim();
+    if (data.backup_token !== undefined) client.credentials.backup_token = data.backup_token.trim();
+
+    if (data.ftp_host !== undefined) client.credentials.ftp_host = data.ftp_host.trim();
+    if (data.ftp_port !== undefined) client.credentials.ftp_port = parseInt(data.ftp_port, 10) || 21;
+    if (data.ftp_user !== undefined) client.credentials.ftp_user = data.ftp_user.trim();
+    if (data.ftp_password !== undefined && data.ftp_password && !data.ftp_password.startsWith('••••')) {
+      client.credentials.ftp_password = data.ftp_password.trim();
     }
 
     if (data.mysql_host !== undefined) client.credentials.mysql_host = data.mysql_host.trim();
@@ -844,6 +859,13 @@ class CrmStore {
       ssh_port: 22,
       ssh_user: 'root',
       ssh_password: '',
+      ssh_key: '',
+      web_root_dir: '/home/bitrix/www',
+      backup_token: `bk_${id}_${(client.inn || 'secret').slice(-4)}_${Math.abs(id * 31337).toString(16)}`,
+      ftp_host: '',
+      ftp_port: 21,
+      ftp_user: '',
+      ftp_password: '',
       mysql_host: 'localhost',
       mysql_name: '',
       mysql_user: '',
@@ -861,6 +883,7 @@ class CrmStore {
       hosting_api_key: maskVal(creds.hosting_api_key),
       bitrix_password: maskVal(creds.bitrix_password),
       ssh_password: maskVal(creds.ssh_password),
+      ftp_password: maskVal(creds.ftp_password),
       mysql_password: maskVal(creds.mysql_password)
     };
   }

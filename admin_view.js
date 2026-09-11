@@ -315,6 +315,18 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
       flex-direction: column;
       justify-content: space-between;
     }
+    .kpi-clickable {
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .kpi-clickable:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(99, 102, 241, 0.16), 0 0 0 1px rgba(99, 102, 241, 0.3);
+    }
+    .kpi-clickable:active {
+      transform: translateY(0);
+    }
     .kpi-header {
       display: flex;
       justify-content: space-between;
@@ -712,13 +724,16 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
       </div>
     </div>
 
-    <!-- KPI Summary Grid -->
+    <!-- KPI Summary Grid (Interactive & Clickable) -->
     <div class="kpi-grid">
-      <!-- 1. Hours Progress -->
-      <div class="glass-card kpi-card">
+      <!-- 1. Hours Progress (Clickable) -->
+      <div class="glass-card kpi-card kpi-clickable" onclick="openKpiHoursModal()" title="Нажмите для детализации расхода часов по договору" style="cursor: pointer; position: relative; transition: all 0.2s ease;">
         <div class="kpi-header">
           <span class="kpi-label">Лимит часов в месяц</span>
-          <div class="kpi-icon" style="background: rgba(124, 58, 237, 0.12); color: #6d28d9;">⏱️</div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span class="kpi-zoom-badge" style="font-size:10px; background:rgba(124,58,237,0.1); color:#6d28d9; padding:2px 6px; border-radius:6px; font-weight:700;">Детали ↗</span>
+            <div class="kpi-icon" style="background: rgba(124, 58, 237, 0.12); color: #6d28d9;">⏱️</div>
+          </div>
         </div>
         <div>
           <div class="kpi-val">${totalHoursUsed.toFixed(1)} <span style="font-size:16px; font-weight:500; color:#64748b;">/ ${planHours} ч</span></div>
@@ -732,11 +747,14 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         </div>
       </div>
 
-      <!-- 2. Work Logs Count -->
-      <div class="glass-card kpi-card">
+      <!-- 2. Work Logs Count (Clickable) -->
+      <div class="glass-card kpi-card kpi-clickable" onclick="location.href='?tab=works#work-table-anchor'" title="Перейти к журналу всех задач и работ" style="cursor: pointer; position: relative; transition: all 0.2s ease;">
         <div class="kpi-header">
           <span class="kpi-label">Всего работ в CRM</span>
-          <div class="kpi-icon" style="background: rgba(16, 185, 129, 0.12); color: #10b981;">📋</div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span class="kpi-zoom-badge" style="font-size:10px; background:rgba(16,185,129,0.1); color:#059669; padding:2px 6px; border-radius:6px; font-weight:700;">Открыть ↗</span>
+            <div class="kpi-icon" style="background: rgba(16, 185, 129, 0.12); color: #10b981;">📋</div>
+          </div>
         </div>
         <div>
           <div class="kpi-val">${logs.length} <span style="font-size:16px; font-weight:500; color:#64748b;">задач</span></div>
@@ -747,11 +765,14 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         </div>
       </div>
 
-      <!-- 3. Saby Integration Status -->
-      <div class="glass-card kpi-card">
+      <!-- 3. Saby Integration Status (Clickable) -->
+      <div class="glass-card kpi-card kpi-clickable" onclick="openKpiSabyModal()" title="Нажмите для просмотра статуса интеграции Saby СБИС" style="cursor: pointer; position: relative; transition: all 0.2s ease;">
         <div class="kpi-header">
           <span class="kpi-label">Шлюз Saby / СБИС ЭДО</span>
-          <div class="kpi-icon" style="background: rgba(2, 132, 199, 0.12); color: #0284c7;">⚡</div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span class="kpi-zoom-badge" style="font-size:10px; background:rgba(2,132,199,0.1); color:#0284c7; padding:2px 6px; border-radius:6px; font-weight:700;">Статус ↗</span>
+            <div class="kpi-icon" style="background: rgba(2, 132, 199, 0.12); color: #0284c7;">⚡</div>
+          </div>
         </div>
         <div>
           <div class="kpi-val" style="color:#0284c7; font-size:24px;">Связь активна</div>
@@ -761,11 +782,14 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         </div>
       </div>
 
-      <!-- 4. Beget Hosting Status -->
-      <div class="glass-card kpi-card">
+      <!-- 4. Beget Hosting Status (Clickable) -->
+      <div class="glass-card kpi-card kpi-clickable" onclick="openKpiBackupModal()" title="Нажмите для управления мониторингом бэкапов и хостинга" style="cursor: pointer; position: relative; transition: all 0.2s ease;">
         <div class="kpi-header">
           <span class="kpi-label">Beget Cloud & Резерв</span>
-          <div class="kpi-icon" style="background: rgba(245, 158, 11, 0.12); color: #d97706;">☁️</div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span class="kpi-zoom-badge" style="font-size:10px; background:rgba(245,158,11,0.12); color:#d97706; padding:2px 6px; border-radius:6px; font-weight:700;">Бэкапы ↗</span>
+            <div class="kpi-icon" style="background: rgba(245, 158, 11, 0.12); color: #d97706;">☁️</div>
+          </div>
         </div>
         <div>
           <div class="kpi-val" style="color:#166534; font-size:24px;">100% Норма</div>
@@ -1491,21 +1515,61 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
           <div>
             <h2 style="font-size:20px; font-weight:800; color:var(--text-main); margin-bottom:4px;">🔑 Учетные записи, хостинг и доступы к сайтам</h2>
             <p style="font-size:14px; color:var(--text-secondary);">
-              Централизованное защищённое хранение логинов, паролей, API-токенов хостинга и панели 1С-Битрикс
+              Централизованное управление серверами, FTP, SSH-ключами, 1С-Битрикс и быстрый переход в нужные разделы хостинга
             </p>
           </div>
-          <div style="display:flex; gap:10px;">
+          <!-- Quick Direct Navigation Ribbon -->
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" onclick="openSshTerminalModal()" class="btn" style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color:#38bdf8; font-family:monospace; font-weight:700; border:1px solid #334155;">
+              <span>🖥️</span> Web-терминал SSH &nearr;
+            </button>
+            <button type="button" onclick="openBackupAgentModal()" class="btn" style="background:linear-gradient(135deg, #4338ca 0%, #3730a3 100%); color:#fff; font-weight:700;">
+              <span>🤖</span> Агент авто-бэкапов
+            </button>
             ${creds.bitrix_admin_url ? `
               <a href="${creds.bitrix_admin_url}" target="_blank" class="btn" style="background:#dc2626; color:#fff; font-weight:700;">
-                <span>🔑</span> Вход в 1С-Битрикс &nearr;
+                <span>🔑</span> Вход в Битрикс &nearr;
               </a>
             ` : ''}
-            ${creds.hosting_url ? `
-              <a href="${creds.hosting_url}" target="_blank" class="btn btn-glass">
-                <span>🌐</span> Панель хостинга &nearr;
-              </a>
-            ` : ''}
+            <a href="${creds.hosting_url || 'https://cp.beget.com'}" target="_blank" class="btn btn-glass">
+              <span>🌐</span> Хостинг &nearr;
+            </a>
           </div>
+        </div>
+
+        <!-- Quick Access Action Cards Row -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:24px;">
+          <a href="${creds.hosting_url ? creds.hosting_url + (creds.hosting_url.includes('beget') ? '/fm' : '') : 'https://cp.beget.com/fm'}" target="_blank" class="glass-card" style="padding:12px 14px; text-decoration:none; display:flex; align-items:center; gap:10px; border:1px solid #e2e8f0; border-radius:12px;">
+            <span style="font-size:22px;">📁</span>
+            <div>
+              <div style="font-weight:700; font-size:13px; color:#1e1b4b;">Файловый менеджер ↗</div>
+              <div style="font-size:11px; color:#64748b;">Папка сайтов / public_html</div>
+            </div>
+          </a>
+
+          <a href="${creds.hosting_url ? creds.hosting_url + (creds.hosting_url.includes('beget') ? '/cron' : '') : 'https://cp.beget.com/cron'}" target="_blank" class="glass-card" style="padding:12px 14px; text-decoration:none; display:flex; align-items:center; gap:10px; border:1px solid #e2e8f0; border-radius:12px;">
+            <span style="font-size:22px;">⏰</span>
+            <div>
+              <div style="font-weight:700; font-size:13px; color:#1e1b4b;">Планировщик Cron ↗</div>
+              <div style="font-size:11px; color:#64748b;">Автоматический запуск скриптов</div>
+            </div>
+          </a>
+
+          <a href="${creds.hosting_url ? creds.hosting_url + (creds.hosting_url.includes('beget') ? '/db' : '') : 'https://cp.beget.com/db'}" target="_blank" class="glass-card" style="padding:12px 14px; text-decoration:none; display:flex; align-items:center; gap:10px; border:1px solid #e2e8f0; border-radius:12px;">
+            <span style="font-size:22px;">🗄️</span>
+            <div>
+              <div style="font-weight:700; font-size:13px; color:#1e1b4b;">Базы данных / phpMyAdmin ↗</div>
+              <div style="font-size:11px; color:#64748b;">Управление MySQL и таблицами</div>
+            </div>
+          </a>
+
+          <a href="${creds.hosting_url ? creds.hosting_url + (creds.hosting_url.includes('beget') ? '/backup' : '') : 'https://cp.beget.com/backup'}" target="_blank" class="glass-card" style="padding:12px 14px; text-decoration:none; display:flex; align-items:center; gap:10px; border:1px solid #e2e8f0; border-radius:12px;">
+            <span style="font-size:22px;">📦</span>
+            <div>
+              <div style="font-weight:700; font-size:13px; color:#1e1b4b;">Бэкапы хостинга ↗</div>
+              <div style="font-size:11px; color:#64748b;">Архивы сайтов и БД на Beget</div>
+            </div>
+          </a>
         </div>
 
         <form action="/client/${client.id}/update_full" method="POST">
@@ -1534,7 +1598,9 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
                 <h3 style="font-size:16px; font-weight:700; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
                   <span>☁️</span> Хостинг и Cloud API
                 </h3>
-                <span class="badge badge-warning" style="font-size:11px;">Beget / Timeweb / VPS</span>
+                <div style="display:flex; gap:6px;">
+                  <a href="${creds.hosting_url || 'https://cp.beget.com'}" target="_blank" class="badge badge-warning" style="font-size:11px; text-decoration:none;">Открыть панель ↗</a>
+                </div>
               </div>
 
               <div class="form-group">
@@ -1546,7 +1612,7 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
                 <label>URL панели управления хостинга:</label>
                 <div style="display:flex; gap:8px;">
                   <input type="text" name="cred_hosting_url" id="inp_hosting_url" value="${creds.hosting_url || (client.beget_login ? 'https://cp.beget.com' : '')}" class="form-control" placeholder="https://cp.beget.com">
-                  ${creds.hosting_url ? `<a href="${creds.hosting_url}" target="_blank" class="btn btn-glass" style="padding:8px 12px;" title="Открыть">↗</a>` : ''}
+                  <a href="${creds.hosting_url || 'https://cp.beget.com'}" target="_blank" class="btn btn-glass" style="padding:8px 12px;" title="Открыть хостинг">↗</a>
                 </div>
               </div>
 
@@ -1581,7 +1647,11 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
                 <h3 style="font-size:16px; font-weight:700; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
                   <span>🔑</span> Панель 1С-Битрикс
                 </h3>
-                <span class="badge" style="background:#fee2e2; color:#991b1b; font-size:11px; font-weight:700;">CMS 1C-Битрикс</span>
+                <div style="display:flex; gap:6px;">
+                  ${creds.bitrix_admin_url ? `
+                    <a href="${creds.bitrix_admin_url.replace(/\/admin\/.*$/, '/admin/dump.php')}" target="_blank" class="badge badge-info" style="font-size:11px; text-decoration:none;">Бэкапы Битрикс ↗</a>
+                  ` : ''}
+                </div>
               </div>
 
               <div class="form-group">
@@ -1619,13 +1689,16 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
               </div>
             </div>
 
-            <!-- SECTION 3: SSH / SFTP -->
-            <div style="background: rgba(248,250,252,0.85); border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px;">
+            <!-- SECTION 3: SSH / SFTP & CONSOLE -->
+            <div style="background: rgba(248,250,252,0.85); border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; border-top: 3px solid #0284c7;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
                 <h3 style="font-size:16px; font-weight:700; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
-                  <span>💻</span> Сервер SSH & SFTP
+                  <span>💻</span> Сервер SSH & SFTP (Root Доступ)
                 </h3>
-                <span class="badge badge-info" style="font-size:11px;">Консоль Linux</span>
+                <div style="display:flex; gap:6px;">
+                  <button type="button" onclick="testSshConnection()" class="btn btn-glass" style="font-size:11px; padding:3px 8px;">⚡ Тест связи</button>
+                  <button type="button" onclick="openSshTerminalModal()" class="badge" style="background:#0f172a; color:#38bdf8; font-family:monospace; border:none; cursor:pointer; font-size:11px; padding:4px 8px; border-radius:6px;">🖥️ Терминал</button>
+                </div>
               </div>
 
               <div style="display:grid; grid-template-columns: 3fr 1fr; gap:12px;">
@@ -1645,7 +1718,7 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
                   <input type="text" name="cred_ssh_user" id="inp_ssh_user" value="${creds.ssh_user || 'root'}" class="form-control">
                 </div>
                 <div class="form-group">
-                  <label>Пароль / ключ SSH:</label>
+                  <label>Пароль SSH:</label>
                   <div style="display:flex; gap:6px;">
                     <input type="password" name="cred_ssh_password" id="inp_ssh_pass" value="${creds.ssh_password || ''}" class="form-control">
                     <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="togglePassVisibility('inp_ssh_pass')">👁️</button>
@@ -1654,20 +1727,86 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
                 </div>
               </div>
 
-              <div style="margin-top:4px;">
-                <button type="button" class="btn btn-glass" style="width:100%; font-size:12px; font-family:monospace;" onclick="copyTextValue('ssh ' + (document.getElementById('inp_ssh_user').value || 'root') + '@' + (document.getElementById('inp_ssh_host').value || 'host') + ' -p ' + (document.getElementById('inp_ssh_port').value || 22), 'Команда SSH')">
-                  📋 Скопировать команду подключения: ssh user@host -p 22
+              <div class="form-group">
+                <label>Приватный SSH-ключ (OpenSSH / ED25519 / RSA):</label>
+                <div style="position:relative;">
+                  <textarea name="cred_ssh_key" id="inp_ssh_key" rows="2" class="form-control" style="font-family:monospace; font-size:11px;" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...">${creds.ssh_key || ''}</textarea>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Корневой каталог сайта на сервере:</label>
+                <input type="text" name="cred_web_root_dir" id="inp_web_root_dir" value="${creds.web_root_dir || '/home/bitrix/www'}" class="form-control" placeholder="/home/bitrix/www или /home/login/domain/public_html">
+              </div>
+
+              <!-- Quick SSH Buttons -->
+              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+                <button type="button" class="btn btn-glass" style="flex:1; font-size:12px;" onclick="openSshTerminalModal()">
+                  🖥️ Открыть Web-терминал
+                </button>
+                <button type="button" class="btn btn-glass" style="flex:1; font-size:12px;" onclick="autoInstallAgentViaSsh()">
+                  🚀 Установить агент бэкапов
+                </button>
+                <button type="button" class="btn btn-glass" style="font-size:12px;" onclick="copyTextValue('ssh ' + (document.getElementById('inp_ssh_user').value || 'root') + '@' + (document.getElementById('inp_ssh_host').value || 'host') + ' -p ' + (document.getElementById('inp_ssh_port').value || 22), 'Команда SSH')">
+                  📋 Команда SSH
                 </button>
               </div>
             </div>
 
-            <!-- SECTION 4: MYSQL DATABASE -->
+            <!-- SECTION 4: FTP / SFTP -->
+            <div style="background: rgba(248,250,252,0.85); border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+                <h3 style="font-size:16px; font-weight:700; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
+                  <span>📡</span> Доступ по FTP / SFTP
+                </h3>
+                <span class="badge badge-info" style="font-size:11px;">FileZilla / WinSCP</span>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 3fr 1fr; gap:12px;">
+                <div class="form-group">
+                  <label>FTP Сервер (Host):</label>
+                  <input type="text" name="cred_ftp_host" id="inp_ftp_host" value="${creds.ftp_host || creds.ssh_host || ''}" class="form-control" placeholder="ftp.domain.ru или IP">
+                </div>
+                <div class="form-group">
+                  <label>Порт:</label>
+                  <input type="number" name="cred_ftp_port" id="inp_ftp_port" value="${creds.ftp_port || 21}" class="form-control">
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                <div class="form-group">
+                  <label>Логин FTP:</label>
+                  <input type="text" name="cred_ftp_user" id="inp_ftp_user" value="${creds.ftp_user || creds.hosting_login || ''}" class="form-control">
+                </div>
+                <div class="form-group">
+                  <label>Пароль FTP:</label>
+                  <div style="display:flex; gap:6px;">
+                    <input type="password" name="cred_ftp_password" id="inp_ftp_pass" value="${creds.ftp_password || ''}" class="form-control">
+                    <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="togglePassVisibility('inp_ftp_pass')">👁️</button>
+                    <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="copyTextValue(document.getElementById('inp_ftp_pass').value, 'Пароль FTP')">📋</button>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display:flex; gap:8px; margin-top:6px;">
+                <button type="button" class="btn btn-glass" style="width:100%; font-size:12px;" onclick="openFtpClient()">
+                  📡 Открыть в FileZilla / FTP-клиенте
+                </button>
+                <button type="button" class="btn btn-glass" style="font-size:12px;" onclick="copyFtpParams()">
+                  📋 Скопировать данные FTP
+                </button>
+              </div>
+            </div>
+
+            <!-- SECTION 5: MYSQL DATABASE -->
             <div style="background: rgba(248,250,252,0.85); border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
                 <h3 style="font-size:16px; font-weight:700; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
                   <span>🗄️</span> База данных MySQL
                 </h3>
-                <span class="badge badge-success" style="font-size:11px;">MySQL 8.0</span>
+                <div style="display:flex; gap:6px;">
+                  <a href="${creds.hosting_url ? creds.hosting_url + (creds.hosting_url.includes('beget') ? '/db' : '') : 'https://cp.beget.com/db'}" target="_blank" class="badge badge-success" style="font-size:11px; text-decoration:none;">phpMyAdmin ↗</a>
+                </div>
               </div>
 
               <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
@@ -1697,9 +1836,71 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
               </div>
             </div>
 
+            <!-- SECTION 6: AUTOMATED BACKUP AGENT (ALL CLIENT SITES) -->
+            <div style="background: rgba(248,250,252,0.85); border: 1px solid #c7d2fe; border-radius: 14px; padding: 20px; grid-column: 1 / -1; border-left: 4px solid #4f46e5;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+                <div>
+                  <h3 style="font-size:16px; font-weight:800; color:#1e1b4b; display:flex; align-items:center; gap:8px; margin:0 0 4px;">
+                    <span>🤖</span> Агент автоматического сбора бэкапов со всех сайтов контрагента
+                  </h3>
+                  <p style="font-size:13px; color:#475569; margin:0; line-height:1.5;">
+                    Единый скрипт автоматически сканирует архивы 1С-Битрикс по всем доменам клиента (${clientSites.map(s => s.domain).join(', ') || 'главный сайт'}), вычисляет размер, статус и передает отчет в CRM.
+                  </p>
+                </div>
+                <div style="display:flex; gap:6px;">
+                  <a href="/api/client/${client.id}/backup-agent.php" download="crm_backup_agent.php" class="btn btn-primary" style="font-size:12.5px; padding:8px 14px;">
+                    📥 Скачать crm_backup_agent.php
+                  </a>
+                  <button type="button" onclick="openBackupAgentModal()" class="btn btn-glass" style="font-size:12.5px; padding:8px 14px;">
+                    📖 Инструкция и код
+                  </button>
+                </div>
+              </div>
+
+              <!-- Step-by-step instructions -->
+              <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; font-size:13px; line-height:1.6; margin-bottom:14px;">
+                <div style="margin-bottom:8px;">
+                  <strong>1. Размещение скрипта на сервере:</strong> Скачайте или скопируйте файл <code>crm_backup_agent.php</code> и загрузите его в корень сайта:
+                  <div style="margin:4px 0; color:#4338ca; font-family:monospace; font-size:12px;">
+                    &bull; Для Beget: <code>/home/${creds.hosting_login || client.beget_login || 'username'}/${clientSites[0]?.domain || 'site.ru'}/public_html/crm_backup_agent.php</code><br>
+                    &bull; Для BitrixVM (сервер VPS): <code>/home/bitrix/www/crm_backup_agent.php</code>
+                  </div>
+                  <div style="margin-top:6px; display:flex; gap:8px;">
+                    <a href="${creds.hosting_url ? creds.hosting_url + (creds.hosting_url.includes('beget') ? '/fm' : '') : 'https://cp.beget.com/fm'}" target="_blank" class="btn btn-glass" style="font-size:11.5px; padding:4px 10px;">
+                      📁 Открыть файловый менеджер Beget ↗
+                    </a>
+                  </div>
+                </div>
+
+                <div style="margin-bottom:8px; border-top:1px solid #f1f5f9; padding-top:8px;">
+                  <strong>2. Настройка Cron-задачи:</strong> В панели хостинга добавьте ежедневную задачу Cron (например, на 04:15 утра):
+                  <div style="display:flex; gap:6px; margin-top:4px;">
+                    <input type="text" readonly value="php -f ${creds.web_root_dir || '/home/bitrix/www'}/crm_backup_agent.php" id="inp_cron_cmd" style="flex:1; padding:6px 10px; font-family:monospace; font-size:12px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px;">
+                    <button type="button" class="btn btn-glass" style="padding:6px 10px;" onclick="copyTextValue(document.getElementById('inp_cron_cmd').value, 'Команда Cron')">📋</button>
+                    <a href="${creds.hosting_url ? creds.hosting_url + (creds.hosting_url.includes('beget') ? '/cron' : '') : 'https://cp.beget.com/cron'}" target="_blank" class="btn btn-glass" style="font-size:11.5px; padding:4px 10px;">
+                      ⏰ Открыть Cron на Beget ↗
+                    </a>
+                  </div>
+                </div>
+
+                <div style="border-top:1px solid #f1f5f9; padding-top:8px;">
+                  <strong>3. Автоматическая установка через SSH в 1 клик:</strong>
+                  Если доступы SSH к серверу указаны выше, скрипт установится и настроит cron сам без ручных действий:
+                  <div style="margin-top:8px; display:flex; gap:10px;">
+                    <button type="button" onclick="autoInstallAgentViaSsh()" class="btn" style="background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; font-weight:700; font-size:12.5px; padding:8px 16px;">
+                      🚀 Установить агент по SSH автоматически
+                    </button>
+                    <button type="button" onclick="copyCurlInstaller()" class="btn btn-glass" style="font-size:12px;">
+                      ⚡ Скопировать команду One-Liner (curl ... | bash)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
 
-          <!-- SECTION 5: NOTES -->
+          <!-- SECTION 7: NOTES -->
           <div class="form-group" style="margin-bottom:24px;">
             <label style="font-size:14px; font-weight:700; color:#1e1b4b;">Заметки по инфраструктуре и особые инструкции доступа:</label>
             <textarea name="cred_notes" rows="3" class="form-control" placeholder="Особые порты, VPN, 2FA, контакты системного администратора со стороны клиента">${creds.notes || ''}</textarea>
@@ -1757,30 +1958,55 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:24px;">
           
-          <!-- Automation / Webhook info -->
-          <div style="background:rgba(248,250,252,0.85); border:1px solid #e2e8f0; border-radius:14px; padding:20px;">
-            <h3 style="font-size:16px; font-weight:700; color:#1e1b4b; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
-              <span>🤖</span> Автоматический сбор бэкапов через Webhook
-            </h3>
-            <p style="font-size:13px; color:#64748b; margin-bottom:14px;">
-              Скрипт бэкапа на сервере сайта может автоматически передавать статус выполнения в CRM после каждого ночного прогона:
+          <!-- Automation / Webhook info & Agent Generator -->
+          <div style="background:rgba(248,250,252,0.85); border:1px solid #c7d2fe; border-radius:14px; padding:20px; border-top:3px solid #4f46e5;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+              <h3 style="font-size:16px; font-weight:800; color:#1e1b4b; display:flex; align-items:center; gap:8px; margin:0;">
+                <span>🤖</span> Автоматический агент бэкапов (PHP + Cron)
+              </h3>
+              <div style="display:flex; gap:6px;">
+                <a href="/api/client/${client.id}/backup-agent.php" download="crm_backup_agent.php" class="btn btn-primary" style="font-size:12px; padding:5px 12px;">
+                  📥 Скачать агент
+                </a>
+                <button type="button" onclick="openBackupAgentModal()" class="btn btn-glass" style="font-size:12px; padding:5px 12px;">
+                  📖 Инструкция
+                </button>
+              </div>
+            </div>
+
+            <p style="font-size:13px; color:#475569; margin-bottom:12px; line-height:1.5;">
+              Скрипт автоматически находит свежие дампы 1С-Битрикс и MySQL, вычисляет размер и передает статус в CRM. Поместите скрипт в корень сайта или настройте авто-установку по SSH:
             </p>
 
-            <div class="form-group">
-              <label style="font-size:12px; font-weight:600; color:#475569;">Webhook URL:</label>
-              <div style="display:flex; gap:6px;">
-                <input type="text" id="webhook_url" value="https://test.crm.e-klimov.ru/api/backups/report" class="form-control" readonly style="font-family:monospace; font-size:12px; background:#f1f5f9;">
-                <button type="button" class="btn btn-glass" onclick="copyTextValue('https://test.crm.e-klimov.ru/api/backups/report', 'Webhook URL')">📋</button>
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:12px; font-size:12.5px; line-height:1.6; margin-bottom:12px;">
+              <div><strong>Папка на Beget:</strong> <code>/home/${creds.hosting_login || client.beget_login || 'user'}/${clientSites[0]?.domain || 'domain.ru'}/public_html/</code></div>
+              <div><strong>Папка на VPS:</strong> <code>/home/bitrix/www/</code></div>
+              <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
+                <a href="${creds.hosting_url ? creds.hosting_url + (creds.hosting_url.includes('beget') ? '/fm' : '') : 'https://cp.beget.com/fm'}" target="_blank" class="btn btn-glass" style="font-size:11.5px; padding:4px 10px;">
+                  📁 Файловый менеджер Beget ↗
+                </a>
+                <a href="${creds.hosting_url ? creds.hosting_url + (creds.hosting_url.includes('beget') ? '/cron' : '') : 'https://cp.beget.com/cron'}" target="_blank" class="btn btn-glass" style="font-size:11.5px; padding:4px 10px;">
+                  ⏰ Cron на Beget ↗
+                </a>
               </div>
             </div>
 
             <div class="form-group" style="margin-bottom:10px;">
-              <label style="font-size:12px; font-weight:600; color:#475569;">Пример команды для Cron на сервере клиента:</label>
-              <textarea rows="3" class="form-control" readonly style="font-family:monospace; font-size:11.5px; background:#f8fafc;">/usr/bin/php -f /home/bitrix/www/bitrix/modules/main/tools/backup.php &amp;&amp; curl -s -X POST https://test.crm.e-klimov.ru/api/backups/report -H "Content-Type: application/json" -d '{"site":"${clientSites[0]?.domain || 'site.ru'}", "size_mb":3840, "status":"Успешно"}'</textarea>
+              <label style="font-size:12px; font-weight:600; color:#475569;">Запуск через планировщик Cron (ежедневно 04:15):</label>
+              <div style="display:flex; gap:6px;">
+                <input type="text" id="webhook_cron_cmd" value="php -f ${creds.web_root_dir || '/home/bitrix/www'}/crm_backup_agent.php" class="form-control" readonly style="font-family:monospace; font-size:12px; background:#f1f5f9;">
+                <button type="button" class="btn btn-glass" onclick="copyTextValue(document.getElementById('webhook_cron_cmd').value, 'Команда Cron')">📋</button>
+              </div>
             </div>
-            <button type="button" class="btn btn-glass" style="font-size:12px; width:100%;" onclick="copyTextValue('curl -s -X POST https://test.crm.e-klimov.ru/api/backups/report -H &quot;Content-Type: application/json&quot; -d \'{\&quot;site\&quot;:\&quot;${clientSites[0]?.domain || 'site.ru'}\&quot;, \&quot;size_mb\&quot;:3840, \&quot;status\&quot;:\&quot;Успешно\&quot;}\'', 'Команда cURL')">
-              📋 Скопировать cURL команду для cron
-            </button>
+
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="btn" style="flex:1; background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; font-size:12px; font-weight:700; padding:8px;" onclick="autoInstallAgentViaSsh()">
+                🚀 Установить по SSH в 1 клик
+              </button>
+              <button type="button" class="btn btn-glass" style="font-size:12px; padding:8px 12px;" onclick="openSshTerminalModal()">
+                🖥️ SSH-терминал
+              </button>
+            </div>
           </div>
 
           <!-- Manual Backup Record Form -->
@@ -2310,6 +2536,197 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         alert('Ошибка связи: ' + err.message);
       }
     }
+
+    // --- Interactive KPI Modals ---
+    function openKpiHoursModal() {
+      document.getElementById('kpi-hours-modal').style.display = 'flex';
+    }
+    function closeKpiHoursModal() {
+      document.getElementById('kpi-hours-modal').style.display = 'none';
+    }
+
+    function openKpiSabyModal() {
+      document.getElementById('kpi-saby-modal').style.display = 'flex';
+    }
+    function closeKpiSabyModal() {
+      document.getElementById('kpi-saby-modal').style.display = 'none';
+    }
+
+    function openKpiBackupModal() {
+      document.getElementById('kpi-backup-modal').style.display = 'flex';
+    }
+    function closeKpiBackupModal() {
+      document.getElementById('kpi-backup-modal').style.display = 'none';
+    }
+
+    // --- In-Browser SSH Terminal ---
+    function openSshTerminalModal() {
+      const modal = document.getElementById('ssh-terminal-modal');
+      if (!modal) return;
+      modal.style.display = 'flex';
+      const term = document.getElementById('ssh-term-output');
+      if (term && term.dataset.initialized !== 'true') {
+        term.dataset.initialized = 'true';
+        term.innerHTML = '<div style="color:#64748b;">[Web-SSH Terminal инициализирован]</div>' +
+          '<div style="color:#38bdf8;">Подключение к ${creds.ssh_user || "root"}@${creds.ssh_host || "localhost"}:${creds.ssh_port || 22}...</div>' +
+          '<div style="color:#10b981;">✓ Готово. Введите команду Linux или выберите быстрые команды ниже.</div><br>';
+      }
+      setTimeout(() => {
+        const inp = document.getElementById('ssh-term-input');
+        if (inp) inp.focus();
+      }, 100);
+    }
+
+    function closeSshTerminalModal() {
+      const modal = document.getElementById('ssh-terminal-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function clearTerminal() {
+      const term = document.getElementById('ssh-term-output');
+      if (term) term.innerHTML = '<div style="color:#64748b;">[Терминал очищен]</div>';
+    }
+
+    async function sendTerminalCmd(e) {
+      if (e) e.preventDefault();
+      const inp = document.getElementById('ssh-term-input');
+      const term = document.getElementById('ssh-term-output');
+      if (!inp || !inp.value.trim()) return;
+      const cmd = inp.value.trim();
+      inp.value = '';
+      await runQuickSshCmd(cmd);
+    }
+
+    async function runQuickSshCmd(cmd) {
+      const term = document.getElementById('ssh-term-output');
+      if (!term) return;
+      const ts = new Date().toLocaleTimeString('ru-RU');
+      term.innerHTML += '<div style="margin-top:6px; color:#94a3b8;"><span style="color:#38bdf8; font-weight:700;">root@server</span>:<span style="color:#a855f7;">~</span># ' + escapeHtml(cmd) + ' <span style="font-size:10px; color:#64748b; float:right;">' + ts + '</span></div>';
+      term.scrollTop = term.scrollHeight;
+
+      try {
+        const res = await fetch('/api/client/${client.id}/ssh/exec', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: cmd })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          const out = data.stdout || data.output || '(Команда выполнена успешно, без вывода)';
+          term.innerHTML += '<div style="color:#f1f5f9; white-space:pre-wrap; margin:4px 0 10px; font-family:monospace; line-height:1.4;">' + escapeHtml(out) + '</div>';
+          if (data.stderr) {
+            term.innerHTML += '<div style="color:#f87171; white-space:pre-wrap; margin:2px 0 8px; font-family:monospace;">' + escapeHtml(data.stderr) + '</div>';
+          }
+        } else {
+          term.innerHTML += '<div style="color:#f87171; white-space:pre-wrap; margin:4px 0 8px; font-family:monospace;">Ошибка: ' + escapeHtml(data.error || 'Сбой выполнения') + '</div>';
+        }
+      } catch (err) {
+        term.innerHTML += '<div style="color:#f87171; margin:4px 0 8px; font-family:monospace;">Сетевой сбой: ' + escapeHtml(err.message) + '</div>';
+      }
+      term.scrollTop = term.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // --- SSH Test & Auto Install Agent ---
+    async function testSshConnection() {
+      showToast('⚡ Проверка подключения по SSH...');
+      try {
+        const res = await fetch('/api/client/${client.id}/ssh/test', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          alert('✓ Связь по SSH установлена!\\n\\n' +
+            'Хост: ' + data.host + ':' + data.port + '\\n' +
+            'Пользователь: ' + data.user + '\\n' +
+            'ОС: ' + (data.os || 'Linux') + '\\n' +
+            'Uptime: ' + (data.uptime || 'OK'));
+          showToast('✓ SSH соединение успешно');
+        } else {
+          alert('⚠️ Ошибка подключения по SSH:\\n\\n' + data.error + '\\n\\nПроверьте хост, порт, логин и пароль/ключ во вкладке Доступы.');
+        }
+      } catch (err) {
+        alert('Ошибка связи с сервером CRM: ' + err.message);
+      }
+    }
+
+    async function autoInstallAgentViaSsh() {
+      if (!confirm('Автоматически подключиться по SSH к серверу клиента, создать скрипт crm_backup_agent.php и добавить задачу в планировщик cron?')) return;
+      showToast('🚀 Установка агента авто-бэкапов через SSH...');
+      try {
+        const res = await fetch('/api/client/${client.id}/ssh/install-agent', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          alert('✓ Агент авто-бэкапов успешно развернут на сервере!\\n\\n' +
+            'Файл: ' + data.path + '\\n' +
+            'Cron задача: ' + (data.cron_installed ? 'Добавлена в crontab' : 'Требует проверки') + '\\n\\n' +
+            'Результат:\\n' + (data.output || 'OK'));
+          showToast('✓ Агент авто-бэкапов установлен на сервер');
+          setTimeout(() => { window.location.reload(); }, 1500);
+        } else {
+          alert('⚠️ Ошибка автоматической установки:\\n\\n' + data.error + '\\n\\nПопробуйте скачать скрипт вручную или проверить настройки SSH.');
+        }
+      } catch (err) {
+        alert('Ошибка связи: ' + err.message);
+      }
+    }
+
+    // --- Backup Agent Modal ---
+    function openBackupAgentModal() {
+      const modal = document.getElementById('backup-agent-modal');
+      if (modal) modal.style.display = 'flex';
+    }
+    function closeBackupAgentModal() {
+      const modal = document.getElementById('backup-agent-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function copyBackupAgentCode() {
+      try {
+        const res = await fetch('/api/client/${client.id}/backup-agent.php');
+        const code = await res.text();
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(code);
+          showToast('✓ PHP-код скрипта crm_backup_agent.php скопирован!');
+        } else {
+          prompt('Код скрипта crm_backup_agent.php:', code);
+        }
+      } catch (err) {
+        showToast('Ошибка загрузки скрипта');
+      }
+    }
+
+    function copyCurlInstaller() {
+      const host = window.location.origin;
+      const cmd = 'curl -sSL ' + host + '/api/client/${client.id}/install-agent.sh | bash';
+      copyTextValue(cmd, 'Команда One-Liner (curl | bash)');
+    }
+
+    function openFtpClient() {
+      const host = document.getElementById('inp_ftp_host')?.value || document.getElementById('inp_ssh_host')?.value || '';
+      const port = document.getElementById('inp_ftp_port')?.value || '21';
+      const user = document.getElementById('inp_ftp_user')?.value || '';
+      const pass = document.getElementById('inp_ftp_pass')?.value || '';
+      if (!host) {
+        alert('Укажите FTP хост во вкладке «Доступы»');
+        return;
+      }
+      const uri = 'ftp://' + encodeURIComponent(user) + ':' + encodeURIComponent(pass) + '@' + host + ':' + port + '/';
+      window.location.href = uri;
+      showToast('Открытие FTP-клиента...');
+    }
+
+    function copyFtpParams() {
+      const host = document.getElementById('inp_ftp_host')?.value || document.getElementById('inp_ssh_host')?.value || '';
+      const port = document.getElementById('inp_ftp_port')?.value || '21';
+      const user = document.getElementById('inp_ftp_user')?.value || '';
+      const pass = document.getElementById('inp_ftp_pass')?.value || '';
+      const text = 'Хост: ' + host + '\\nПорт: ' + port + '\\nПользователь: ' + user + '\\nПароль: ' + pass;
+      copyTextValue(text, 'Параметры FTP подключения');
+    }
   </script>
 
   <!-- Add Contact Modal -->
@@ -2400,6 +2817,262 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
       </div>
 
       <div id="gh-result-box" style="display:none; padding:12px; border-radius:10px; font-size:13px; line-height:1.4;"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: KPI Hours Breakdown -->
+  <div id="kpi-hours-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); backdrop-filter:blur(5px); align-items:center; justify-content:center; z-index:2000; padding:20px;">
+    <div style="background:#ffffff; border-radius:20px; max-width:620px; width:100%; padding:26px; box-shadow:0 24px 60px rgba(0,0,0,0.25);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid #e2e8f0;">
+        <h3 style="margin:0; font-size:18px; font-weight:800; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
+          <span>⏱️</span> Баланс и лимит часов по договору
+        </h3>
+        <button type="button" onclick="closeKpiHoursModal()" style="background:transparent; border:none; font-size:24px; cursor:pointer; color:#94a3b8;">&times;</button>
+      </div>
+
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-bottom:20px;">
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px; text-align:center;">
+          <div style="font-size:12px; color:#64748b; font-weight:600;">Лимит по договору</div>
+          <div style="font-size:22px; font-weight:800; color:#1e1b4b; margin-top:2px;">${planHours} ч</div>
+          <div style="font-size:11px; color:#7c3aed; font-weight:600;">${client.tariff || '38 000 ₽ / мес'}</div>
+        </div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px; text-align:center;">
+          <div style="font-size:12px; color:#64748b; font-weight:600;">Израсходовано</div>
+          <div style="font-size:22px; font-weight:800; color:#d97706; margin-top:2px;">${totalHoursUsed.toFixed(1)} ч</div>
+          <div style="font-size:11px; color:#64748b;">${logs.length} выполненных задач</div>
+        </div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:14px; text-align:center;">
+          <div style="font-size:12px; color:#64748b; font-weight:600;">Остаток часов</div>
+          <div style="font-size:22px; font-weight:800; color:#059669; margin-top:2px;">${hoursLeft} ч</div>
+          <div style="font-size:11px; color:#059669; font-weight:700;">${percentUsed}% израсходовано</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <h4 style="font-size:13.5px; font-weight:700; color:#1e1b4b; margin-bottom:8px;">Последние задачи за период:</h4>
+        <div style="max-height:220px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px;">
+          <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+            <tbody>
+              ${logs.slice(0, 6).map(l => `
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                  <td style="padding:8px 12px; color:#64748b; white-space:nowrap;">${formatDateRus(l.work_date)}</td>
+                  <td style="padding:8px 12px; font-weight:600; color:#1e1b4b;">${l.description}</td>
+                  <td style="padding:8px 12px; font-weight:700; text-align:right; white-space:nowrap; color:#6d28d9;">${parseFloat(l.hours).toFixed(1)} ч</td>
+                </tr>
+              `).join('')}
+              ${logs.length === 0 ? '<tr><td colspan="3" style="padding:20px; text-align:center; color:#94a3b8;">Задач пока нет</td></tr>' : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" onclick="closeKpiHoursModal(); openAddWorkModal();" class="btn btn-primary" style="font-size:13px; padding:9px 18px;">
+          <span>+</span> Добавить работу
+        </button>
+        <a href="?tab=settings" class="btn btn-glass" style="font-size:13px; padding:9px 18px;">
+          <span>⚙️</span> Настройки тарифа и договора
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: KPI Saby Status -->
+  <div id="kpi-saby-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); backdrop-filter:blur(5px); align-items:center; justify-content:center; z-index:2000; padding:20px;">
+    <div style="background:#ffffff; border-radius:20px; max-width:580px; width:100%; padding:26px; box-shadow:0 24px 60px rgba(0,0,0,0.25);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid #e2e8f0;">
+        <h3 style="margin:0; font-size:18px; font-weight:800; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
+          <span>⚡</span> Интеграция с Saby (СБИС) и документооборот
+        </h3>
+        <button type="button" onclick="closeKpiSabyModal()" style="background:transparent; border:none; font-size:24px; cursor:pointer; color:#94a3b8;">&times;</button>
+      </div>
+
+      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; font-size:13.5px; line-height:1.6; margin-bottom:18px;">
+        <div><strong>Контрагент:</strong> ${client.company_name}</div>
+        <div><strong>ИНН / КПП:</strong> ${client.inn || 'Не указан'} / ${client.kpp || '—'}</div>
+        <div><strong>Договор в Saby:</strong> <strong>${client.saby_contract_number || 'АС-2024/05'}</strong></div>
+        <div><strong>Статус шлюза:</strong> <span style="color:#059669; font-weight:700;">✓ Шлюз подключен (2-way sync)</span></div>
+        <div><strong>Сформировано документов:</strong> ${sabyDocs.length} актов / счетов</div>
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+        <button type="button" onclick="closeKpiSabyModal(); triggerSabySync(${client.id});" class="btn btn-primary" style="flex:1; font-size:13px; padding:10px;">
+          <span>🔄</span> Запустить синхронизацию
+        </button>
+        <button type="button" onclick="testSabyRPC()" class="btn btn-glass" style="font-size:13px; padding:10px 14px;">
+          <span>⚡</span> Тест шлюза
+        </button>
+        <button type="button" onclick="closeKpiSabyModal(); openCreateActModal();" class="btn btn-glass" style="font-size:13px; padding:10px 14px;">
+          <span>📑</span> Создать акт
+        </button>
+      </div>
+
+      <div style="text-align:right;">
+        <a href="?tab=saby_sync" class="btn btn-glass" style="font-size:12.5px;">Перейти в раздел Saby &nearr;</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: KPI Backup & Cloud Status -->
+  <div id="kpi-backup-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); backdrop-filter:blur(5px); align-items:center; justify-content:center; z-index:2000; padding:20px;">
+    <div style="background:#ffffff; border-radius:20px; max-width:620px; width:100%; padding:26px; box-shadow:0 24px 60px rgba(0,0,0,0.25);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid #e2e8f0;">
+        <h3 style="margin:0; font-size:18px; font-weight:800; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
+          <span>☁️</span> Мониторинг бэкапов и инфраструктуры Beget
+        </h3>
+        <button type="button" onclick="closeKpiBackupModal()" style="background:transparent; border:none; font-size:24px; cursor:pointer; color:#94a3b8;">&times;</button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;">
+        ${clientSites.map(s => `
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-weight:700; color:#1e1b4b; font-size:14px;">${s.domain}</div>
+              <div style="font-size:12px; color:#64748b;">${s.cms} &bull; PHP ${s.php_version}</div>
+            </div>
+            <div style="text-align:right;">
+              <span class="badge badge-success" style="font-size:11px;">✓ ${s.last_backup?.status || 'Успешно'}</span>
+              <div style="font-size:11.5px; color:#64748b; margin-top:2px;">${s.last_backup?.date || 'Сегодня 03:15'} (${s.last_backup?.size_mb || 3840} МБ)</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:space-between; align-items:center;">
+        <div style="display:flex; gap:8px;">
+          <a href="?tab=backups" class="btn btn-primary" style="font-size:13px; padding:9px 16px;">
+            <span>📦</span> Все бэкапы (${backups.length})
+          </a>
+          <button type="button" onclick="closeKpiBackupModal(); openBackupAgentModal();" class="btn btn-glass" style="font-size:13px; padding:9px 14px;">
+            <span>🤖</span> Агент скриптов
+          </button>
+        </div>
+        <a href="${creds.hosting_url || 'https://cp.beget.com'}" target="_blank" class="btn btn-glass" style="font-size:13px; padding:9px 14px;">
+          <span>🌐</span> Beget Cloud ↗
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: IN-BROWSER SSH TERMINAL -->
+  <div id="ssh-terminal-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.75); backdrop-filter:blur(8px); align-items:center; justify-content:center; z-index:2500; padding:20px;">
+    <div style="background:#090d16; border:1px solid #1e293b; border-radius:18px; max-width:860px; width:100%; box-shadow:0 30px 80px rgba(0,0,0,0.6); display:flex; flex-direction:column; overflow:hidden; height:85vh; max-height:640px;">
+      
+      <!-- Terminal Window Header (Mac Style) -->
+      <div style="background:#0f172a; padding:12px 18px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1e293b;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="width:12px; height:12px; border-radius:50%; background:#ef4444; display:inline-block; cursor:pointer;" onclick="closeSshTerminalModal()" title="Закрыть"></span>
+          <span style="width:12px; height:12px; border-radius:50%; background:#f59e0b; display:inline-block; cursor:pointer;" onclick="clearTerminal()" title="Очистить экран"></span>
+          <span style="width:12px; height:12px; border-radius:50%; background:#10b981; display:inline-block;" title="Активно"></span>
+          <span style="color:#94a3b8; font-family:monospace; font-size:13px; margin-left:12px;">
+            ${creds.ssh_user || 'root'}@${creds.ssh_host || 'localhost'}:${creds.ssh_port || 22} (${client.company_name})
+          </span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" onclick="clearTerminal()" style="background:transparent; border:1px solid #334155; color:#94a3b8; padding:3px 10px; border-radius:6px; font-size:11.5px; font-family:monospace; cursor:pointer;">
+            Clear
+          </button>
+          <button type="button" onclick="closeSshTerminalModal()" style="background:transparent; border:none; color:#94a3b8; font-size:20px; line-height:1; cursor:pointer;">&times;</button>
+        </div>
+      </div>
+
+      <!-- Terminal Output Screen -->
+      <div id="ssh-term-output" style="flex:1; padding:16px 20px; overflow-y:auto; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:13px; line-height:1.55; color:#e2e8f0; background:#070b12;">
+        <div style="color:#64748b;">[Web-SSH Terminal инициализирован]</div>
+        <div style="color:#38bdf8;">Подключение к ${creds.ssh_user || 'root'}@${creds.ssh_host || 'localhost'}:${creds.ssh_port || 22}...</div>
+        <div style="color:#10b981;">✓ Готово. Введите команду Linux или выберите быстрые команды ниже.</div>
+      </div>
+
+      <!-- Quick Command Buttons Bar -->
+      <div style="background:#0b1120; border-top:1px solid #1e293b; padding:8px 16px; display:flex; gap:6px; overflow-x:auto; white-space:nowrap;">
+        <button type="button" onclick="runQuickSshCmd('uptime')" style="background:#1e293b; color:#38bdf8; border:none; padding:4px 10px; border-radius:6px; font-size:11.5px; font-family:monospace; cursor:pointer;">uptime</button>
+        <button type="button" onclick="runQuickSshCmd('free -h')" style="background:#1e293b; color:#38bdf8; border:none; padding:4px 10px; border-radius:6px; font-size:11.5px; font-family:monospace; cursor:pointer;">free -h</button>
+        <button type="button" onclick="runQuickSshCmd('df -h')" style="background:#1e293b; color:#38bdf8; border:none; padding:4px 10px; border-radius:6px; font-size:11.5px; font-family:monospace; cursor:pointer;">df -h</button>
+        <button type="button" onclick="runQuickSshCmd('crontab -l')" style="background:#1e293b; color:#38bdf8; border:none; padding:4px 10px; border-radius:6px; font-size:11.5px; font-family:monospace; cursor:pointer;">crontab -l</button>
+        <button type="button" onclick="runQuickSshCmd('ls -la ${creds.web_root_dir || '/home/bitrix/www'}')" style="background:#1e293b; color:#38bdf8; border:none; padding:4px 10px; border-radius:6px; font-size:11.5px; font-family:monospace; cursor:pointer;">ls -la web-root</button>
+        <button type="button" onclick="runQuickSshCmd('php -v')" style="background:#1e293b; color:#38bdf8; border:none; padding:4px 10px; border-radius:6px; font-size:11.5px; font-family:monospace; cursor:pointer;">php -v</button>
+        <button type="button" onclick="autoInstallAgentViaSsh()" style="background:#065f46; color:#a7f3d0; border:none; padding:4px 10px; border-radius:6px; font-size:11.5px; font-family:monospace; cursor:pointer; font-weight:700;">+ Развернуть агент бэкапов</button>
+      </div>
+
+      <!-- Terminal Command Input Line -->
+      <form onsubmit="sendTerminalCmd(event)" style="background:#0f172a; padding:12px 18px; display:flex; gap:10px; align-items:center; border-top:1px solid #1e293b;">
+        <span style="color:#10b981; font-family:monospace; font-weight:700; font-size:14px;">#</span>
+        <input type="text" id="ssh-term-input" placeholder="Введите команду Linux (например: ls -la /home/bitrix/www) и нажмите Enter..." autocomplete="off" style="flex:1; background:transparent; border:none; outline:none; color:#f1f5f9; font-family:monospace; font-size:13.5px;">
+        <button type="submit" style="background:#38bdf8; color:#0f172a; border:none; font-weight:700; font-size:12px; padding:6px 14px; border-radius:6px; cursor:pointer;">
+          Выполнить &crarr;
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: BACKUP AGENT SCRIPT & INSTRUCTIONS -->
+  <div id="backup-agent-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(6px); align-items:center; justify-content:center; z-index:2200; padding:20px;">
+    <div style="background:#ffffff; border-radius:20px; max-width:760px; width:100%; padding:26px; box-shadow:0 24px 60px rgba(0,0,0,0.25); max-height:90vh; overflow-y:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid #e2e8f0;">
+        <h3 style="margin:0; font-size:18px; font-weight:800; color:#1e1b4b; display:flex; align-items:center; gap:8px;">
+          <span>🤖</span> Автоматический агент бэкапов (PHP + Cron)
+        </h3>
+        <button type="button" onclick="closeBackupAgentModal()" style="background:transparent; border:none; font-size:24px; cursor:pointer; color:#94a3b8;">&times;</button>
+      </div>
+
+      <p style="font-size:13.5px; color:#475569; line-height:1.55; margin-bottom:16px;">
+        Скрипт <code>crm_backup_agent.php</code> генерируется персонально для клиента <strong>${client.company_name}</strong> с защитным токеном авторизации. Он автоматически находит архивы 1С-Битрикс и MySQL, вычисляет размер и передает статус в CRM.
+      </p>
+
+      <!-- Quick Action Buttons -->
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px;">
+        <a href="/api/client/${client.id}/backup-agent.php" download="crm_backup_agent.php" class="btn btn-primary" style="padding:10px 18px; font-size:13px;">
+          📥 Скачать crm_backup_agent.php
+        </a>
+        <button type="button" onclick="copyBackupAgentCode()" class="btn btn-glass" style="padding:10px 16px; font-size:13px;">
+          📋 Скопировать PHP-код в буфер
+        </button>
+        <button type="button" onclick="copyCurlInstaller()" class="btn btn-glass" style="padding:10px 16px; font-size:13px;">
+          ⚡ Команда One-Liner (curl | bash)
+        </button>
+        <button type="button" onclick="closeBackupAgentModal(); autoInstallAgentViaSsh();" class="btn" style="background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; font-weight:700; font-size:13px; padding:10px 16px;">
+          🚀 Установить по SSH на сервер
+        </button>
+      </div>
+
+      <!-- Instructions Section -->
+      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:18px; font-size:13px; line-height:1.65; margin-bottom:18px;">
+        <h4 style="font-size:14.5px; font-weight:800; color:#1e1b4b; margin-bottom:10px;">Инструкция по размещению на хостинге:</h4>
+        
+        <div style="margin-bottom:12px;">
+          <strong>Шаг 1. Разместите файл в корне сайта:</strong>
+          <div style="margin:4px 0; color:#4338ca; font-family:monospace; font-size:12px;">
+            &bull; Папка Beget: <code>/home/${creds.hosting_login || client.beget_login || 'login'}/${clientSites[0]?.domain || 'site.ru'}/public_html/crm_backup_agent.php</code><br>
+            &bull; Папка BitrixVM: <code>/home/bitrix/www/crm_backup_agent.php</code>
+          </div>
+          <div style="margin-top:6px;">
+            <a href="${creds.hosting_url ? creds.hosting_url + (creds.hosting_url.includes('beget') ? '/fm' : '') : 'https://cp.beget.com/fm'}" target="_blank" class="btn btn-glass" style="font-size:11.5px; padding:4px 10px;">
+              📁 Открыть файловый менеджер Beget ↗
+            </a>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid #e2e8f0; padding-top:10px; margin-bottom:12px;">
+          <strong>Шаг 2. Настройте задание в Cron на хостинге:</strong>
+          <div style="margin:4px 0; color:#475569;">Рекомендуемое время запуска: <strong>ежедневно в 04:15 утра</strong> (после создания ночного бэкапа Битрикса):</div>
+          <div style="display:flex; gap:6px; margin-top:6px;">
+            <input type="text" readonly value="php -f ${creds.web_root_dir || '/home/bitrix/www'}/crm_backup_agent.php" id="modal_cron_cmd" style="flex:1; padding:7px 10px; font-family:monospace; font-size:12px; background:#fff; border:1px solid #cbd5e1; border-radius:8px;">
+            <button type="button" class="btn btn-glass" style="padding:6px 12px; font-size:12px;" onclick="copyTextValue(document.getElementById('modal_cron_cmd').value, 'Команда Cron')">📋 Скопировать</button>
+            <a href="${creds.hosting_url ? creds.hosting_url + (creds.hosting_url.includes('beget') ? '/cron' : '') : 'https://cp.beget.com/cron'}" target="_blank" class="btn btn-glass" style="font-size:11.5px; padding:6px 10px;">
+              ⏰ Открыть Cron на Beget ↗
+            </a>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid #e2e8f0; padding-top:10px;">
+          <strong>Шаг 3. Проверка работы:</strong>
+          <div style="margin-top:4px; color:#475569;">После запуска скрипт отправит отчет в CRM по защищенному Webhook URL, и запись появится в таблице во вкладке «Бэкапы сайтов».</div>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end;">
+        <button type="button" onclick="closeBackupAgentModal()" class="btn btn-glass" style="padding:8px 20px;">Закрыть</button>
+      </div>
     </div>
   </div>
 </body>

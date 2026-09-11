@@ -11,6 +11,8 @@ import { renderAdminClientPage, renderNewClientPage } from './admin_view.js';
 import { getGitStatus, getGitHubConfig, testGitHubApi, syncToGitHub, pullFromGitHub } from './github_sync.js';
 import { testSabyConnection, authenticateSaby, searchSabyCompany, fetchSabyContracts } from './saby_client.js';
 import { testBegetConnection, pullBegetSnapshot } from './beget_client.js';
+import { sshService } from './ssh_service.js';
+import { generatePhpBackupAgent, generateBashInstaller } from './backup_agent_generator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -404,12 +406,20 @@ app.get('/', (req, res) => {
       </div>
 
       <!-- Corporate SMTP Notification Mailbox Group -->
-      <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 16px;">
-        <h4 style="margin: 0 0 12px; font-size: 14.5px; color: #4338ca; display: flex; align-items: center; gap: 6px;">
-          <span>✉️</span> Основная корпоративная почта для рассылок и 2FA кодов (Beget SMTP)
-        </h4>
+      <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 16px; background: #fcfcfd;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+          <h4 style="margin: 0; font-size: 14.5px; color: #4338ca; display: flex; align-items: center; gap: 6px;">
+            <span>✉️</span> Основная корпоративная почта (рассылки, уведомления и 2FA)
+          </h4>
+          <div style="display: flex; gap: 6px; font-size: 11px;">
+            <button type="button" onclick="applySmtpPreset('beget')" class="btn" style="background:#e0e7ff; color:#3730a3; border:none; padding:3px 8px; border-radius:6px; cursor:pointer; font-weight:600;">Beget (465 SSL)</button>
+            <button type="button" onclick="applySmtpPreset('yandex')" class="btn" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:3px 8px; border-radius:6px; cursor:pointer;">Яндекс</button>
+            <button type="button" onclick="applySmtpPreset('mailru')" class="btn" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:3px 8px; border-radius:6px; cursor:pointer;">Mail.ru</button>
+            <button type="button" onclick="applySmtpPreset('gmail')" class="btn" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:3px 8px; border-radius:6px; cursor:pointer;">Gmail</button>
+          </div>
+        </div>
 
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px;">
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">SMTP Сервер:</label>
             <input type="text" id="cfg-smtp-host" placeholder="smtp.beget.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
@@ -417,6 +427,13 @@ app.get('/', (req, res) => {
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Порт:</label>
             <input type="number" id="cfg-smtp-port" placeholder="465" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Шифрование:</label>
+            <select id="cfg-smtp-secure" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff;">
+              <option value="true">SSL (Порт 465)</option>
+              <option value="false">STARTTLS / Нет (587 / 25)</option>
+            </select>
           </div>
         </div>
 
@@ -427,7 +444,10 @@ app.get('/', (req, res) => {
           </div>
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Пароль от почты:</label>
-            <input type="password" id="cfg-smtp-pass" placeholder="••••••••••••" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            <div style="display: flex; gap: 6px;">
+              <input type="password" id="cfg-smtp-pass" placeholder="••••••••••••" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+              <button type="button" onclick="const p=document.getElementById('cfg-smtp-pass'); p.type=p.type==='password'?'text':'password';" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:0 8px; border-radius:6px; cursor:pointer;" title="Показать/скрыть пароль">👁️</button>
+            </div>
           </div>
         </div>
 
@@ -437,16 +457,16 @@ app.get('/', (req, res) => {
             <input type="text" id="cfg-smtp-from-name" placeholder="IT-сопровождение | Климов Евгений" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
           </div>
           <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Email оповещений администратора:</label>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Куда слать тестовое письмо / Уведомления админа:</label>
             <input type="email" id="cfg-admin-notify-email" placeholder="EKlimov84@gmail.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
           </div>
         </div>
 
-        <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
-          <button type="button" id="cfg-test-smtp-btn" onclick="testSmtpFromModal()" style="background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; padding: 8px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600; cursor: pointer;">
+        <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap;">
+          <button type="button" id="cfg-test-smtp-btn" onclick="testSmtpFromModal()" style="background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%); color: #fff; border: none; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">
             ✉️ Проверить отправку тестового письма
           </button>
-          <span style="font-size: 12px; color: #64748b;">Отправит проверочный 2FA-тест на почту администратора</span>
+          <span style="font-size: 12px; color: #64748b;">Проверит соединение с SMTP и отправит проверочный тест на указанную почту</span>
         </div>
       </div>
 
@@ -663,6 +683,7 @@ app.get('/', (req, res) => {
         backup_alert_email: document.getElementById('cfg-backup-email').value,
         smtp_host: document.getElementById('cfg-smtp-host').value,
         smtp_port: document.getElementById('cfg-smtp-port').value,
+        smtp_secure: document.getElementById('cfg-smtp-secure').value === 'true',
         smtp_user: document.getElementById('cfg-smtp-user').value,
         smtp_password: document.getElementById('cfg-smtp-pass').value,
         smtp_from_name: document.getElementById('cfg-smtp-from-name').value,
@@ -698,6 +719,26 @@ app.get('/', (req, res) => {
       }
     }
 
+    function applySmtpPreset(type) {
+      if (type === 'beget') {
+        document.getElementById('cfg-smtp-host').value = 'smtp.beget.com';
+        document.getElementById('cfg-smtp-port').value = '465';
+        document.getElementById('cfg-smtp-secure').value = 'true';
+      } else if (type === 'yandex') {
+        document.getElementById('cfg-smtp-host').value = 'smtp.yandex.ru';
+        document.getElementById('cfg-smtp-port').value = '465';
+        document.getElementById('cfg-smtp-secure').value = 'true';
+      } else if (type === 'mailru') {
+        document.getElementById('cfg-smtp-host').value = 'smtp.mail.ru';
+        document.getElementById('cfg-smtp-port').value = '465';
+        document.getElementById('cfg-smtp-secure').value = 'true';
+      } else if (type === 'gmail') {
+        document.getElementById('cfg-smtp-host').value = 'smtp.gmail.com';
+        document.getElementById('cfg-smtp-port').value = '465';
+        document.getElementById('cfg-smtp-secure').value = 'true';
+      }
+    }
+
     async function testSmtpFromModal() {
       const btn = document.getElementById('cfg-test-smtp-btn');
       const box = document.getElementById('cfg-result-box');
@@ -706,12 +747,13 @@ app.get('/', (req, res) => {
       box.style.display = 'block';
       box.style.background = '#eff6ff';
       box.style.color = '#1e3a8a';
-      box.textContent = 'Проверка подключения к SMTP серверу и отправка проверочного письма...';
+      box.innerHTML = '⏳ Проверка соединения с SMTP-сервером и отправка тестового письма...';
 
       const payload = {
         recipient: document.getElementById('cfg-admin-notify-email').value,
         smtp_host: document.getElementById('cfg-smtp-host').value,
         smtp_port: document.getElementById('cfg-smtp-port').value,
+        smtp_secure: document.getElementById('cfg-smtp-secure').value === 'true',
         smtp_user: document.getElementById('cfg-smtp-user').value,
         smtp_password: document.getElementById('cfg-smtp-pass').value,
         smtp_from_name: document.getElementById('cfg-smtp-from-name').value
@@ -727,16 +769,18 @@ app.get('/', (req, res) => {
         if (data.ok) {
           box.style.background = '#ecfdf5';
           box.style.color = '#065f46';
-          box.textContent = '✓ ' + data.message + (data.simulated ? ' (Режим безопасной эмуляции, код записан в логи)' : '');
+          box.innerHTML = '<strong>✓ Успешно:</strong> ' + data.message;
         } else {
           box.style.background = '#fffbeb';
           box.style.color = '#92400e';
-          box.textContent = 'SMTP статус: ' + data.message;
+          const errMsg = data.error || data.message || 'Ошибка соединения с сервером почты';
+          const hint = data.hint ? '<br><small style="display:block; margin-top:4px; color:#b45309;">💡 ' + data.hint + '</small>' : '';
+          box.innerHTML = '<strong>⚠️ Ошибка SMTP:</strong> ' + errMsg + hint;
         }
       } catch (err) {
         box.style.background = '#fef2f2';
         box.style.color = '#991b1b';
-        box.textContent = 'Сетевая ошибка: ' + err.message;
+        box.innerHTML = '<strong>❌ Сетевая ошибка:</strong> ' + err.message;
       } finally {
         btn.disabled = false;
         btn.textContent = '✉️ Проверить отправку тестового письма';
@@ -887,6 +931,13 @@ app.post('/client/:id/update_full', (req, res) => {
       ssh_port: req.body.cred_ssh_port,
       ssh_user: req.body.cred_ssh_user,
       ssh_password: req.body.cred_ssh_password,
+      ssh_key: req.body.cred_ssh_key,
+      web_root_dir: req.body.cred_web_root_dir,
+      backup_token: req.body.cred_backup_token,
+      ftp_host: req.body.cred_ftp_host,
+      ftp_port: req.body.cred_ftp_port,
+      ftp_user: req.body.cred_ftp_user,
+      ftp_password: req.body.cred_ftp_password,
       mysql_host: req.body.cred_mysql_host,
       mysql_name: req.body.cred_mysql_name,
       mysql_user: req.body.cred_mysql_user,
@@ -899,6 +950,109 @@ app.post('/client/:id/update_full', (req, res) => {
     ? '✓ Доступы к хостингу, 1С-Битрикс и SSH успешно сохранены!'
     : '✓ Параметры карточки и договор Saby успешно сохранены!';
   res.redirect(`/client/${clientId}?tab=${activeTab}`);
+});
+
+// --- API for Backup Agent script generation & download ---
+app.get('/api/client/:id/backup-agent.php', (req, res) => {
+  const client = db.getClientById(req.params.id);
+  if (!client) return res.status(404).send('Клиент не найден');
+  const creds = db.getClientCredentials(client.id, { mask: false });
+  const sites = db.getClientSites(client.id);
+  const host = req.get('host');
+  const webhookUrl = `https://${host}/api/backups/report`;
+  const token = req.query.token || creds?.backup_token || `bk_${client.id}_secret`;
+
+  const phpCode = generatePhpBackupAgent({ client, webhookUrl, secretToken: token, sites });
+  res.setHeader('Content-Type', 'application/x-php; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="crm_backup_agent.php"');
+  res.send(phpCode);
+});
+
+app.get('/api/client/:id/install-agent.sh', (req, res) => {
+  const client = db.getClientById(req.params.id);
+  if (!client) return res.status(404).send('Клиент не найден');
+  const creds = db.getClientCredentials(client.id, { mask: false });
+  const host = req.get('host');
+  const webhookUrl = `https://${host}/api/backups/report`;
+  const token = req.query.token || creds?.backup_token || `bk_${client.id}_secret`;
+
+  const bashCode = generateBashInstaller({ client, webhookUrl, secretToken: token, reqHost: host });
+  res.setHeader('Content-Type', 'text/x-shellscript; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="install-crm-agent.sh"');
+  res.send(bashCode);
+});
+
+// --- API for Remote SSH Testing, Command Exec & Auto Agent Install ---
+app.post('/api/client/:id/ssh/test', async (req, res) => {
+  try {
+    const client = db.getClientById(req.params.id);
+    if (!client) return res.json({ ok: false, error: 'Клиент не найден' });
+    const creds = db.getClientCredentials(client.id, { mask: false });
+    const connInfo = {
+      host: req.body.host || creds.ssh_host,
+      port: req.body.port || creds.ssh_port || 22,
+      user: req.body.user || creds.ssh_user || 'root',
+      password: (req.body.password && !req.body.password.startsWith('••••')) ? req.body.password : creds.ssh_password,
+      privateKey: req.body.privateKey || creds.ssh_key
+    };
+    const result = await sshService.testConnection(connInfo);
+    res.json(result);
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/client/:id/ssh/exec', async (req, res) => {
+  try {
+    const client = db.getClientById(req.params.id);
+    if (!client) return res.json({ ok: false, error: 'Клиент не найден' });
+    const creds = db.getClientCredentials(client.id, { mask: false });
+    const { command } = req.body;
+    if (!command) return res.json({ ok: false, error: 'Команда не указана' });
+
+    const connInfo = {
+      host: req.body.host || creds.ssh_host,
+      port: req.body.port || creds.ssh_port || 22,
+      user: req.body.user || creds.ssh_user || 'root',
+      password: (req.body.password && !req.body.password.startsWith('••••')) ? req.body.password : creds.ssh_password,
+      privateKey: req.body.privateKey || creds.ssh_key
+    };
+    const result = await sshService.executeCommand(connInfo, command);
+    res.json(result);
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/client/:id/ssh/install-agent', async (req, res) => {
+  try {
+    const client = db.getClientById(req.params.id);
+    if (!client) return res.json({ ok: false, error: 'Клиент не найден' });
+    const creds = db.getClientCredentials(client.id, { mask: false });
+    const sites = db.getClientSites(client.id);
+    const host = req.get('host');
+    const webhookUrl = `https://${host}/api/backups/report`;
+    const token = creds?.backup_token || `bk_${client.id}_secret`;
+    const phpCode = generatePhpBackupAgent({ client, webhookUrl, secretToken: token, sites });
+
+    const targetDir = req.body.targetDir || creds.web_root_dir || '/home/bitrix/www';
+    const connInfo = {
+      host: creds.ssh_host,
+      port: creds.ssh_port || 22,
+      user: creds.ssh_user || 'root',
+      password: creds.ssh_password,
+      privateKey: creds.ssh_key
+    };
+
+    const result = await sshService.installBackupAgent(connInfo, {
+      agentCode: phpCode,
+      targetDir,
+      cronTime: req.body.cronTime || '15 4 * * *'
+    });
+    res.json(result);
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
 });
 
 // Record manual backup
@@ -1311,22 +1465,36 @@ app.post('/api/client/:id/contact/:contactId/send_invite', async (req, res) => {
 app.post('/api/settings/smtp/test', async (req, res) => {
   try {
     const { recipient, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_password, smtp_from_name, smtp_from_email } = req.body || {};
+    const raw = settingsManager.getRawSettings();
+    
+    // Fall back to saved password if masked or empty
+    let cleanPassword = smtp_password;
+    if (!cleanPassword || String(cleanPassword).startsWith('••••') || String(cleanPassword).includes('***')) {
+      cleanPassword = raw.smtp_password || '';
+    }
+
     if (smtp_host) {
       settingsManager.saveSettings({
         smtp_host,
         smtp_port,
         smtp_secure,
         smtp_user,
-        smtp_password,
+        smtp_password: cleanPassword,
         smtp_from_name,
         smtp_from_email,
         admin_notify_email: recipient
       });
     }
-    const testRes = await mailer.testConnection(recipient, req.body);
+
+    const configToTest = {
+      ...req.body,
+      smtp_password: cleanPassword
+    };
+
+    const testRes = await mailer.testConnection(recipient, configToTest);
     res.json(testRes);
   } catch (err) {
-    res.json({ ok: false, message: err.message });
+    res.json({ ok: false, error: err.message, message: err.message });
   }
 });
 
