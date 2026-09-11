@@ -660,16 +660,8 @@ app.get('/', (req, res) => {
         </h4>
 
         <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; font-size: 13px; color: #1e40af; line-height: 1.5;">
-          <strong>Инструкция: Как получить ключи для интеграции с Saby CRM (СБИС):</strong>
-          <ol style="margin-top: 8px; margin-bottom: 0; padding-left: 20px;">
-            <li>Войдите в личный кабинет <strong>online.sbis.ru</strong> (с правами администратора).</li>
-            <li>Перейдите в раздел <strong>Настройки</strong> (шестеренка) &rarr; <strong>Интеграции</strong> &rarr; <strong>Внешние системы</strong> (или REST API).</li>
-            <li>Нажмите <strong>Создать приложение</strong>. Дайте ему название (например, "Интеграция с CRM").</li>
-            <li>Скопируйте <strong>Идентификатор приложения (Client ID)</strong> и вставьте в поле ниже.</li>
-            <li>Скопируйте <strong>Секретный ключ приложения (App Secret)</strong> и вставьте в поле ниже.</li>
-            <li>Если используется <strong>Сервисный ключ (Secret Key)</strong>, сгенерируйте его в разделе интеграций СБИС для пользователя системы и добавьте в поле ниже.</li>
-            <li>Сохраните изменения. Указанные ключи будут зашифрованы и сохранены локально на сервере.</li>
-          </ol>
+          <strong>Интеграция с Saby CRM (СБИС):</strong>
+          <p style="margin-top: 6px; margin-bottom: 0;">Вставьте "ID подключения" и "Защищенный ключ" из настроек вашего приложения в Saby.</p>
         </div>
 
 

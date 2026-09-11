@@ -36,7 +36,7 @@ export function getSabyCredentials() {
     clientId,
     appSecret,
     secretKey,
-    hasCredentials: !!(clientId && appSecret && secretKey)
+    hasCredentials: !!(clientId && appSecret)
   };
 }
 
@@ -49,7 +49,7 @@ export async function authenticateSaby() {
     return {
       ok: false,
       configured: false,
-      message: 'Учетные данные Saby API не настроены (требуются SABY_APP_CLIENT_ID, SABY_APP_SECRET, SABY_SECRET_KEY).'
+      message: 'Учетные данные Saby API не настроены (требуются SABY_APP_CLIENT_ID и SABY_APP_SECRET).'
     };
   }
 
@@ -59,15 +59,19 @@ export async function authenticateSaby() {
   }
 
   try {
+    const authParams = {
+      app_client_id: creds.clientId,
+      app_secret: creds.appSecret
+    };
+    if (creds.secretKey && creds.secretKey.trim() !== '') {
+      authParams.secret_key = creds.secretKey;
+    }
+
     const payload = {
       jsonrpc: '2.0',
       method: 'СБИС.Аутентифицировать',
       params: {
-        Параметр: {
-          app_client_id: creds.clientId,
-          app_secret: creds.appSecret,
-          secret_key: creds.secretKey
-        }
+        Параметр: authParams
       },
       id: 1
     };
