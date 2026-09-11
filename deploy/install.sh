@@ -50,7 +50,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-    command: sh -c "apk add --no-cache python3 make g++ && npm install && node server.js"
+    command: sh -c "apk add --no-cache python3 make g++ && npm install && node src/server.js"
     restart: always
 DOCKER_EOF
 
