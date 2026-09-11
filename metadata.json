@@ -1,0 +1,8 @@
+{
+  "name": "Saby & Beget CRM",
+  "description": "CRM-система управления инфраструктурой сайтов и договоров с интеграцией Saby и Beget",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

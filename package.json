@@ -1,0 +1,17 @@
+{
+  "name": "saby-beget-crm",
+  "version": "1.0.0",
+  "description": "CRM-система управления инфраструктурой сайтов и договоров с интеграцией Saby и Beget",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "build": "node -e \"console.log('Build successful')\"",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1"
+  }
+}
