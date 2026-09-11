@@ -123,18 +123,31 @@ def main():
         print("[CRM Supervisor] Node.js not found in PATH. Attempting automatic installation...")
         try:
             subprocess.run(["apt-get", "update", "-qq"], timeout=60)
-            subprocess.run(["apt-get", "install", "-y", "-qq", "nodejs"], timeout=120)
+            subprocess.run(["apt-get", "install", "-y", "-qq", "nodejs", "npm"], timeout=120)
             node_bin = find_node()
         except Exception as e:
             print(f"[CRM Supervisor] Automatic installation failed: {e}")
 
     if not node_bin:
         print("[CRM Supervisor] Fatal: nodejs is required to run the modern CRM interface.")
-        print("[CRM Supervisor] Please install Node.js: apt update && apt install -y nodejs")
+        print("[CRM Supervisor] Please install Node.js: apt update && apt install -y nodejs npm")
+        time.sleep(3)
         return 1
+
+    # Ensure express and session dependencies are installed
+    express_pkg = os.path.join(base_dir, "node_modules", "express")
+    if not os.path.isdir(express_pkg):
+        print("[CRM Supervisor] node_modules missing. Installing npm dependencies...")
+        npm_bin = shutil.which("npm") or "/usr/bin/npm"
+        if os.path.isfile(npm_bin):
+            try:
+                subprocess.run([npm_bin, "install", "--omit=dev"], cwd=base_dir, timeout=120)
+            except Exception as e:
+                print(f"[CRM Supervisor] npm install error: {e}")
 
     print(f"[CRM Supervisor] Starting Node.js backend ({node_bin} {server_js})...")
     env = os.environ.copy()
+    env["PORT"] = str(NODE_PORT)
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
