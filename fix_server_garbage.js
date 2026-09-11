@@ -1,19 +1,14 @@
 import fs from 'fs';
 let code = fs.readFileSync('server.js', 'utf8');
 
-// Remove app.get('/portal/:id', ...) entirely.
-const idRouteStart = "app.get('/portal/:id', (req, res) => {";
-const idRouteEnd = "// API endpoint to create ticket from client portal";
-const startIndex = code.indexOf(idRouteStart);
-const endIndex = code.indexOf(idRouteEnd);
+const marker = "// Secure Client Portal Entry";
+const endMarker = "// API endpoint to create ticket from client portal (with contact attribution & admin email alert)";
+
+const startIndex = code.indexOf(marker);
+const endIndex = code.indexOf(endMarker);
 
 if (startIndex !== -1 && endIndex !== -1) {
-  code = code.substring(0, startIndex) + code.substring(endIndex);
-}
-
-// Modify app.get('/public/client/:token') to serve as the ONLY portal entry point for clients & admin preview.
-const oldPublicClient = "app.get('/public/client/:token', async (req, res) => {";
-const newPublicClient = `// Secure Client Portal Entry
+  const newCode = `// Secure Client Portal Entry
 app.get('/portal/t/:token', async (req, res) => {
   const token = req.params.token;
   
@@ -82,6 +77,9 @@ app.get('/public/client/:token', (req, res) => {
 });
 
 `;
-
-code = code.replace(oldPublicClient, newPublicClient);
-fs.writeFileSync('server.js', code);
+  code = code.substring(0, startIndex) + newCode + code.substring(endIndex);
+  fs.writeFileSync('server.js', code);
+  console.log('Fixed garbage');
+} else {
+  console.log('Could not find markers');
+}

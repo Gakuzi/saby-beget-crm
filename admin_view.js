@@ -667,7 +667,7 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
       </a>
 
       <div style="display:flex; align-items:center; gap:10px;">
-        <a href="/portal/${client.id}" target="_blank" class="btn btn-portal" title="Открыть персональный клиентский портал">
+        <a href="/portal/t/${client.active_token || ''}" target="_blank" class="btn btn-portal" title="Открыть персональный клиентский портал (как клиент)">
           <span>✨</span>
           <span>Кабинет клиента ↗</span>
         </a>
@@ -2382,7 +2382,7 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
     }
 
     function copyClientAccessLink() {
-      const url = window.location.origin + '/public/client/${client.active_token || ''}';
+      const url = window.location.origin + '/portal/t/${client.active_token || ''}';
       if (navigator.clipboard) {
         navigator.clipboard.writeText(url).then(() => {
           showToast('✓ Ссылка для клиента скопирована в буфер обмена!');

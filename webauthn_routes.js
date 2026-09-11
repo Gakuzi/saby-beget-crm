@@ -151,7 +151,9 @@ export function setupWebAuthn(app) {
       });
 
       if (verification.verified && verification.registrationInfo) {
-        const { credentialID, credentialPublicKey, counter, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+        const { credentialDeviceType, credentialBackedUp, credential } = verification.registrationInfo;
+        const credentialPublicKey = credential ? credential.publicKey : (verification.registrationInfo.credentialPublicKey || new Uint8Array());
+        const counter = credential ? credential.counter : (verification.registrationInfo.counter || 0);
         
         db.savePasskey({
           id: response.id,

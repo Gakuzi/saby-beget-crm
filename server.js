@@ -2331,114 +2331,72 @@ app.get('/portal', async (req, res) => {
 });
 
 // Public client portal (Apple Liquid Glass design) - legacy token redirection
-app.get('/public/client/:token', async (req, res) => {
+// Secure Client Portal Entry
+app.get('/portal/t/:token', async (req, res) => {
   const token = req.params.token;
-  const contact = db.getContactByToken(token);
-  if (contact) {
-    const client = db.getClientById(contact.client_id);
-    const { code } = db.createVerificationCode(contact.id);
-    const mailRes = await mailer.sendLoginVerificationCode({
-      toEmail: contact.email,
-      contactName: contact.name,
-      companyName: client ? client.company_name : 'Контрагент',
-      code
-    });
-    return res.send(renderPortalVerifyPage({
-      contact,
-      client,
-      token: contact.token,
-      simulatedCode: mailRes.simulated ? code : null
+  
+  // 1. Check if token belongs to a Client (Admin Preview Mode)
+  const clientByToken = db.getClientByToken(token);
+  if (clientByToken) {
+    if (!req.session.admin_id) {
+      return res.status(403).send('Доступ к предпросмотру запрещен. Вы не авторизованы как администратор.');
+    }
+    return res.send(renderPortalPage({
+      client: clientByToken,
+      contact: null,
+      isAdminPreview: true,
+      token,
+      activeTab: req.query.tab || 'home',
+      reqQuery: req.query
     }));
   }
 
-  const client = db.getClientByToken(token);
-  if (!client) {
+  // 2. Check if token belongs to a Contact (Actual Client Access)
+  const contact = db.getContactByToken(token);
+  if (!contact) {
     return res.status(404).send(`<!doctype html>
       <html lang="ru">
-      <head><meta charset="utf-8"><title>Ссылка недействительна</title>
-<script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
-<script>
-async function registerPasskey() {
-  try {
-    const resp = await fetch('/webauthn/generate-reg', { credentials: 'include' });
-    if (!resp.ok) {
-      if (resp.status === 401) throw new Error('Не авторизован');
-      throw new Error('Failed to generate options');
-    }
-    const opts = await resp.json();
-    if (opts.error) throw new Error(opts.error);
-    
-    const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
-    
-    const verifyResp = await fetch('/webauthn/verify-reg', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(attResp),
-      credentials: 'include'
-    });
-    
-    const verification = await verifyResp.json();
-    if (verification.verified) {
-      alert('Ключ (Passkey) успешно добавлен! Теперь вы можете входить по отпечатку или Face ID.');
-    } else {
-      alert('Ошибка при сохранении ключа: ' + (verification.error || 'Неизвестная ошибка'));
-    }
-  } catch (e) {
-    console.error(e);
-    alert('Не удалось зарегистрировать ключ: ' + e.message);
-  }
-}
-</script>
-</head>
-      <body style="font-family:sans-serif; text-align:center; padding:60px; background:#f8fafc;">
-        <h2 style="color:#1e1b4b;">Ссылка клиентского кабинета недействительна или отозвана</h2>
-        <p style="color:#64748b;">Запросите актуальную ссылку у вашего системного администратора.</p>
-        <a href="/" style="color:#6366f1; font-weight:bold;">Перейти в CRM</a>
+      <head><meta charset="utf-8"><title>Ссылка недействительна</title></head>
+      <body style="font-family:sans-serif; padding:40px; text-align:center;">
+        <h2>Ссылка недействительна или устарела.</h2>
+        <p>Обратитесь к администратору для получения новой ссылки.</p>
       </body>
       </html>`);
   }
 
-  res.redirect(`/portal/${client.id}`);
+  const client = db.getClientById(contact.client_id);
+  
+  // If contact is already logged in via session
+  if (req.session.portalContactId && String(req.session.portalContactId) === String(contact.id)) {
+    return res.send(renderPortalPage({
+      client,
+      contact,
+      token: contact.token,
+      activeTab: req.query.tab || 'home',
+      reqQuery: req.query
+    }));
+  }
+
+  // Otherwise, require 2FA Verification
+  const { code } = db.createVerificationCode(contact.id);
+  const mailRes = await mailer.sendLoginVerificationCode({
+    toEmail: contact.email,
+    contactName: contact.name,
+    companyName: client ? client.company_name : 'Контрагент',
+    code
+  });
+  
+  return res.send(renderPortalVerifyPage({
+    contact,
+    client,
+    token: contact.token,
+    simulatedCode: mailRes.simulated ? code : null
+  }));
 });
 
-// Client Portal Direct / Admin Preview Route
-app.get('/portal/:id', (req, res) => {
-  const clientId = req.params.id;
-  const client = db.getClientById(clientId);
-  if (!client) {
-    return res.status(404).send('Клиент не найден');
-  }
-
-  // If user is already authenticated as a contact
-  if (req.session.portalContactId) {
-    const contact = db.getContactById(req.session.portalContactId);
-    if (contact && String(contact.client_id) === String(clientId)) {
-      return res.send(renderPortalPage({
-        client,
-        contact,
-        token: contact.token,
-        activeTab: req.query.tab || 'home',
-        reqQuery: req.query
-      }));
-    }
-  }
-
-  // Check if Admin
-  if (!req.session.admin_id && !req.session.portalContactId) {
-    return res.status(403).send('Доступ запрещен. Требуется авторизация.');
-  }
-  
-  // Admin Preview Mode (opened from CRM control panel)
-  const token = client.active_token || db.createAccessLink(client.id);
-  const activeTab = req.query.tab || 'home';
-  res.send(renderPortalPage({
-    client,
-    contact: null,
-    isAdminPreview: true,
-    token,
-    activeTab,
-    reqQuery: req.query
-  }));
+// Alias for old public link structure just in case
+app.get('/public/client/:token', (req, res) => {
+  res.redirect('/portal/t/' + req.params.token);
 });
 
 // API endpoint to create ticket from client portal (with contact attribution & admin email alert)
