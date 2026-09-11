@@ -36,16 +36,18 @@ jobs:
 
       - name: Validate source code
         run: |
-          node --check server.js
-          node --check crm_store.js
-          node --check portal_view.js
-          node --check admin_view.js
-          node --check inn_helper.js
-          node --check saby_client.js
-          node --check beget_client.js
-          node --check github_sync.js
-          node --check mailer.js
-          python3 -m py_compile app.py
+          node --check src/server.js
+          for file in crm_store.js portal_view.js admin_view.js inn_helper.js saby_client.js beget_client.js github_sync.js mailer.js; do
+            target=$(find src -name "$file" 2>/dev/null | head -n 1)
+            if [ -n "$target" ]; then
+              node --check "$target"
+            elif [ -f "$file" ]; then
+              node --check "$file"
+            fi
+          done
+          if [ -f "app.py" ]; then
+            python3 -m py_compile app.py
+          fi
 
       - name: Create release archive
         run: |
@@ -211,4 +213,3 @@ jobs:
             echo "================================================================"
             echo "==> [SSH] Деплой успешно завершен! Все сервисы обновлены."
             echo "================================================================"
-
