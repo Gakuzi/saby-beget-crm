@@ -5,6 +5,7 @@ node_modules/
 # Runtime data and secrets
 .env
 .env.*
+!.env.example
 .admin_credentials
 .internal_report_token
 .github_sync_history.json

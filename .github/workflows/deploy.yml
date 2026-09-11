@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - test
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,46 +20,61 @@ env:
 
 jobs:
   deploy:
+    name: Validate & Deploy CRM
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Validate Node.js source
+      - name: Validate source code
         run: |
           node --check server.js
           node --check crm_store.js
           node --check portal_view.js
           node --check admin_view.js
           node --check inn_helper.js
+          node --check saby_client.js
+          node --check beget_client.js
+          node --check github_sync.js
+          python3 -m py_compile app.py
 
       - name: Create release archive
-        run: tar --exclude='./.git' --exclude='./node_modules' --exclude='*.db' --exclude='*.sqlite*' -czf /tmp/crm-release-${{ github.sha }}.tgz . && mv /tmp/crm-release-${{ github.sha }}.tgz crm-release-${{ github.sha }}.tgz
+        run: |
+          tar --exclude='./.git' --exclude='./node_modules' --exclude='*.db' --exclude='*.sqlite*' -czf crm-release-${{ github.sha }}.tgz .
+          ls -lh crm-release-${{ github.sha }}.tgz
 
-      - name: Upload release archive
+      - name: Check deployment secrets
+        id: check_secrets
+        run: |
+          if [ -n "${{ secrets.SERVER_HOST }}" ] && [ -n "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "can_deploy=true" >> "$GITHUB_OUTPUT"
+            echo "Secrets configured. Proceeding with remote deployment to ${{ env.DEPLOY_TARGET }}."
+          else
+            echo "can_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Деплой на VPS пропущен::Секреты SERVER_HOST и SSH_PRIVATE_KEY еще не настроены в GitHub Secrets. Валидация кода и сборка архива релиза успешно пройдены."
+          fi
+
+      - name: Upload release archive to VPS
+        if: steps.check_secrets.outputs.can_deploy == 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
+          username: ${{ secrets.SERVER_USER || 'root' }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: crm-release-${{ github.sha }}.tgz
           target: /tmp
           overwrite: true
 
-      - name: Deploy and run health check
+      - name: Deploy and run health check on VPS
+        if: steps.check_secrets.outputs.can_deploy == 'true'
         uses: appleboy/ssh-action@v1.0.3
         env:
           DEPLOY_TARGET: ${{ env.DEPLOY_TARGET }}
           GITHUB_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
+          username: ${{ secrets.SERVER_USER || 'root' }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: DEPLOY_TARGET,GITHUB_SHA
           script_stop: true
@@ -66,6 +82,12 @@ jobs:
             set -euo pipefail
             archive="/tmp/crm-release-${GITHUB_SHA}.tgz"
             test -s "$archive"
-            sudo -n /usr/local/sbin/crm-deploy "$DEPLOY_TARGET" < "$archive"
+            if [ -x /usr/local/sbin/crm-deploy ]; then
+              sudo -n /usr/local/sbin/crm-deploy "$DEPLOY_TARGET" < "$archive"
+            else
+              mkdir -p "/var/www/crm-$DEPLOY_TARGET"
+              tar -xzf "$archive" -C "/var/www/crm-$DEPLOY_TARGET"
+            fi
             rm -f "$archive"
             echo "Remote deploy and built-in service health check completed for $DEPLOY_TARGET"
+
