@@ -450,7 +450,9 @@ app.get('/workers/:id/delete', (req, res) => {
 
 // Logout
 app.get('/logout', (req, res) => {
-  res.redirect('/');
+  req.session.destroy(() => {
+    res.redirect('/login');
+  });
 });
 
 // Change Password
@@ -497,8 +499,7 @@ app.post('/change-password', (req, res) => {
   if (adminId) {
     const admin = db.db.prepare('SELECT * FROM admin_users WHERE id = ?').get(adminId);
     if (admin) {
-      const salt = require('crypto').randomBytes(16).toString('hex');
-      const hash = require('crypto').pbkdf2Sync(new_password, salt, 1000, 64, 'sha512').toString('hex');
+      const { hash, salt } = db.hashPassword(new_password);
       db.db.prepare('UPDATE admin_users SET password_hash = ?, salt = ? WHERE id = ?').run(hash, salt, adminId);
     }
   } else {

@@ -68,9 +68,9 @@ export function setupWebAuthn(app) {
         expectedChallenge,
         expectedOrigin,
         expectedRPID: getRpId(req),
-        authenticator: {
-          credentialID: new Uint8Array(Buffer.from(passkey.id, 'base64url')),
-          credentialPublicKey: Buffer.from(passkey.public_key, 'base64'),
+        credential: {
+          id: passkey.id,
+          publicKey: new Uint8Array(Buffer.from(passkey.public_key, 'base64')),
           counter: passkey.counter,
           transports: passkey.transports ? passkey.transports.split(',') : undefined,
         },

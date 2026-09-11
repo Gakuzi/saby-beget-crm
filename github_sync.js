@@ -463,3 +463,43 @@ export async function pullFromGitHub() {
   return { ok: true, commitHash, log: logItem, message: logItem.message };
 }
 
+
+export async function createGitHubRelease(version, name, body) {
+  const config = getGitHubConfig();
+  if (!config.token || !config.repo) {
+    return { ok: false, error: 'Не настроен GitHub Token или имя репозитория. Заполните их в настройках CRM.' };
+  }
+
+  // Push latest changes first
+  runGit('add -A');
+  runGit('commit -m "chore: Prepare release ' + version + '"');
+  runGit('push ' + (config.repoUrl || 'origin') + ' ' + config.branch);
+
+  try {
+    const res = await fetch('https://api.github.com/repos/' + config.repo + '/releases', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/vnd.github.v3+json',
+        'Authorization': 'token ' + config.token,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tag_name: version,
+        name: name,
+        body: body,
+        draft: false,
+        prerelease: false
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      syncHistory.unshift({ timestamp: new Date().toISOString(), status: 'success', message: 'Создан релиз ' + version });
+      saveSyncHistory();
+      return { ok: true, url: data.html_url };
+    } else {
+      return { ok: false, error: data.message || 'Ошибка API GitHub' };
+    }
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}

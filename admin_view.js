@@ -2982,7 +2982,44 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         }, 5000);
       }
     }
-  </script>
+  
+    async function executeGitHubRelease() {
+      const btn = document.getElementById('modal-release-btn');
+      const box = document.getElementById('modal-result');
+      btn.disabled = true;
+      btn.innerHTML = 'Создание...';
+      box.style.display = 'block';
+      box.innerHTML = 'Запрос к GitHub API...';
+      box.style.background = '#eff6ff';
+      box.style.color = '#1e3a8a';
+      
+      try {
+        const res = await fetch('/api/settings/github/release', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version: 'v1.0.0', name: 'Первый стабильный релиз', body: 'Релиз включает полный функционал CRM, WebAuthn авторизацию, встроенный Web-SSH терминал и базу данных SQLite.' })
+        });
+        const data = await res.json();
+        
+        if (data.ok) {
+          box.style.background = '#ecfdf5';
+          box.style.color = '#065f46';
+          box.innerHTML = '<strong>✅ Успешно!</strong> Релиз v1.0.0 опубликован на GitHub.<br><a href="' + data.url + '" target="_blank" style="color:#0284c7; text-decoration:underline;">Посмотреть релиз</a>';
+        } else {
+          box.style.background = '#fef2f2';
+          box.style.color = '#991b1b';
+          box.innerHTML = '<strong>❌ Ошибка:</strong> ' + (data.error || 'Сбой при публикации релиза');
+        }
+      } catch (err) {
+        box.style.background = '#fef2f2';
+        box.style.color = '#991b1b';
+        box.innerHTML = '<strong>❌ Сетевая ошибка:</strong> ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>📦</span> Выпустить релиз v1.0.0';
+      }
+    }
+\n  </script>
 
 
   <!-- Add Contact Modal -->
