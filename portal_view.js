@@ -43,8 +43,8 @@ export function renderPortalPage({ client, contact = null, token = '', activeTab
 
   const contractNum = client.saby_contract_number || '№ Д-2024/017';
   const planHours = client.plan_hours || 15;
-  const hoursUsed = summary.hours.used;
-  const hoursPercent = summary.hours.percent;
+  const hoursUsed = summary.hours_used || 0;
+  const hoursPercent = Math.min(100, (hoursUsed / planHours) * 100).toFixed(1);
 
   return `<!DOCTYPE html>
 <html lang="ru">

@@ -291,7 +291,7 @@ class SqliteDatabase {
   }
 
   ensureAdminUser() {
-    const row = this.db.prepare('SELECT * FROM admin_users WHERE username = ? OR email = ?').get('admin', 'EKlimov84@gmail.com');
+    const row = this.db.prepare('SELECT * FROM admin_users WHERE username = ? OR LOWER(email) = LOWER(?)').get('admin', 'EKlimov84@gmail.com');
     if (!row) {
       const { hash, salt } = this.hashPassword('admin123');
       const now = new Date().toISOString();

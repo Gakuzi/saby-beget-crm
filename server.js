@@ -1,4 +1,4 @@
-import express from 'express';
+import express from "express";
 import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -23,13 +23,15 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
+app.set('trust proxy', 1);
+
 // Session configuration
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'crm-saby-beget-secret-2024',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 24 * 60 * 60 * 1000 }
+    cookie: { maxAge: 24 * 60 * 60 * 1000, secure: true, sameSite: 'none' }
   })
 );
 
@@ -41,14 +43,25 @@ app.use((req, res, next) => {
 });
 
 // Authentication middleware (Bypassed: open access mode so interface and client cabinets work seamlessly without secrets or login blocks)
+
 function requireAdmin(req, res, next) {
-  if (req.session) {
-    if (!req.session.crm_admin_user) {
-      req.session.crm_admin_user = 'Климов Евгений';
-    }
+  // Allow open access to portal, login, health, api auth routes
+  const openRoutes = ['/login', '/login_otp', '/healthz', '/portal'];
+  if (openRoutes.some(route => req.path.startsWith(route))) {
+    return next();
   }
-  return next();
+  
+  // Also allow static assets if any, though we don't have a static dir mapped here
+  
+  if (req.session && req.session.admin_id) {
+    return next();
+  }
+  
+  // Not logged in, save next url and redirect
+  const nextUrl = req.originalUrl;
+  res.redirect('/login?next=' + encodeURIComponent(nextUrl));
 }
+
 
 app.use(requireAdmin);
 
@@ -86,21 +99,241 @@ app.get('/healthz', (req, res) => {
 });
 
 // Login (Direct access to CRM without password blocker)
+
 app.get('/login', (req, res) => {
-  if (req.session) {
-    req.session.crm_admin_user = 'Климов Евгений';
-  }
+  const msg = req.query.msg || '';
   const nextUrl = req.query.next || '/';
-  res.redirect(nextUrl.startsWith('/') ? nextUrl : '/');
+  res.send(`<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Вход — CRM Администратора</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f8fafc; font-family: -apple-system, sans-serif; }
+    .card { width: min(440px, calc(100% - 32px)); padding: 32px; background: #fff; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }
+    h2 { margin-top:0; color: #1e293b; text-align: center; margin-bottom: 24px; }
+    input { width: 100%; box-sizing: border-box; padding: 12px; margin: 8px 0 16px; border: 1px solid #cbd5e1; border-radius: 8px; font-size:15px; }
+    button { width: 100%; padding: 12px; background: #2563eb; color: #fff; border: 0; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; transition: background 0.2s; }
+    button:hover { background: #1d4ed8; }
+    .msg { color: #dc2626; text-align: center; font-size: 14px; margin-bottom: 16px; font-weight: 500; }
+    .success { color: #16a34a; text-align: center; font-size: 14px; margin-bottom: 16px; font-weight: 500; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; }
+    .tab { flex: 1; text-align: center; padding: 8px; cursor: pointer; color: #64748b; font-weight: 600; border-radius: 6px; }
+    .tab.active { background: #eff6ff; color: #2563eb; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Вход в CRM</h2>
+    ${msg ? `<div class="${req.query.type === 'success' ? 'success' : 'msg'}">${msg}</div>` : ''}
+    
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('pwd')">По паролю</div>
+      <div class="tab" onclick="switchTab('otp')">По E-mail (Код)</div>
+    </div>
+
+    <!-- Password Login Form -->
+    <form id="form-pwd" method="post" action="/login">
+      <input type="hidden" name="next" value="${nextUrl}">
+      <label>Email или Логин:</label>
+      <input type="text" name="login" required placeholder="admin">
+      <label>Пароль:</label>
+      <input type="password" name="password" required placeholder="••••••••">
+      <button type="submit">Войти</button>
+    </form>
+
+    <!-- OTP Request Form -->
+    <form id="form-otp-req" method="post" action="/login_otp_request" style="display:none;">
+      <input type="hidden" name="next" value="${nextUrl}">
+      <label>Email администратора:</label>
+      <input type="email" name="email" required placeholder="eklimov84@gmail.com">
+      <button type="submit">Получить код</button>
+    </form>
+    
+    <!-- OTP Verify Form (if code was sent) -->
+    ${req.query.show_otp ? `
+      <form id="form-otp-verify" method="post" action="/login_otp_verify" style="margin-top:20px; padding-top:20px; border-top:1px dashed #cbd5e1;">
+        <input type="hidden" name="next" value="${nextUrl}">
+        <input type="hidden" name="email" value="${req.query.email}">
+        <label>Код из письма:</label>
+        <input type="text" name="code" required placeholder="123456" style="letter-spacing:4px; text-align:center; font-weight:bold; font-size:18px;">
+        <button type="submit" style="background:#10b981;">Подтвердить код</button>
+      </form>
+      <script>
+        document.getElementById('form-pwd').style.display = 'none';
+        document.getElementById('form-otp-req').style.display = 'none';
+        document.querySelector('.tabs').style.display = 'none';
+      </script>
+    ` : ''}
+
+    <script>
+      function switchTab(t) {
+        document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+        if(t === 'pwd') {
+          document.getElementById('form-pwd').style.display = 'block';
+          document.getElementById('form-otp-req').style.display = 'none';
+          document.querySelectorAll('.tab')[0].classList.add('active');
+        } else {
+          document.getElementById('form-pwd').style.display = 'none';
+          document.getElementById('form-otp-req').style.display = 'block';
+          document.querySelectorAll('.tab')[1].classList.add('active');
+        }
+      }
+    </script>
+  </div>
+</body>
+</html>`);
 });
 
 app.post('/login', (req, res) => {
-  if (req.session) {
-    req.session.crm_admin_user = 'Климов Евгений';
+  const { login, password, next } = req.body;
+  const admin = db.verifyAdminCredentials(login, password);
+  if (!admin) {
+    return res.redirect('/login?msg=' + encodeURIComponent('Неверный логин или пароль') + '&next=' + encodeURIComponent(next || '/'));
   }
-  const nextUrl = req.query.next || '/';
-  res.redirect(nextUrl.startsWith('/') ? nextUrl : '/');
+  
+  req.session.admin_id = admin.id;
+  req.session.crm_admin_user = admin.username || admin.email;
+  db.setAdminLastLogin(admin.id);
+  
+  res.redirect(next || '/');
 });
+
+const otps = new Map(); // Store OTPs in memory for simplicity
+
+app.post('/login_otp_request', async (req, res) => {
+  const { email, next } = req.body;
+  
+  // Check if admin exists
+  const admin = db.db.prepare('SELECT * FROM admin_users WHERE LOWER(email) = LOWER(?)').get(email.trim());
+  if (!admin) {
+    return res.redirect('/login?msg=' + encodeURIComponent('Email не найден в списке администраторов') + '&next=' + encodeURIComponent(next || '/'));
+  }
+  
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  otps.set(email.trim(), { code, expires: Date.now() + 10 * 60 * 1000 });
+  
+  // Send email
+  const { mailer } = await import('./mailer.js');
+  await mailer.sendAdminLoginOtp(email.trim(), code);
+  
+  res.redirect('/login?show_otp=1&type=success&msg=' + encodeURIComponent('Код отправлен на почту') + '&email=' + encodeURIComponent(email.trim()) + '&next=' + encodeURIComponent(next || '/'));
+});
+
+app.post('/login_otp_verify', (req, res) => {
+  const { email, code, next } = req.body;
+  const record = otps.get(email.trim());
+  
+  if (!record || record.code !== code.trim() || record.expires < Date.now()) {
+    return res.redirect('/login?msg=' + encodeURIComponent('Неверный или просроченный код') + '&next=' + encodeURIComponent(next || '/'));
+  }
+  
+  otps.delete(email.trim());
+  const admin = db.db.prepare('SELECT * FROM admin_users WHERE LOWER(email) = LOWER(?)').get(email.trim());
+  
+  req.session.admin_id = admin.id;
+  req.session.crm_admin_user = admin.username || admin.email;
+  
+  db.setAdminLastLogin(admin.id);
+  
+  res.redirect(next || '/');
+});
+
+// Workers Management
+app.get('/workers', (req, res) => {
+  const admins = db.db.prepare('SELECT id, username, email, created_at, last_login_at FROM admin_users ORDER BY id ASC').all();
+  
+  res.send(`<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Управление сотрудниками — CRM</title>
+  <style>
+    body { margin: 0; padding: 30px; background: #f8fafc; font-family: -apple-system, sans-serif; color: #1e293b; }
+    .container { max-width: 1000px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f1f5f9; color: #475569; font-weight: 600; }
+    a { color: #2563eb; text-decoration: none; }
+    input { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; width: 100%; box-sizing: border-box; }
+    button { padding: 10px 16px; background: #10b981; color: #fff; border: 0; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; margin-top: 20px; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+      <h2 style="margin:0;">Сотрудники CRM (Администраторы)</h2>
+      <a href="/">&larr; В панель управления</a>
+    </div>
+    
+    <table>
+      <thead>
+        <tr>
+          <th>Имя / Логин</th>
+          <th>E-mail</th>
+          <th>Последний вход</th>
+          <th>Действия</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${admins.map(a => `
+          <tr>
+            <td><strong>${a.username}</strong></td>
+            <td>${a.email}</td>
+            <td style="color:#64748b; font-size:13px;">${a.last_login_at ? new Date(a.last_login_at).toLocaleString('ru-RU') : 'Никогда'}</td>
+            <td>
+              ${a.username !== 'admin' ? `<a href="/workers/${a.id}/delete" onclick="return confirm('Удалить сотрудника?');" style="color:#ef4444;">Удалить</a>` : '<span style="color:#94a3b8;font-size:12px;">Системный</span>'}
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:40px;">+ Добавить сотрудника</h3>
+    <form method="post" action="/workers/add" class="form-grid">
+      <div>
+        <label style="display:block; margin-bottom:4px; font-size:13px; font-weight:600;">Логин / Имя:</label>
+        <input type="text" name="username" required>
+      </div>
+      <div>
+        <label style="display:block; margin-bottom:4px; font-size:13px; font-weight:600;">Email:</label>
+        <input type="email" name="email" required>
+      </div>
+      <div>
+        <label style="display:block; margin-bottom:4px; font-size:13px; font-weight:600;">Пароль (мин. 6 символов):</label>
+        <input type="password" name="password" required minlength="6">
+      </div>
+      <div>
+        <button type="submit">Создать аккаунт</button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>`);
+});
+
+app.post('/workers/add', (req, res) => {
+  const { username, email, password } = req.body;
+  try {
+    const { hash, salt } = db.hashPassword(password);
+    db.db.prepare('INSERT INTO admin_users (username, email, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)').run(
+      username.trim(), email.trim(), hash, salt, new Date().toISOString()
+    );
+  } catch (e) {
+    console.error(e);
+  }
+  res.redirect('/workers');
+});
+
+app.get('/workers/:id/delete', (req, res) => {
+  if (parseInt(req.params.id) !== 1) { // protect main admin
+    db.db.prepare('DELETE FROM admin_users WHERE id = ?').run(req.params.id);
+  }
+  res.redirect('/workers');
+});
+
+
 
 // Logout
 app.get('/logout', (req, res) => {
@@ -233,39 +466,24 @@ app.get('/', (req, res) => {
 </head>
 <body>
   <div class="container" style="position: relative;">
-    <div class="header-bar" style="justify-content: center; position: relative;">
-      <h2 style="font-weight: 800; font-size: 24px; text-align: center;">CRM-система управления договорами</h2>
-      
-      <!-- User / Settings Dropdown in top right -->
-      <div style="position: absolute; right: 0; top: -5px;" class="user-dropdown-container">
-        <button type="button" onclick="document.getElementById('user-menu').classList.toggle('show')" style="background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-          <div style="width: 36px; height: 36px; background: #fdf2ee; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #b45309; font-weight: bold;">
-            ${(req.session.crm_admin_user || 'К Е').substring(0,2).toUpperCase()}
-          </div>
-          <span style="font-weight: 600; color: #475569;">${req.session.crm_admin_user || 'Климов Евгений'}</span>
-          <span style="font-size: 10px; color: #94a3b8;">▼</span>
-        </button>
-        <div id="user-menu" style="display: none; position: absolute; right: 0; top: 45px; background: #fff; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-radius: 8px; width: 240px; z-index: 100; border: 1px solid #f1f5f9; padding: 8px 0;">
-          <a href="/?filter=${filter === 'active' ? 'archived' : 'active'}" style="display: block; padding: 10px 16px; color: #334155; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">${filter === 'active' ? '🗄️ Показать архивные' : '📁 Показать активные'}</a>
-            <a href="#" onclick="openSabySettingsModal()" style="display: block; padding: 10px 16px; color: #334155; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">⚙️ Настройки Saby CRM & Ключи</a>
-          <a href="/change-password" style="display: block; padding: 10px 16px; color: #334155; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">🔑 Сменить пароль</a>
-          <a href="#" onclick="resetDatabase()" style="display: block; padding: 10px 16px; color: #ef4444; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">⚠️ Сбросить всю БД</a>
-          <a href="#" onclick="seedDatabase()" style="display: block; padding: 10px 16px; color: #10b981; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">🌱 Заполнить тестовым клиентом</a>
-          <a href="/logout" style="display: block; padding: 10px 16px; color: #334155; text-decoration: none; font-size: 14px;">🚪 Выйти</a>
-        </div>
+    
+    <div class="header-bar">
+      <h2 style="font-weight: 800; font-size: 24px;">CRM-система</h2>
+      <div class="user-info" style="display:flex; align-items:center; gap:16px;">
+        <span style="font-weight: 600; color: #475569;">👤 ${req.session.crm_admin_user || 'Администратор'}</span>
+        <a href="/?filter=${filter === 'active' ? 'archived' : 'active'}" style="font-size:13px; font-weight:600; color:#3b82f6;">${filter === 'active' ? '🗄️ Архив' : '📁 Активные'}</a>
+        <a href="/workers" style="font-size:13px; font-weight:600;">👥 Сотрудники</a>
+        <a href="#" onclick="openSabySettingsModal()" style="font-size:13px; font-weight:600;">⚙️ Настройки Saby</a>
+        <a href="/change-password" style="font-size:13px; font-weight:600;">🔑 Пароль</a>
+        <a href="/logout" style="font-size:13px; font-weight:600; color:#ef4444;">🚪 Выйти</a>
       </div>
     </div>
 
     <div class="actions-bar" style="justify-content: space-between;">
-      <div style="display: flex; gap: 12px; position: relative;">
-        <!-- Add Client Dropdown -->
-        <button type="button" onclick="document.getElementById('add-menu').classList.toggle('show')" class="btn" style="padding: 10px 14px; font-size: 18px; border-radius: 50%; width: 44px; height: 44px; justify-content: center; box-shadow: 0 4px 12px rgba(255, 180, 162, 0.4);" title="Добавить клиента">
-          +
-        </button>
-        <div id="add-menu" style="display: none; position: absolute; left: 0; top: 52px; background: #fff; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-radius: 8px; width: 260px; z-index: 100; border: 1px solid #f1f5f9; padding: 8px 0;">
-          <a href="/add_page" style="display: block; padding: 10px 16px; color: #334155; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">🔍 Найти в базе данных / Saby</a>
-          <a href="#" onclick="alert('Форма ручного добавления в разработке')" style="display: block; padding: 10px 16px; color: #334155; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">📝 Добавить вручную</a>
-        </div>
+      <div style="display: flex; gap: 12px;">
+        <a href="/add_page" class="btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; padding: 10px 18px; border-radius: 8px;">+ Добавить контрагента</a>
+        <button type="button" onclick="seedDatabase()" class="btn" style="background: #f1f5f9; color: #475569; padding: 10px 18px; border-radius: 8px; border:none; cursor:pointer; font-weight:600;">🌱 Тестовый клиент</button>
+        <button type="button" onclick="resetDatabase()" class="btn" style="background: #fee2e2; color: #ef4444; padding: 10px 18px; border-radius: 8px; border:none; cursor:pointer; font-weight:600;">⚠️ Сбросить БД</button>
       </div>
       <span style="font-size:13px; color:#94a3b8;">Всего контрагентов: ${clients.length}</span>
     </div>
@@ -911,17 +1129,7 @@ app.get('/', (req, res) => {
         });
     }
     
-    // Close dropdowns when clicking outside
-    document.addEventListener('click', function(event) {
-      if (!event.target.closest('.user-dropdown-container')) {
-        const userMenu = document.getElementById('user-menu');
-        if (userMenu && userMenu.classList.contains('show')) userMenu.classList.remove('show');
-      }
-      if (!event.target.closest('.actions-bar')) {
-        const addMenu = document.getElementById('add-menu');
-        if (addMenu && addMenu.classList.contains('show')) addMenu.classList.remove('show');
-      }
-    });
+
     </script>
 
   </body>
@@ -1896,6 +2104,11 @@ app.get('/portal/:id', (req, res) => {
     }
   }
 
+  // Check if Admin
+  if (!req.session.admin_id && !req.session.portalContactId) {
+    return res.status(403).send('Доступ запрещен. Требуется авторизация.');
+  }
+  
   // Admin Preview Mode (opened from CRM control panel)
   const token = client.active_token || db.createAccessLink(client.id);
   const activeTab = req.query.tab || 'home';
