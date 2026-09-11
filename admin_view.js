@@ -712,6 +712,21 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         </div>
 
         <div class="header-actions">
+          <a href="/client/${client.id}/dossier" target="_blank" class="btn btn-glass" style="background: #f8fafc; color: #0f172a; border-color: #cbd5e1; font-weight: 700;">
+            <span>⚖️</span>
+            <span>Юридическое досье</span>
+          </a>
+          ${client.is_archived === 1 ? `
+            <button type="button" onclick="restoreClientAction(${client.id})" class="btn" style="background: #dcfce7; color: #166534; font-weight: 700; border: 1px solid #86efac;">
+              <span>♻️</span>
+              <span>Восстановить договор</span>
+            </button>
+          ` : `
+            <button type="button" onclick="archiveClientAction(${client.id})" class="btn" style="background: #fee2e2; color: #991b1b; font-weight: 700; border: 1px solid #fca5a5;">
+              <span>📦</span>
+              <span>В архив (завершить)</span>
+            </button>
+          `}
           <button type="button" onclick="triggerSabySync(${client.id})" id="sync-top-btn" class="btn btn-primary">
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
             <span>Синхронизировать с Saby</span>
@@ -723,6 +738,29 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         </div>
       </div>
     </div>
+
+    ${client.is_archived === 1 ? `
+      <div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: 14px; padding: 18px 22px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 20px;">📁</span>
+            <strong style="color: #991b1b; font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px;">Карточка контрагента находится в АРХИВЕ</strong>
+          </div>
+          <div style="font-size: 13.5px; color: #b91c1c; margin-top: 6px; line-height: 1.45;">
+            Договор завершен / расторгнут: <strong>${client.archived_at ? new Date(client.archived_at).toLocaleString('ru-RU') : '—'}</strong>.<br>
+            Основание: <strong>${client.archived_reason || 'Договор завершен'}</strong>. Все данные, журналы работ, доступы и акты защищены и сохранены в базе данных SQLite.
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <a href="/client/${client.id}/dossier" target="_blank" class="btn btn-primary" style="background: #0f172a;">
+            ⚖️ Открыть судебное досье
+          </a>
+          <button type="button" onclick="restoreClientAction(${client.id})" class="btn" style="background: #ffffff; color: #166534; border: 1px solid #86efac; font-weight: 700;">
+            ♻️ Восстановить в активные
+          </button>
+        </div>
+      </div>
+    ` : ''}
 
     <!-- KPI Summary Grid (Interactive & Clickable) -->
     <div class="kpi-grid">
@@ -3314,6 +3352,43 @@ export function renderNewClientPage() {
       const parts = val.split('|||');
       document.getElementById('contract_id').value = parts[0] || '';
       document.getElementById('contract_number').value = parts[1] || '';
+    }
+
+    function archiveClientAction(id) {
+      const reason = prompt('Укажите причину расторжения / архивации договора:', 'Договор завершен / расторгнут');
+      if (reason === null) return; // User cancelled
+      
+      fetch('/api/client/' + id + '/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason })
+      })
+      .then(r => r.json())
+      .then(res => {
+        if (res.ok) {
+          window.location.reload();
+        } else {
+          alert('Ошибка архивации: ' + res.error);
+        }
+      })
+      .catch(e => alert('Ошибка сети: ' + e));
+    }
+
+    function restoreClientAction(id) {
+      if (!confirm('Вы действительно хотите восстановить договор из архива и перевести его в статус "Активный"?')) return;
+      
+      fetch('/api/client/' + id + '/restore', {
+        method: 'POST'
+      })
+      .then(r => r.json())
+      .then(res => {
+        if (res.ok) {
+          window.location.reload();
+        } else {
+          alert('Ошибка восстановления: ' + res.error);
+        }
+      })
+      .catch(e => alert('Ошибка сети: ' + e));
     }
   </script>
 </body>

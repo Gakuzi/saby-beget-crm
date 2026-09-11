@@ -2587,14 +2587,6 @@ export function renderPortalVerifyPage({ contact, client, token = '', error = nu
       </form>
       <a href="/portal/login" style="color: #64748b; text-decoration: none;">Войти другим контактом</a>
     </div>
-
-    ${simulatedCode ? `
-      <div class="simulated-banner">
-        💡 <strong>Журнал сервера CRM:</strong><br>
-        Одноразовый проверочный код: <code style="font-size: 15px; font-weight: 800; background: #dbeafe; padding: 2px 8px; border-radius: 4px; letter-spacing: 2px;">${simulatedCode}</code><br>
-        <em>(Если SMTP ещё не настроен, используйте этот код для входа)</em>
-      </div>
-    ` : ''}
   </div>
 </body>
 </html>`;

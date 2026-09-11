@@ -982,6 +982,25 @@ app.post('/client/:id/update_full', (req, res) => {
   res.redirect(`/client/${clientId}?tab=${activeTab}`);
 });
 
+app.post('/api/client/:id/archive', (req, res) => {
+  const { reason } = req.body;
+  try {
+    db.archiveClient(req.params.id, reason);
+    res.json({ ok: true, message: 'Договор расторгнут, клиент перенесен в архив.' });
+  } catch(e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/client/:id/restore', (req, res) => {
+  try {
+    db.restoreClient(req.params.id);
+    res.json({ ok: true, message: 'Договор восстановлен, клиент активен.' });
+  } catch(e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // --- API for Backup Agent script generation & download ---
 app.get('/api/client/:id/backup-agent.php', (req, res) => {
   const client = db.getClientById(req.params.id);

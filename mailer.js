@@ -281,6 +281,187 @@ class MailerService {
     }
   }
 
+  // Send Admin 2FA verification code
+  async sendAdminVerificationCode({ email, code }) {
+    const transporter = await this.getTransporter();
+    if (!transporter) {
+      console.warn('[Mailer] Почтовый транспорт не настроен, 2FA код:', code);
+      return { ok: false, error: 'Почтовый сервер не настроен' };
+    }
+
+    try {
+      const from = this.getFromAddress();
+      await transporter.sendMail({
+        from,
+        to: email,
+        subject: `🔐 Код входа в панель администратора CRM: ${code}`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: auto; padding: 26px; border: 1px solid #cbd5e1; border-radius: 12px; background: #ffffff; color: #0f172a;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+              <span style="font-size: 24px;">🛡️</span>
+              <h2 style="margin: 0; font-size: 19px; font-weight: 700; color: #0f172a;">Вход в CRM Администратора</h2>
+            </div>
+            <p style="font-size: 14.5px; line-height: 1.5; color: #334155;">
+              Здравствуйте, Евгений! Выполнен вход в панель управления IT-инфраструктурой и договорами.
+            </p>
+            <div style="text-align: center; margin: 24px 0;">
+              <div style="display: inline-block; background: #f1f5f9; border: 2px solid #6366f1; border-radius: 10px; padding: 16px 36px;">
+                <div style="font-size: 11px; font-weight: 700; color: #4f46e5; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Код подтверждения</div>
+                <div style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #0f172a; font-family: monospace;">
+                  ${code}
+                </div>
+                <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Действителен 15 минут</div>
+              </div>
+            </div>
+            <p style="font-size: 12.5px; color: #64748b; line-height: 1.4; border-top: 1px solid #f1f5f9; padding-top: 14px; margin-bottom: 0;">
+              Если вы не запрашивали вход, немедленно измените пароль учетной записи.
+            </p>
+          </div>
+        `
+      });
+      return { ok: true, message: `Код подтверждения отправлен на ${email}` };
+    } catch (err) {
+      console.error('[Mailer] Ошибка отправки кода администратора:', err.message);
+      return { ok: false, error: err.message };
+    }
+  }
+
+  // Send Invoice for payment
+  async sendInvoiceNotification({ toEmail, client, invoiceNumber, amount, billingPeriod }) {
+    const transporter = await this.getTransporter();
+    if (!transporter) {
+      return { ok: false, error: 'Почтовый транспорт не настроен' };
+    }
+
+    try {
+      const from = this.getFromAddress();
+      const num = invoiceNumber || `СЧ-${Math.floor(1000 + Math.random() * 9000)}`;
+      const sumFormatted = new Intl.NumberFormat('ru-RU').format(amount || client.monthly_fee || 15000);
+      const period = billingPeriod || new Date().toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
+
+      await transporter.sendMail({
+        from,
+        to: toEmail,
+        subject: `Счет на оплату № ${num} по договору ${client.saby_contract_number || ''} — ${client.company_name}`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: auto; padding: 28px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; color: #1e293b;">
+            <div style="border-bottom: 2px solid #3b82f6; padding-bottom: 14px; margin-bottom: 20px;">
+              <h3 style="margin: 0; color: #0f172a; font-size: 18px;">Счет на оплату услуг технической поддержки</h3>
+              <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Исполнитель: ИП Климов Евгений Владимирович (ИНН 500100732259)</div>
+            </div>
+
+            <p style="font-size: 14.5px; line-height: 1.5; color: #334155;">
+              Уважаемые партнеры <strong>«${client.company_name}»</strong>!<br>
+              Направляем счет на абонентское обслуживание по договору № <strong>${client.saby_contract_number || 'б/н'}</strong> за <strong>${period}</strong>.
+            </p>
+
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 18px; margin: 20px 0;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
+                <span>Номер счета:</span> <strong>№ ${num}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
+                <span>Период обслуживания:</span> <strong>${period}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
+                <span>Договор:</span> <strong>${client.saby_contract_title || 'Договор технического сопровождения'}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 17px; font-weight: 800; color: #1e40af; border-top: 1px dashed #cbd5e1; padding-top: 10px; margin-top: 10px;">
+                <span>Сумма к оплате:</span> <span>${sumFormatted} руб. (НДС не облагается)</span>
+              </div>
+            </div>
+
+            <p style="font-size: 13.5px; line-height: 1.5; color: #475569;">
+              Оригиналы расчетных документов (счет и акт) также направлены вам через систему электронного документооборота (СБИС / Диадок).
+            </p>
+
+            <div style="border-top: 1px solid #f1f5f9; padding-top: 16px; font-size: 12px; color: #94a3b8; line-height: 1.5;">
+              С уважением,<br>
+              <strong>ИП Климов Е.В.</strong><br>
+              Тел: +7 (926) 880-99-90 | Email: EKlimov84@gmail.com
+            </div>
+          </div>
+        `
+      });
+
+      return { ok: true, message: `Счет отправлен на ${toEmail}` };
+    } catch (err) {
+      console.error('[Mailer] Ошибка отправки счета:', err.message);
+      return { ok: false, error: err.message };
+    }
+  }
+
+  // Send Payment Reminder
+  async sendPaymentReminder({ toEmail, client, contractNumber, amount }) {
+    const transporter = await this.getTransporter();
+    if (!transporter) return { ok: false, error: 'Почтовый транспорт не настроен' };
+
+    try {
+      const from = this.getFromAddress();
+      const sumFormatted = new Intl.NumberFormat('ru-RU').format(amount || client.monthly_fee || 15000);
+
+      await transporter.sendMail({
+        from,
+        to: toEmail,
+        subject: `Напоминание об оплате по договору ${contractNumber || client.saby_contract_number || ''} — ${client.company_name}`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 580px; margin: auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; color: #1e293b;">
+            <h3 style="margin-top: 0; color: #b45309; font-size: 18px;">Напоминание о проведении оплаты</h3>
+            <p style="font-size: 14.5px; line-height: 1.5; color: #334155;">
+              Здравствуйте! Напоминаем о необходимости оплаты услуг технического сопровождения веб-ресурсов по договору <strong>№ ${contractNumber || client.saby_contract_number || 'б/н'}</strong>.
+            </p>
+            <div style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 16px; margin: 20px 0; font-size: 14px; color: #92400e;">
+              <strong>Сумма к перечислению:</strong> ${sumFormatted} руб.<br>
+              <strong>Получатель:</strong> ИП Климов Евгений Владимирович (ИНН 500100732259)
+            </div>
+            <p style="font-size: 13.5px; color: #475569;">
+              Если оплата уже произведена, пожалуйста, проигнорируйте данное сообщение или направьте платежное поручение в ответном письме.
+            </p>
+          </div>
+        `
+      });
+      return { ok: true, message: `Напоминание успешно отправлено на ${toEmail}` };
+    } catch (err) {
+      console.error('[Mailer] Ошибка отправки напоминания:', err.message);
+      return { ok: false, error: err.message };
+    }
+  }
+
+  // Send Closing Act notification
+  async sendActNotification({ toEmail, client, actNumber, monthName }) {
+    const transporter = await this.getTransporter();
+    if (!transporter) return { ok: false, error: 'Почтовый транспорт не настроен' };
+
+    try {
+      const from = this.getFromAddress();
+      const period = monthName || new Date().toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
+
+      await transporter.sendMail({
+        from,
+        to: toEmail,
+        subject: `Акт выполненных работ ${actNumber || ''} за ${period} — ${client.company_name}`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 580px; margin: auto; padding: 26px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; color: #1e293b;">
+            <h3 style="margin-top: 0; color: #047857; font-size: 18px;">Сформирован Акт выполненных работ</h3>
+            <p style="font-size: 14.5px; line-height: 1.5; color: #334155;">
+              Уважаемые партнеры <strong>«${client.company_name}»</strong>!<br>
+              Регламентные работы по сопровождению ваших веб-сайтов и серверов за <strong>${period}</strong> успешно завершены.
+            </p>
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 20px 0; font-size: 14px; color: #166534;">
+              📄 Акт <strong>№ ${actNumber || 'АКТ-01'}</strong> подписан с нашей стороны электронной подписью и передан в систему ЭДО <strong>СБИС</strong>.
+            </div>
+            <p style="font-size: 13.5px; color: #475569;">
+              Пожалуйста, подпишите акт со своей стороны в системе электронного документооборота.
+            </p>
+          </div>
+        `
+      });
+      return { ok: true, message: `Уведомление об акте отправлено на ${toEmail}` };
+    } catch (err) {
+      console.error('[Mailer] Ошибка отправки акта:', err.message);
+      return { ok: false, error: err.message };
+    }
+  }
+
   // Notify admin when a ticket is created by client contact
   async sendTicketNotificationToAdmin({ ticket, client, contact }) {
     const raw = settingsManager.getRawSettings();
