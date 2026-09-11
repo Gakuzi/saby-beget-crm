@@ -784,20 +784,22 @@ class CrmStore {
 
     // Credentials & Hosting Access
     client.credentials = client.credentials || {};
+    const isSecretMasked = (val) => !val || typeof val !== 'string' || val.includes('•') || val.includes('●') || val.includes('***') || val.includes('…');
+
     if (data.hosting_provider !== undefined) client.credentials.hosting_provider = data.hosting_provider.trim();
     if (data.hosting_url !== undefined) client.credentials.hosting_url = data.hosting_url.trim();
     if (data.hosting_login !== undefined) client.credentials.hosting_login = data.hosting_login.trim();
-    if (data.hosting_password !== undefined && data.hosting_password && !data.hosting_password.startsWith('••••')) {
+    if (data.hosting_password !== undefined && !isSecretMasked(data.hosting_password)) {
       client.credentials.hosting_password = data.hosting_password.trim();
     }
-    if (data.hosting_api_key !== undefined && data.hosting_api_key && !data.hosting_api_key.startsWith('••••')) {
+    if (data.hosting_api_key !== undefined && !isSecretMasked(data.hosting_api_key)) {
       client.credentials.hosting_api_key = data.hosting_api_key.trim();
     }
 
     // 1C-Bitrix Admin Access
     if (data.bitrix_admin_url !== undefined) client.credentials.bitrix_admin_url = data.bitrix_admin_url.trim();
     if (data.bitrix_login !== undefined) client.credentials.bitrix_login = data.bitrix_login.trim();
-    if (data.bitrix_password !== undefined && data.bitrix_password && !data.bitrix_password.startsWith('••••')) {
+    if (data.bitrix_password !== undefined && !isSecretMasked(data.bitrix_password)) {
       client.credentials.bitrix_password = data.bitrix_password.trim();
     }
     if (data.bitrix_version !== undefined) client.credentials.bitrix_version = data.bitrix_version.trim();
@@ -807,14 +809,11 @@ class CrmStore {
     if (data.ssh_host !== undefined) client.credentials.ssh_host = data.ssh_host.trim();
     if (data.ssh_port !== undefined) client.credentials.ssh_port = parseInt(data.ssh_port, 10) || 22;
     if (data.ssh_user !== undefined) client.credentials.ssh_user = data.ssh_user.trim();
-    if (data.ssh_password !== undefined && data.ssh_password && !data.ssh_password.startsWith('••••')) {
+    if (data.ssh_password !== undefined && !isSecretMasked(data.ssh_password)) {
       client.credentials.ssh_password = data.ssh_password.trim();
     }
-    if (data.ssh_key !== undefined) {
-      // Don't overwrite with masked string
-      if (!data.ssh_key.startsWith('••••')) {
-        client.credentials.ssh_key = data.ssh_key.trim();
-      }
+    if (data.ssh_key !== undefined && !isSecretMasked(data.ssh_key)) {
+      client.credentials.ssh_key = data.ssh_key.trim();
     }
     if (data.web_root_dir !== undefined) client.credentials.web_root_dir = data.web_root_dir.trim();
     if (data.backup_token !== undefined) client.credentials.backup_token = data.backup_token.trim();
@@ -822,14 +821,14 @@ class CrmStore {
     if (data.ftp_host !== undefined) client.credentials.ftp_host = data.ftp_host.trim();
     if (data.ftp_port !== undefined) client.credentials.ftp_port = parseInt(data.ftp_port, 10) || 21;
     if (data.ftp_user !== undefined) client.credentials.ftp_user = data.ftp_user.trim();
-    if (data.ftp_password !== undefined && data.ftp_password && !data.ftp_password.startsWith('••••')) {
+    if (data.ftp_password !== undefined && !isSecretMasked(data.ftp_password)) {
       client.credentials.ftp_password = data.ftp_password.trim();
     }
 
     if (data.mysql_host !== undefined) client.credentials.mysql_host = data.mysql_host.trim();
     if (data.mysql_name !== undefined) client.credentials.mysql_name = data.mysql_name.trim();
     if (data.mysql_user !== undefined) client.credentials.mysql_user = data.mysql_user.trim();
-    if (data.mysql_password !== undefined && data.mysql_password && !data.mysql_password.startsWith('••••')) {
+    if (data.mysql_password !== undefined && !isSecretMasked(data.mysql_password)) {
       client.credentials.mysql_password = data.mysql_password.trim();
     }
 

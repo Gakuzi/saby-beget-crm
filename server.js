@@ -419,6 +419,13 @@ app.get('/', (req, res) => {
           </div>
         </div>
 
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #1e40af; line-height: 1.5;">
+          💡 <strong>Для почты Beget (домен e-klimov.ru):</strong><br>
+          &bull; <strong>Логин:</strong> должен быть полным адресом созданного почтового ящика (<code>noreply@e-klimov.ru</code>).<br>
+          &bull; <strong>Пароль:</strong> вводится пароль конкретного почтового ящика из панели Beget &rarr; «Почта». <em>Не путайте с паролем от входа на хостинг!</em><br>
+          &bull; <strong>Email отправителя (From):</strong> должен строго совпадать с ящиком авторизации (<code>noreply@e-klimov.ru</code>), иначе Beget отклонит письмо (ошибка 550).
+        </div>
+
         <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">SMTP Сервер:</label>
@@ -440,24 +447,29 @@ app.get('/', (req, res) => {
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Логин / Email ящика:</label>
-            <input type="email" id="cfg-smtp-user" placeholder="info@e-klimov.ru" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            <input type="email" id="cfg-smtp-user" autocomplete="off" placeholder="noreply@e-klimov.ru" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
           </div>
           <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Пароль от почты:</label>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Пароль от почтового ящика:</label>
             <div style="display: flex; gap: 6px;">
-              <input type="password" id="cfg-smtp-pass" placeholder="••••••••••••" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+              <input type="password" id="cfg-smtp-pass" autocomplete="new-password" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
               <button type="button" onclick="const p=document.getElementById('cfg-smtp-pass'); p.type=p.type==='password'?'text':'password';" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:0 8px; border-radius:6px; cursor:pointer;" title="Показать/скрыть пароль">👁️</button>
             </div>
+            <div id="cfg-smtp-pass-status" style="font-size: 11.5px; margin-top: 3px; color: #059669; font-weight: 500;">✓ Рабочий пароль сохранен в системе</div>
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 10px;">
           <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Имя отправителя (From Name):</label>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Email отправителя (From):</label>
+            <input type="email" id="cfg-smtp-from-email" autocomplete="off" placeholder="noreply@e-klimov.ru" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Имя отправителя:</label>
             <input type="text" id="cfg-smtp-from-name" placeholder="IT-сопровождение | Климов Евгений" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
           </div>
           <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Куда слать тестовое письмо / Уведомления админа:</label>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Куда слать тест и алерты:</label>
             <input type="email" id="cfg-admin-notify-email" placeholder="EKlimov84@gmail.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
           </div>
         </div>
@@ -652,10 +664,26 @@ app.get('/', (req, res) => {
           // SMTP
           document.getElementById('cfg-smtp-host').value = s.smtp_host || 'smtp.beget.com';
           document.getElementById('cfg-smtp-port').value = s.smtp_port || 465;
-          document.getElementById('cfg-smtp-user').value = s.smtp_user || 'info@e-klimov.ru';
-          document.getElementById('cfg-smtp-pass').value = s.has_smtp_password ? '••••••••' : '';
+          document.getElementById('cfg-smtp-user').value = s.smtp_user || 'noreply@e-klimov.ru';
+          document.getElementById('cfg-smtp-from-email').value = s.smtp_from_email || s.smtp_user || 'noreply@e-klimov.ru';
           document.getElementById('cfg-smtp-from-name').value = s.smtp_from_name || 'IT-сопровождение | Климов Евгений';
           document.getElementById('cfg-admin-notify-email').value = s.admin_notify_email || 'EKlimov84@gmail.com';
+          
+          // Clear password input to prevent browser autofill overwriting the real mailbox password
+          const passInput = document.getElementById('cfg-smtp-pass');
+          passInput.value = '';
+          const passStatus = document.getElementById('cfg-smtp-pass-status');
+          if (passStatus) {
+            if (s.has_smtp_password) {
+              passStatus.textContent = '✓ Рабочий пароль ящика сохранен в CRM (оставьте поле пустым)';
+              passStatus.style.color = '#059669';
+              passInput.placeholder = '•••••••• (сохранен, оставьте пустым)';
+            } else {
+              passStatus.textContent = '⚠️ Пароль ящика еще не сохранен';
+              passStatus.style.color = '#dc2626';
+              passInput.placeholder = 'Введите пароль ящика';
+            }
+          }
         }
       } catch (err) {
         console.error('Ошибка загрузки настроек:', err);
@@ -686,6 +714,7 @@ app.get('/', (req, res) => {
         smtp_secure: document.getElementById('cfg-smtp-secure').value === 'true',
         smtp_user: document.getElementById('cfg-smtp-user').value,
         smtp_password: document.getElementById('cfg-smtp-pass').value,
+        smtp_from_email: document.getElementById('cfg-smtp-from-email').value || document.getElementById('cfg-smtp-user').value,
         smtp_from_name: document.getElementById('cfg-smtp-from-name').value,
         admin_notify_email: document.getElementById('cfg-admin-notify-email').value
       };
@@ -756,6 +785,7 @@ app.get('/', (req, res) => {
         smtp_secure: document.getElementById('cfg-smtp-secure').value === 'true',
         smtp_user: document.getElementById('cfg-smtp-user').value,
         smtp_password: document.getElementById('cfg-smtp-pass').value,
+        smtp_from_email: document.getElementById('cfg-smtp-from-email')?.value || document.getElementById('cfg-smtp-user').value,
         smtp_from_name: document.getElementById('cfg-smtp-from-name').value
       };
 
@@ -1468,10 +1498,13 @@ app.post('/api/settings/smtp/test', async (req, res) => {
     const raw = settingsManager.getRawSettings();
     
     // Fall back to saved password if masked or empty
+    const isMaskedSecret = (v) => !v || typeof v !== 'string' || v.includes('•') || v.includes('●') || v.includes('***') || v.includes('…');
     let cleanPassword = smtp_password;
-    if (!cleanPassword || String(cleanPassword).startsWith('••••') || String(cleanPassword).includes('***')) {
+    if (isMaskedSecret(cleanPassword)) {
       cleanPassword = raw.smtp_password || '';
     }
+
+    const effectiveFromEmail = (smtp_from_email || smtp_user || raw.smtp_from_email || raw.smtp_user || 'noreply@e-klimov.ru').trim();
 
     if (smtp_host) {
       settingsManager.saveSettings({
@@ -1481,13 +1514,14 @@ app.post('/api/settings/smtp/test', async (req, res) => {
         smtp_user,
         smtp_password: cleanPassword,
         smtp_from_name,
-        smtp_from_email,
+        smtp_from_email: effectiveFromEmail,
         admin_notify_email: recipient
       });
     }
 
     const configToTest = {
       ...req.body,
+      smtp_from_email: effectiveFromEmail,
       smtp_password: cleanPassword
     };
 

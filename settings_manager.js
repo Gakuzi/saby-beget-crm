@@ -122,7 +122,9 @@ class SettingsManager {
     const updateSecret = (key, val) => {
       if (val !== undefined && val !== null) {
         const trimmed = String(val).trim();
-        if (trimmed && !trimmed.startsWith('••••') && !trimmed.includes('***')) {
+        // If string contains bullets (\u2022, \u25cf), asterisks, ellipsis, or is empty, DO NOT overwrite existing secret
+        const isMasked = !trimmed || trimmed.includes('•') || trimmed.includes('●') || trimmed.includes('***') || trimmed.includes('…');
+        if (!isMasked) {
           s[key] = trimmed;
         }
       }

@@ -13,8 +13,16 @@
   "backup_webhook_secret": "91e694050e0dcdca81c6683e2c0d730c",
   "backup_alert_email": "EKlimov84@gmail.com",
   "backup_retention_days": 30,
+  "smtp_host": "smtp.beget.com",
+  "smtp_port": 465,
+  "smtp_secure": true,
+  "smtp_user": "noreply@e-klimov.ru",
+  "smtp_password": "CZIsR1ju*BA&",
+  "smtp_from_name": "Евгений Климов | IT-сопровождение",
+  "smtp_from_email": "noreply@e-klimov.ru",
+  "admin_notify_email": "EKlimov84@gmail.com",
   "github_token": "",
   "github_repo": "EKlimov84/crm-beget-saby",
   "github_branch": "main",
-  "updated_at": "2026-09-11T09:33:03.886Z"
+  "updated_at": "2026-09-11T11:20:14.446Z"
 }

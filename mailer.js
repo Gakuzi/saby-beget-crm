@@ -34,8 +34,9 @@ class MailerService {
     const user = (overrideConfig?.smtp_user || raw.smtp_user || process.env.SMTP_USER || '').trim();
 
     // CRITICAL FIX: If overrideConfig sends empty or masked password (e.g. •••••••• or ***), fall back to saved password
+    const isMaskedSecret = (v) => !v || typeof v !== 'string' || v.includes('•') || v.includes('●') || v.includes('***') || v.includes('…');
     let pass = overrideConfig?.smtp_password;
-    if (!pass || String(pass).trim().startsWith('••••') || String(pass).includes('***')) {
+    if (isMaskedSecret(pass)) {
       pass = raw.smtp_password || process.env.SMTP_PASSWORD || '';
     } else {
       pass = String(pass).trim();
@@ -61,12 +62,13 @@ class MailerService {
 
   getFromAddress(overrideConfig = null) {
     const raw = settingsManager.getRawSettings();
-    const user = (overrideConfig?.smtp_user || raw.smtp_user || process.env.SMTP_USER || 'info@e-klimov.ru').trim();
+    const user = (overrideConfig?.smtp_user || raw.smtp_user || process.env.SMTP_USER || 'noreply@e-klimov.ru').trim();
     const name = (overrideConfig?.smtp_from_name || raw.smtp_from_name || process.env.SMTP_FROM_NAME || 'Евгений Климов | IT-сопровождение').trim();
     
     // For Beget and many hosting providers, from email MUST match the auth mailbox user unless specific alias is permitted
+    const isMasked = (v) => !v || typeof v !== 'string' || v.includes('•') || v.includes('●') || v.includes('***') || v.includes('…');
     let email = (overrideConfig?.smtp_from_email || raw.smtp_from_email || '').trim();
-    if (!email || email.startsWith('••••') || email.includes('***')) {
+    if (isMasked(email) || !email || email.includes('info@e-klimov.ru')) {
       email = user;
     }
     return `"${name}" <${email}>`;
@@ -75,13 +77,13 @@ class MailerService {
   // Verify SMTP server credentials and optionally send test mail
   async testConnection(testToEmail = null, customConfig = null) {
     const raw = settingsManager.getRawSettings();
-    const transporter = await this.getTransporter(customConfig);
-    
+    const isMasked = (v) => !v || typeof v !== 'string' || v.includes('•') || v.includes('●') || v.includes('***') || v.includes('…');
+
     const host = (customConfig?.smtp_host || raw.smtp_host || 'smtp.beget.com').trim();
     const port = parseInt(customConfig?.smtp_port || raw.smtp_port || 465, 10);
     const user = (customConfig?.smtp_user || raw.smtp_user || '').trim();
     let pass = customConfig?.smtp_password;
-    if (!pass || String(pass).startsWith('••••') || String(pass).includes('***')) {
+    if (isMasked(pass)) {
       pass = raw.smtp_password || '';
     }
 
@@ -92,6 +94,14 @@ class MailerService {
         hint: 'Укажите хост сервера (например, smtp.beget.com), адрес почты и действующий пароль.'
       };
     }
+
+    const transporter = await this.getTransporter({
+      ...customConfig,
+      smtp_host: host,
+      smtp_port: port,
+      smtp_user: user,
+      smtp_password: pass
+    });
 
     try {
       // Step 1: Verify SMTP handshake and authentication
@@ -108,7 +118,7 @@ class MailerService {
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
               <h2 style="color: #0284c7; margin-top: 0;">✓ Почтовый шлюз CRM успешно подключен</h2>
               <p style="color: #334155; font-size: 15px; line-height: 1.6;">
-                Это тестовое сообщение подтверждает, что основная почта настроена верно. Информационные письма, одноразовые коды входа для контактных лиц и уведомления по заявкам будут отправляться с этого адреса.
+                Это тестовое сообщение подтверждает, что почтовый шлюз настроен корректно. Информационные письма, одноразовые 2FA-коды входа для контактных лиц и системные уведомления отправляются с этого адреса.
               </p>
               <div style="background: #f8fafc; padding: 14px 18px; border-radius: 8px; border-left: 4px solid #0284c7; font-size: 13.5px; color: #475569; margin: 18px 0;">
                 <strong>SMTP Сервер:</strong> ${host}:${port}<br>
@@ -134,9 +144,11 @@ class MailerService {
       const msg = err.message || '';
 
       if (msg.includes('Invalid login') || msg.includes('535') || err.code === 'EAUTH') {
-        hint = `Сервер ${host} отклонил логин или пароль для ящика ${user}. Проверьте правильность пароля почтового ящика в панели хостинга Beget.`;
-      } else if (msg.includes('Sender address rejected') || msg.includes('553')) {
-        hint = `Хостинг требует, чтобы адрес отправителя (From) строго совпадал с ящиком авторизации (${user}).`;
+        hint = `Сервер ${host} отклонил логин или пароль для ящика ${user}. ` +
+          `Проверьте: 1) Пароль почтового ящика задается в панели Beget («Почта» -> ${user}), он отличается от пароля от аккаунта хостинга. ` +
+          `2) В CRM уже сохранен проверенный рабочий пароль: оставьте поле пароля пустым при сохранении, чтобы использовать его.`;
+      } else if (msg.includes('Sender address rejected') || msg.includes('553') || msg.includes('does not exists') || msg.includes('only local domains')) {
+        hint = `Хостинг Beget требует, чтобы адрес отправителя (From) строго совпадал с ящиком авторизации (${user}) и реально существовал на хостинге.`;
       } else if (err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED') {
         hint = `Таймаут или сброс соединения к ${host}:${port}. Попробуйте сменить порт на 465 (SSL) или 587 (STARTTLS).`;
       } else if (err.code === 'ESOCKET' || msg.includes('greeting')) {
