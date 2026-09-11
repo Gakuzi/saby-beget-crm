@@ -3672,10 +3672,7 @@ export function renderNewClientPage() {
       const container = document.getElementById('sites-container');
       const div = document.createElement('div');
       div.className = 'dynamic-list-item'; div.style.display = 'flex'; div.style.gap = '12px'; div.style.marginBottom = '8px';
-      div.innerHTML = `
-        <input type="text" name="sites[]" class="form-control" placeholder="example.com">
-        <button type="button" class="btn-remove" onclick="this.parentElement.remove()">×</button>
-      `;
+      div.innerHTML = '<input type="text" name="sites[]" class="form-control" placeholder="example.com"><button type="button" class="btn-remove" onclick="this.parentElement.remove()">×</button>';
       container.appendChild(div);
     }
 
@@ -3683,11 +3680,7 @@ export function renderNewClientPage() {
       const container = document.getElementById('contacts-container');
       const div = document.createElement('div');
       div.className = 'dynamic-list-item';
-      div.innerHTML = `
-        <input type="text" name="contact_names[]" class="form-control" placeholder="Имя Фамилия" style="flex: 1;">
-        <input type="email" name="contact_emails[]" class="form-control" placeholder="email@company.ru" style="flex: 1;">
-        <button type="button" class="btn-remove" onclick="this.parentElement.remove()">×</button>
-      `;
+      div.innerHTML = '<input type="text" name="contact_names[]" class="form-control" placeholder="Имя Фамилия" style="flex: 1;"><input type="email" name="contact_emails[]" class="form-control" placeholder="email@company.ru" style="flex: 1;"><button type="button" class="btn-remove" onclick="this.parentElement.remove()">×</button>';
       container.appendChild(div);
     }
   </script>
