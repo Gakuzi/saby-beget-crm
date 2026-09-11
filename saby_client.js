@@ -36,7 +36,7 @@ export function getSabyCredentials() {
     clientId,
     appSecret,
     secretKey,
-    hasCredentials: !!(clientId && appSecret)
+    hasCredentials: !!(clientId && appSecret && secretKey)
   };
 }
 
@@ -49,7 +49,7 @@ export async function authenticateSaby() {
     return {
       ok: false,
       configured: false,
-      message: 'Учетные данные Saby API не настроены (требуются SABY_APP_CLIENT_ID и SABY_APP_SECRET).'
+      message: 'Учетные данные Saby API не настроены (требуются ID подключения, Защищенный ключ и Сервисный ключ).'
     };
   }
 
@@ -67,22 +67,14 @@ export async function authenticateSaby() {
       authParams.secret_key = creds.secretKey;
     }
 
-    const payload = {
-      jsonrpc: '2.0',
-      method: 'СБИС.Аутентифицировать',
-      params: {
-        Параметр: authParams
-      },
-      id: 1
-    };
-
-    const res = await fetch(SABY_RPC_URL, {
+    // Use OAuth endpoint instead of JSON-RPC
+    const res = await fetch('https://online.sbis.ru/oauth/service/', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json-rpc; charset=utf-8',
-        'Accept': 'application/json-rpc'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(authParams),
       signal: AbortSignal.timeout(8000)
     });
 
@@ -100,11 +92,12 @@ export async function authenticateSaby() {
       return {
         ok: false,
         configured: true,
-        message: `Ошибка Saby RPC [${json.error.code || ''}]: ${json.error.message || json.error.details || JSON.stringify(json.error)}`
+        message: `Ошибка Saby OAuth [${json.error_code || ''}]: ${json.error_message || json.error.message || JSON.stringify(json.error)}`
       };
     }
 
-    const token = json.result || 'saby-session-active';
+    // oauth/service returns { access_token: "...", sid: "..." }
+    const token = json.access_token || json.sid || json.result || 'saby-session-active';
     activeSabyToken = token;
     tokenExpiresAt = Date.now() + 30 * 60 * 1000;
 
@@ -150,7 +143,7 @@ export async function searchSabyCompany(inn) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json-rpc; charset=utf-8',
-        'X-SBIS-Session': auth.token || ''
+        'X-SBISAccessToken': auth.token || ''
       },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(6000)
@@ -204,7 +197,7 @@ export async function fetchSabyContracts(inn) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json-rpc; charset=utf-8',
-        'X-SBIS-Session': auth.token || ''
+        'X-SBISAccessToken': auth.token || ''
       },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(6000)
