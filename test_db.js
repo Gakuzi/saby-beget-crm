@@ -1,2 +1,2 @@
-import { db } from './crm_store.js';
-console.log(db.getClientById(7));
+import fs from 'fs';
+console.log(fs.existsSync('sqlite_db.js'));

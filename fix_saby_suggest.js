@@ -1,30 +1,7 @@
+import fs from 'fs';
+let code = fs.readFileSync('inn_helper.js', 'utf8');
 
-import { db } from './crm_store.js';
-
-export async function checkInnChecksum(inn) {
-  if (typeof inn !== 'string' || !inn.match(/^\d{10}$|^\d{12}$/)) return false;
-  if (inn.length === 10) {
-    const weights = [2, 4, 10, 3, 5, 9, 4, 6, 8];
-    let sum = 0;
-    for (let i = 0; i < 9; i++) sum += parseInt(inn[i]) * weights[i];
-    return (sum % 11) % 10 === parseInt(inn[9]);
-  } else {
-    const weights11 = [7, 2, 4, 10, 3, 5, 9, 4, 6, 8];
-    const weights12 = [3, 7, 2, 4, 10, 3, 5, 9, 4, 6, 8];
-    let sum11 = 0, sum12 = 0;
-    for (let i = 0; i < 10; i++) sum11 += parseInt(inn[i]) * weights11[i];
-    let check11 = (sum11 % 11) % 10 === parseInt(inn[10]);
-    for (let i = 0; i < 11; i++) sum12 += parseInt(inn[i]) * weights12[i];
-    let check12 = (sum12 % 11) % 10 === parseInt(inn[11]);
-    return check11 && check12;
-  }
-}
-
-export async function suggestCompany(query) {
-  query = (query || '').trim();
-  if (!query || query.length < 2) return [];
-
-  const { authenticateSaby } = await import('./saby_client.js');
+const sabyBlock = `  const { authenticateSaby } = await import('./saby_client.js');
     
   try {
     const auth = await authenticateSaby();
@@ -39,10 +16,10 @@ export async function suggestCompany(query) {
         },
         body: JSON.stringify({
           jsonrpc: '2.0',
-          method: query.match(/^\d+$/)
+          method: query.match(/^\\d+$/)
             ? 'СБИС.Контрагенты.ПолучитьИнформациюОКонтрагенте'
             : 'СБИС.Контрагенты.НайтиКонтрагентов',
-          params: query.match(/^\d+$/)
+          params: query.match(/^\\d+$/)
             ? { Контрагент: contractorObj }
             : { Поиск: query, РазмерСтраницы: 6 },
           id: 1
@@ -50,7 +27,7 @@ export async function suggestCompany(query) {
       });
       const rpcData = await rpcRes.json();
       if (rpcData.result) {
-        if (query.match(/^\d+$/)) {
+        if (query.match(/^\\d+$/)) {
           const comp = rpcData.result;
           const name = comp.Название || comp.НаименованиеСокращенное || comp.НаименованиеПолное || comp.ФИОПолное;
           if (name) {
@@ -82,25 +59,16 @@ export async function suggestCompany(query) {
   } catch (err) {
     console.warn('Saby RPC error in suggestCompany:', err.message);
   }
+`;
 
-  // Local fallback lookup
-  const qLower = query.toLowerCase();
-  const allClients = db.getClients('all');
-  const matched = allClients.filter(c => c.company_name.toLowerCase().includes(qLower) || (c.inn && c.inn.includes(qLower)));
-  
-  return matched.slice(0, 5).map(c => ({
-    name: c.company_name,
-    inn: c.inn,
-    address: '⚠️ (Из локальной базы - Saby недоступен)'
-  }));
-}
+// Replace existing Saby block with one that logs
+const oldSabyBlockRegex = /const \{ authenticateSaby \}[\s\S]*?console\.warn\('Saby RPC error:', err\.message\);\s*\}/;
+code = code.replace(oldSabyBlockRegex, sabyBlock.trim());
 
-export async function getContracts(inn) {
-  if (!inn) return [];
-  const { fetchSabyContracts } = await import('./saby_client.js');
-  const result = await fetchSabyContracts(inn);
-  if (result.ok && result.contracts) {
-    return result.contracts;
-  }
-  return [];
-}
+// Local fallback - we can make it clear it's from local DB so the user knows
+code = code.replace(
+  "address: 'Из вашей локальной базы'",
+  "address: '⚠️ (Из локальной базы - Saby недоступен)'"
+);
+
+fs.writeFileSync('inn_helper.js', code);

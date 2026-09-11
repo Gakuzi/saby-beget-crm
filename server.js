@@ -455,6 +455,60 @@ app.get('/logout', (req, res) => {
 
 // Change Password
 app.get('/change-password', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Установка нового пароля</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body { background: #f8fafc; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin: 12px 0 4px; }
+    input { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; margin-bottom: 12px; }
+    button { width: 100%; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2 style="margin-top:0; color:#1e1b4b; font-size:20px;">Установка нового пароля</h2>
+    <p style="font-size: 13px; color: #64748b;">Вы уже авторизованы. Вы можете задать новый пароль для входа.</p>
+    <form method="post" action="/change-password">
+      <label>Новый пароль:</label>
+      <input type="password" name="new_password" required autocomplete="new-password">
+      <label>Повторите новый пароль:</label>
+      <input type="password" name="confirm_password" required autocomplete="new-password">
+      <button type="submit">Сохранить пароль</button>
+    </form>
+    <p style="text-align:center; margin-top:16px;"><a href="/" style="color:#0284c7; font-weight:600; font-size:13px;">&larr; На главную</a></p>
+  </div>
+</body>
+</html>`);
+});
+
+app.post('/change-password', (req, res) => {
+  const { new_password, confirm_password } = req.body;
+  if (!new_password || new_password !== confirm_password) {
+    return res.send('Ошибка: Пароли не совпадают. <a href="/change-password">Назад</a>');
+  }
+  // Change password for the current admin id if set in session, otherwise default
+  const adminId = req.session.admin_id;
+  if (adminId) {
+    const admin = db.db.prepare('SELECT * FROM admin_users WHERE id = ?').get(adminId);
+    if (admin) {
+      const salt = require('crypto').randomBytes(16).toString('hex');
+      const hash = require('crypto').pbkdf2Sync(new_password, salt, 1000, 64, 'sha512').toString('hex');
+      db.db.prepare('UPDATE admin_users SET password_hash = ?, salt = ? WHERE id = ?').run(hash, salt, adminId);
+    }
+  } else {
+    db.changePassword(new_password);
+  }
+  res.redirect('/');
+});
+
+// Change Password
+app.get('/change-password', (req, res) => {
   res.send(`<!doctype html>
 <html lang="ru">
 <head>
@@ -531,6 +585,58 @@ app.post('/change-password', (req, res) => {
   }
   db.changePassword(new_password);
   res.redirect('/');
+});
+
+
+app.get('/passkeys', (req, res) => {
+  if (!req.session.admin_id) return res.redirect('/login');
+  const passkeys = db.getAdminPasskeys(req.session.admin_id);
+  
+  res.send(`<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Управление Passkey</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body { background: #f8fafc; padding: 20px; font-family: system-ui, sans-serif; }
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%; max-width: 600px; margin: 0 auto; }
+    .key-item { display:flex; justify-content: space-between; align-items:center; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; background: #f8fafc; }
+  </style>
+  <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+  <script src="/global_passkey_scripts.js"></script>
+</head>
+<body>
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <h2 style="margin:0; color:#1e1b4b; font-size:20px;">🛡️ Ваши ключи Passkey</h2>
+      <a href="/" style="color:#0284c7; font-size:14px; text-decoration:none; font-weight:600;">&larr; Назад</a>
+    </div>
+    <div style="margin-bottom: 16px;">
+      ${passkeys.length === 0 ? '<p style="color:#64748b; font-size:14px;">У вас пока нет сохраненных ключей.</p>' : passkeys.map(pk => `
+        <div class="key-item">
+          <div>
+            <div style="font-weight:600; font-size:14px;">${pk.device_type || 'Неизвестное устройство'}</div>
+            <div style="font-size:11px; color:#94a3b8; font-family:monospace; margin-top:4px;">ID: ${pk.id.substring(0, 16)}...</div>
+          </div>
+          <form method="post" action="/passkeys/delete" style="margin:0;">
+            <input type="hidden" name="id" value="${pk.id}">
+            <button type="submit" style="background:#fee2e2; color:#ef4444; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px;">Удалить</button>
+          </form>
+        </div>
+      `).join('')}
+    </div>
+    <button type="button" onclick="registerPasskey()" style="width:100%; background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; border:none; padding:12px; border-radius:8px; font-weight:700; cursor:pointer; font-size:14px;">+ Добавить новый ключ (Отпечаток/FaceID)</button>
+  </div>
+</body>
+</html>`);
+});
+
+app.post('/passkeys/delete', (req, res) => {
+  if (!req.session.admin_id) return res.status(401).send('Не авторизован');
+  db.db.prepare('DELETE FROM admin_passkeys WHERE id = ? AND admin_id = ?').run(req.body.id, req.session.admin_id);
+  res.redirect('/passkeys');
 });
 
 // Dashboard: List clients
@@ -749,120 +855,89 @@ async function registerPasskey() {
 
   <!-- Modal: Saby CRM & Hosting Global Configuration -->
   <div id="saby-settings-modal" class="modal-overlay">
-    <div class="modal-card" style="max-width: 680px; max-height: 90vh; overflow-y: auto;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
-        <h3 style="margin: 0; font-size: 18px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
-          <span>⚙️</span> Настройка шлюза Saby CRM, СБИС и бэкапов
-        </h3>
+    <div class="modal-card" style="max-width: 750px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
+        <h3 style="margin: 0; font-size: 18px; color: #1e1b4b;">⚙️ Глобальные настройки интеграций</h3>
         <button type="button" onclick="closeSabySettingsModal()" style="background: transparent; border: none; font-size: 22px; cursor: pointer; color: #94a3b8;">&times;</button>
       </div>
-
-      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; font-size: 13px; color: #166534; line-height: 1.5;">
-        🔒 <strong>Безопасное хранилище:</strong> Указанные ключи и токены синхронизируются с сервером и файлом <code>crm_secure_settings.json</code> с правами 0600. Существующие пароли защищены маскированием.
-      </div>
-
-      <!-- Saby API Credentials Group -->
-      <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 16px;">
-        <h4 style="margin: 0 0 12px; font-size: 14.5px; color: #0369a1; display: flex; align-items: center; gap: 6px;">
-          <span>🏢</span> Интеграция с Saby CRM / СБИС (online.sbis.ru)
-        </h4>
-
-        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; font-size: 13px; color: #1e40af; line-height: 1.5;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <strong>Интеграция с Saby CRM (СБИС):</strong>
-            <a href="https://sbis.ru/help/integration/api/auth/service?req=app_client_id" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 500;">📖 Официальная инструкция</a>
-          </div>
-          <ol style="margin-top: 6px; margin-bottom: 0; padding-left: 20px;">
-            <li>Вставьте <strong>ID подключения</strong> и <strong>Защищенный ключ</strong> из настроек внешнего приложения Saby.</li>
-            <li>Скачайте сервисный ключ из кабинета СБИС (кнопка ⬇️) и загрузите этот файл <strong>.key</strong> в поле ниже.</li>
-          </ol>
+      
+      <!-- Saby API Section -->
+      <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h4 style="margin: 0; font-size: 15px; color: #0f172a;">API СБИС (Saby)</h4>
+          <button type="button" id="cfg-test-saby-btn" onclick="testSabyFromModal()" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer;">⚡ Проверить связь с Saby</button>
         </div>
-        
-        <script>
-        function handleKeyFileUpload(event) {
-          const file = event.target.files[0];
-          if (!file) return;
-          
-          const reader = new FileReader();
-          reader.onload = function(e) {
-            const content = e.target.result;
-            document.getElementById('cfg-saby-secret-key').value = content;
-            const statusEl = document.getElementById('cfg-saby-key-status');
-            statusEl.textContent = '✅ Файл ключа успешно загружен (длина: ' + content.length + ' симв.)';
-            statusEl.style.color = '#059669';
-          };
-          reader.readAsText(file);
-        }
-        </script>
-
-
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">ID подключения (Client ID):</label>
-            <input type="text" id="cfg-saby-client-id" placeholder="Например: 7276372557633339" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">ID подключения (app_client_id):</label>
+            <input type="text" id="cfg-saby-client-id" placeholder="Например: 1234abcd-..." style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
           </div>
           <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Защищенный ключ (App Secret):</label>
-            <input type="password" id="cfg-saby-app-secret" placeholder="••••••••••••" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Секрет приложения (app_secret):</label>
+            <input type="password" id="cfg-saby-app-secret" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
           </div>
         </div>
-
-        <div style="display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px;">
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Загрузите файл ключа (.key):</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input type="file" id="cfg-saby-key-file" accept=".key" style="flex: 1; font-size: 12px; padding: 6px;" onchange="handleKeyFileUpload(event)">
-            </div>
+        <div>
+          <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Защищенный ключ (сертификат .key):</label>
+          <div style="display: flex; gap: 10px; align-items: flex-start;">
+            <input type="file" id="cfg-saby-file" accept=".key" style="font-size: 12px; width: 100%; max-width: 300px;">
             <input type="hidden" id="cfg-saby-secret-key">
             <div id="cfg-saby-key-status" style="font-size: 11px; margin-top: 4px; color: #64748b;">Здесь будет статус загрузки ключа.</div>
           </div>
         </div>
       </div>
 
-      <!-- Backup Webhook & Monitoring Group -->
-      <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 16px;">
-        <h4 style="margin: 0 0 12px; font-size: 14.5px; color: #b45309; display: flex; align-items: center; gap: 6px;">
-          <span>📦</span> Скрипты бэкапов сайтов (Webhook API)
-        </h4>
-
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 10px;">
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Секретный токен для вебхуков бэкапов (Bearer Secret):</label>
-            <input type="text" id="cfg-backup-secret" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-family: monospace;">
-          </div>
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Email для алертов:</label>
-            <input type="email" id="cfg-backup-email" placeholder="EKlimov84@gmail.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-          </div>
+      <!-- Beget API Section -->
+      <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h4 style="margin: 0; font-size: 15px; color: #0f172a;">API Beget (Хостинг)</h4>
+          <button type="button" id="cfg-test-beget-btn" onclick="testBegetFromModal()" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer;">⚡ Проверить связь с Beget</button>
         </div>
-
-        <div style="font-size: 12px; color: #64748b; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px dashed #cbd5e1;">
-          <strong>URL для скриптов бэкапов:</strong> <code>https://test.crm.e-klimov.ru/api/backups/report</code><br>
-          <em>Скрипт на сервере сайта может вызывать curl с JSON: <code>{"site":"domain.ru", "size_mb": 2500, "status": "Успешно", "secret": "..."}</code></em>
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #1e40af; line-height: 1.5;">
+          💡 <strong>Инструкция по API Beget:</strong><br>
+          API Beget не использует отдельный "API-ключ". В качестве доступа используется ваш <strong>основной логин</strong> (имя аккаунта, например <code>klimov_beget</code>) и <strong>отдельный пароль для API</strong>.<br>
+          Для создания/восстановления пароля API: зайдите в панель управления Beget &rarr; раздел "Настройки" (или "Управление аккаунтом") &rarr; <strong>Пароль для API</strong>. Установите там пароль и впишите его сюда.
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Логин аккаунта Beget:</label>
+            <input type="text" id="cfg-beget-login" placeholder="klimov_beget" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Пароль от API Beget:</label>
+            <div style="display: flex; gap: 6px;">
+              <input type="password" id="cfg-beget-pass" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+              <button type="button" onclick="const p=document.getElementById('cfg-beget-pass'); p.type=p.type==='password'?'text':'password';" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:0 8px; border-radius:6px; cursor:pointer;" title="Показать/скрыть">👁️</button>
+            </div>
+            <div id="cfg-beget-pass-status" style="font-size: 11px; margin-top: 4px; color: #059669; font-weight: 500;"></div>
+          </div>
         </div>
       </div>
 
-      <!-- Corporate SMTP Notification Mailbox Group -->
-      <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 16px; background: #fcfcfd;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-          <h4 style="margin: 0; font-size: 14.5px; color: #4338ca; display: flex; align-items: center; gap: 6px;">
-            <span>✉️</span> Основная корпоративная почта (рассылки, уведомления и 2FA)
-          </h4>
-          <div style="display: flex; gap: 6px; font-size: 11px;">
-            <button type="button" onclick="applySmtpPreset('beget')" class="btn" style="background:#e0e7ff; color:#3730a3; border:none; padding:3px 8px; border-radius:6px; cursor:pointer; font-weight:600;">Beget (465 SSL)</button>
-            <button type="button" onclick="applySmtpPreset('yandex')" class="btn" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:3px 8px; border-radius:6px; cursor:pointer;">Яндекс</button>
-            <button type="button" onclick="applySmtpPreset('mailru')" class="btn" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:3px 8px; border-radius:6px; cursor:pointer;">Mail.ru</button>
-            <button type="button" onclick="applySmtpPreset('gmail')" class="btn" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:3px 8px; border-radius:6px; cursor:pointer;">Gmail</button>
+      <!-- Backup Alerts -->
+      <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
+        <h4 style="margin: 0 0 12px 0; font-size: 15px; color: #0f172a;">Бекапы и Алерты</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Webhook Secret для агентов:</label>
+            <input type="password" id="cfg-backup-secret" placeholder="Секретный токен для приема бекапов" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Email для срочных алертов:</label>
+            <input type="email" id="cfg-backup-email" placeholder="EKlimov84@gmail.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
           </div>
         </div>
+      </div>
 
-        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #1e40af; line-height: 1.5;">
-          💡 <strong>Для почты Beget (домен e-klimov.ru):</strong><br>
-          &bull; <strong>Логин:</strong> должен быть полным адресом созданного почтового ящика (<code>noreply@e-klimov.ru</code>).<br>
-          &bull; <strong>Пароль:</strong> вводится пароль конкретного почтового ящика из панели Beget &rarr; «Почта». <em>Не путайте с паролем от входа на хостинг!</em><br>
-          &bull; <strong>Email отправителя (From):</strong> должен строго совпадать с ящиком авторизации (<code>noreply@e-klimov.ru</code>), иначе Beget отклонит письмо (ошибка 550).
+      <!-- SMTP Settings Section -->
+      <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h4 style="margin: 0; font-size: 15px; color: #0f172a;">Почта (SMTP) для уведомлений</h4>
+          <button type="button" id="cfg-test-smtp-btn" onclick="testSmtpFromModal()" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer;">✉️ Проверить отправку SMTP</button>
         </div>
-
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #1e40af; line-height: 1.5;">
+          💡 <strong>Для почты Beget:</strong> Сервер: <code>smtp.beget.com</code>, Порт: <code>465</code>, Шифрование: <code>SSL</code>.<br> Логин и Email отправителя должны совпадать (например <code>noreply@e-klimov.ru</code>).
+        </div>
         <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">SMTP Сервер:</label>
@@ -876,11 +951,10 @@ async function registerPasskey() {
             <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Шифрование:</label>
             <select id="cfg-smtp-secure" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff;">
               <option value="true">SSL (Порт 465)</option>
-              <option value="false">STARTTLS / Нет (587 / 25)</option>
+              <option value="false">STARTTLS / Нет</option>
             </select>
           </div>
         </div>
-
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Логин / Email ящика:</label>
@@ -892,11 +966,10 @@ async function registerPasskey() {
               <input type="password" id="cfg-smtp-pass" autocomplete="new-password" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
               <button type="button" onclick="const p=document.getElementById('cfg-smtp-pass'); p.type=p.type==='password'?'text':'password';" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:0 8px; border-radius:6px; cursor:pointer;" title="Показать/скрыть пароль">👁️</button>
             </div>
-            <div id="cfg-smtp-pass-status" style="font-size: 11.5px; margin-top: 3px; color: #059669; font-weight: 500;">✓ Рабочий пароль сохранен в системе</div>
+            <div id="cfg-smtp-pass-status" style="font-size: 11.5px; margin-top: 3px; color: #059669; font-weight: 500;"></div>
           </div>
         </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div>
             <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Email отправителя (From):</label>
             <input type="email" id="cfg-smtp-from-email" autocomplete="off" placeholder="noreply@e-klimov.ru" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
@@ -905,20 +978,9 @@ async function registerPasskey() {
             <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Имя отправителя:</label>
             <input type="text" id="cfg-smtp-from-name" placeholder="IT-сопровождение | Климов Евгений" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
           </div>
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Куда слать тест и алерты:</label>
-            <input type="email" id="cfg-admin-notify-email" placeholder="EKlimov84@gmail.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-          </div>
-        </div>
-
-        <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap;">
-          <button type="button" id="cfg-test-smtp-btn" onclick="testSmtpFromModal()" style="background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%); color: #fff; border: none; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">
-            ✉️ Проверить отправку тестового письма
-          </button>
-          <span style="font-size: 12px; color: #64748b;">Проверит соединение с SMTP и отправит проверочный тест на указанную почту</span>
         </div>
       </div>
-
+      
       <!-- Action Buttons -->
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
         <div style="display: flex; gap: 8px;">
@@ -1083,29 +1145,43 @@ async function registerPasskey() {
       modal.style.display = 'flex';
       const box = document.getElementById('cfg-result-box');
       box.style.display = 'none';
-
       try {
         const res = await fetch('/api/settings/global');
         const data = await res.json();
         if (data.ok && data.settings) {
           const s = data.settings;
+          
+          // Saby
           document.getElementById('cfg-saby-client-id').value = s.saby_app_client_id || '';
           document.getElementById('cfg-saby-app-secret').value = s.has_saby_secret ? '••••••••' : '';
           document.getElementById('cfg-saby-secret-key').value = s.has_saby_key ? 'HIDDEN' : '';
-          document.getElementById('cfg-saby-key-status').textContent = s.has_saby_key ? '✓ Ключ уже сохранен в CRM (загрузите новый только если нужно обновить)' : '⚠️ Ключ еще не загружен';
-          // removed rpc-url
-          // removed login
-          // removed pass
+          document.getElementById('cfg-saby-key-status').textContent = s.has_saby_key ? '✓ Ключ сохранен' : '⚠️ Ключ не загружен';
+          
+          // Beget
+          document.getElementById('cfg-beget-login').value = s.beget_login || '';
+          document.getElementById('cfg-beget-pass').value = ''; // clean for placeholder
+          const begetPassStatus = document.getElementById('cfg-beget-pass-status');
+          if (begetPassStatus) {
+            if (s.has_beget_password) {
+              begetPassStatus.textContent = '✓ Пароль сохранен в системе';
+              document.getElementById('cfg-beget-pass').placeholder = 'Оставьте пустым, если не меняете';
+            } else {
+              begetPassStatus.textContent = '⚠️ Пароль не установлен';
+              document.getElementById('cfg-beget-pass').placeholder = 'Введите пароль от API';
+            }
+          }
+
+          // Backups
           document.getElementById('cfg-backup-secret').value = s.backup_webhook_secret || '';
           document.getElementById('cfg-backup-email').value = s.backup_alert_email || '';
-
-          // SMTP
-          document.getElementById('cfg-smtp-host').value = s.smtp_host || 'smtp.beget.com';
-          document.getElementById('cfg-smtp-port').value = s.smtp_port || 465;
-          document.getElementById('cfg-smtp-user').value = s.smtp_user || 'noreply@e-klimov.ru';
-          document.getElementById('cfg-smtp-from-email').value = s.smtp_from_email || s.smtp_user || 'noreply@e-klimov.ru';
-          document.getElementById('cfg-smtp-from-name').value = s.smtp_from_name || 'IT-сопровождение | Климов Евгений';
-          document.getElementById('cfg-admin-notify-email').value = s.admin_notify_email || 'EKlimov84@gmail.com';
+          
+          // SMTP (Removed defaults so it doesn't show fake info)
+          document.getElementById('cfg-smtp-host').value = s.smtp_host || '';
+          document.getElementById('cfg-smtp-port').value = s.smtp_port || '';
+          document.getElementById('cfg-smtp-user').value = s.smtp_user || '';
+          document.getElementById('cfg-smtp-from-email').value = s.smtp_from_email || '';
+          document.getElementById('cfg-smtp-from-name').value = s.smtp_from_name || '';
+          document.getElementById('cfg-admin-notify-email').value = s.admin_notify_email || '';
           
           // Clear password input to prevent browser autofill overwriting the real mailbox password
           const passInput = document.getElementById('cfg-smtp-pass');
@@ -1113,23 +1189,60 @@ async function registerPasskey() {
           const passStatus = document.getElementById('cfg-smtp-pass-status');
           if (passStatus) {
             if (s.has_smtp_password) {
-              passStatus.textContent = '✓ Рабочий пароль ящика сохранен в CRM (оставьте поле пустым)';
-              passStatus.style.color = '#059669';
-              passInput.placeholder = '•••••••• (сохранен, оставьте пустым)';
+              passStatus.textContent = '✓ Рабочий пароль сохранен в системе';
+              passInput.placeholder = 'Оставьте пустым, если не меняете';
             } else {
-              passStatus.textContent = '⚠️ Пароль ящика еще не сохранен';
-              passStatus.style.color = '#dc2626';
-              passInput.placeholder = 'Введите пароль ящика';
+              passStatus.textContent = '⚠️ Пароль не установлен';
+              passInput.placeholder = 'Введите пароль';
             }
           }
         }
       } catch (err) {
-        console.error('Ошибка загрузки настроек:', err);
+        console.error('Failed to load settings', err);
       }
     }
 
-    function closeSabySettingsModal() {
-      document.getElementById('saby-settings-modal').style.display = 'none';
+    async function testBegetFromModal() {
+      const btn = document.getElementById('cfg-test-beget-btn');
+      const box = document.getElementById('cfg-result-box');
+      btn.innerHTML = '⏳ Проверка...';
+      btn.disabled = true;
+      box.style.display = 'none';
+
+      const payload = {
+        beget_login: document.getElementById('cfg-beget-login').value,
+        beget_password: document.getElementById('cfg-beget-pass').value
+      };
+
+      try {
+        const res = await fetch('/api/settings/beget/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        
+        box.style.display = 'block';
+        if (data.ok) {
+          box.style.background = '#dcfce7';
+          box.style.color = '#166534';
+          box.style.border = '1px solid #bbf7d0';
+          box.innerHTML = '<strong>✅ Успех:</strong> Соединение с Beget API установлено!<br>Аккаунт: ' + (data.account || 'Подключено');
+        } else {
+          box.style.background = '#fee2e2';
+          box.style.color = '#991b1b';
+          box.style.border = '1px solid #fecaca';
+          box.innerHTML = '<strong>❌ Ошибка Beget:</strong> ' + (data.error || 'Сбой подключения');
+        }
+      } catch (err) {
+        box.style.display = 'block';
+        box.style.background = '#fee2e2';
+        box.style.color = '#991b1b';
+        box.innerHTML = '<strong>❌ Системная ошибка:</strong> ' + err.message;
+      } finally {
+        btn.innerHTML = '⚡ Проверить связь с Beget';
+        btn.disabled = false;
+      }
     }
 
     async function saveSabyGlobalSettings() {
@@ -1142,6 +1255,8 @@ async function registerPasskey() {
         saby_app_client_id: document.getElementById('cfg-saby-client-id').value,
         saby_app_secret: document.getElementById('cfg-saby-app-secret').value,
         saby_secret_key: document.getElementById('cfg-saby-secret-key').value === 'HIDDEN' ? '' : document.getElementById('cfg-saby-secret-key').value,
+        beget_login: document.getElementById('cfg-beget-login').value,
+        beget_password: document.getElementById('cfg-beget-pass').value,
         // saby_rpc_url: removed,
         // saby_login: removed,
         // saby_password: removed,
@@ -1348,6 +1463,16 @@ app.get('/get_contracts', async (req, res) => {
 // Add client POST
 app.post('/add_client', (req, res) => {
   const { inn, company_name, contract_id, contract_number, contract_title } = req.body;
+  const inputInn = inn || req.body.search_input;
+  
+  if (inputInn) {
+    const existing = db.db.prepare('SELECT id FROM clients WHERE inn = ?').get(inputInn);
+    if (existing) {
+      db.db.prepare('UPDATE clients SET archived = 0 WHERE id = ?').run(existing.id);
+      return res.redirect('/client/' + existing.id + '?flash=' + encodeURIComponent('Клиент с таким ИНН уже существует (восстановлен из архива).'));
+    }
+  }
+
   
   let sitesArray = [];
   if (Array.isArray(req.body['sites[]'])) sitesArray = req.body['sites[]'];
@@ -1745,6 +1870,31 @@ app.post('/api/settings/global', (req, res) => {
 });
 
 // Test Saby API connection with optional newly passed credentials
+
+// Test Beget API from modal
+app.post('/api/settings/beget/test', async (req, res) => {
+  try {
+    const { beget_login, beget_password } = req.body || {};
+    
+    // Save to settings manager temporarily or permanently to test
+    if (beget_login) {
+      settingsManager.saveSettings({ beget_login, beget_password });
+    }
+    
+    const { testBegetConnection } = await import('./beget_client.js');
+    const testRes = await testBegetConnection();
+    
+    if (testRes.ok && testRes.answer) {
+      // Typically /account/getInfo returns { user_id, plan_id, etc. }
+      res.json({ ok: true, account: testRes.answer.plan_name || testRes.answer.user_id || 'Успешно' });
+    } else {
+      res.json({ ok: false, error: testRes.error });
+    }
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 app.post('/api/settings/saby/test', async (req, res) => {
   try {
     const { saby_app_client_id, saby_app_secret, saby_secret_key } = req.body || {};

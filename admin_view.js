@@ -2937,7 +2937,53 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
       const text = 'Хост: ' + host + '\\nПорт: ' + port + '\\nПользователь: ' + user + '\\nПароль: ' + pass;
       copyTextValue(text, 'Параметры FTP подключения');
     }
+  
+    async function testSshConnection() {
+      const btn = document.getElementById('btn-test-ssh-connection');
+      if (!btn) return;
+      btn.innerHTML = '⏳ Подключение...';
+      btn.disabled = true;
+
+      const host = document.getElementById('inp_ssh_host').value;
+      const port = document.getElementById('inp_ssh_port').value;
+      const user = document.getElementById('inp_ssh_user').value;
+      const pass = document.getElementById('inp_ssh_pass').value;
+      const pkey = document.getElementById('inp_ssh_key').value;
+
+      try {
+        const res = await fetch('/api/client/${client.id}/test-ssh', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ host, port, user, pass, key: pkey })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          btn.innerHTML = '✅ Успешно (ОК)';
+          btn.style.background = '#dcfce7';
+          btn.style.color = '#166534';
+          btn.style.borderColor = '#bbf7d0';
+        } else {
+          btn.innerHTML = '❌ Ошибка';
+          btn.style.background = '#fee2e2';
+          btn.style.color = '#991b1b';
+          btn.style.borderColor = '#fecaca';
+          alert('Ошибка SSH: ' + data.error);
+        }
+      } catch (err) {
+        alert('Сбой запроса: ' + err.message);
+        btn.innerHTML = '❌ Сбой';
+      } finally {
+        setTimeout(() => {
+          btn.innerHTML = '⚡ Проверить соединение';
+          btn.disabled = false;
+          btn.style.background = '#e0f2fe';
+          btn.style.color = '#0284c7';
+          btn.style.borderColor = '#bae6fd';
+        }, 5000);
+      }
+    }
   </script>
+
 
   <!-- Add Contact Modal -->
   <div id="add-contact-modal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.5); backdrop-filter:blur(4px); align-items:center; justify-content:center; z-index:2000; padding:20px;">

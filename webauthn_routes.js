@@ -45,7 +45,13 @@ export function setupWebAuthn(app) {
       }
 
       // Find the passkey in DB
-      const passkey = db.getPasskey(response.id);
+      // normalize id just in case
+      let passkey = db.getPasskey(response.id);
+      if (!passkey) {
+        // Try looking up by device if we can't find by ID
+        const allPasskeys = db.db.prepare('SELECT * FROM admin_passkeys').all();
+        passkey = allPasskeys.find(p => p.id === response.id || Buffer.from(p.id, 'base64').toString('base64url') === response.id || p.id === Buffer.from(response.id, 'base64url').toString('base64'));
+      }
       if (!passkey) {
         return res.status(400).json({ error: 'Ключ не найден в базе данных' });
       }
