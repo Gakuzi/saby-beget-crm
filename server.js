@@ -238,91 +238,12 @@ app.get('/', (req, res) => {
       </div>
     </div>
 
-    <!-- GitHub & CI/CD Live Control Banner -->
-    <div style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: #fff; border-radius: 14px; padding: 18px 22px; margin-bottom: 20px; box-shadow: 0 10px 25px rgba(15,23,42,0.15);">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
-        <div>
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <svg width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-            <span style="font-size: 16px; font-weight: 700;">GitHub Репозиторий: ${gitConfig.repo}</span>
-            <span style="background: rgba(16,185,129,0.25); color: #34d399; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 6px;">Ветка: ${gitStatus.branch || 'main'}</span>
-          </div>
-          <div style="font-size: 13px; color: #cbd5e1; margin-top: 6px;">
-            Последний коммит: <strong>${gitStatus.lastCommit ? gitStatus.lastCommit.shortHash : 'Инициализация'}</strong>
-            &bull; <em>${gitStatus.lastCommit ? gitStatus.lastCommit.subject : 'Первичный снимок CRM'}</em>
-            &bull; Автор: ${gitStatus.lastCommit ? gitStatus.lastCommit.author : 'Климов Евгений'}
-          </div>
-        </div>
-
-        <div style="display: flex; gap: 10px; align-items: center;">
-          <button type="button" id="gh-sync-btn" onclick="triggerMainGitHubSync()" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; padding: 9px 18px; border-radius: 8px; font-weight: 700; font-size: 13.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(16,185,129,0.3);">
-            <span>🚀</span>
-            <span>Синхронизировать на GitHub</span>
-          </button>
-          <button type="button" onclick="openGitHubModal()" style="background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.25); padding: 9px 14px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer;">
-            ⚙️ Секреты и CI/CD
-          </button>
-        </div>
-      </div>
-
-      <!-- Quick secrets pills -->
-      <div style="display: flex; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 12px; flex-wrap: wrap;">
-        <span style="color: #94a3b8;">Статус интеграций:</span>
-        <span style="color: ${gitConfig.hasToken ? '#34d399' : '#f59e0b'};">
-          ${gitConfig.hasToken ? '● GITHUB_TOKEN настроен' : '○ GITHUB_TOKEN (для push)'}
-        </span>
-        <span style="color: ${hasSaby ? '#34d399' : '#94a3b8'};">
-          ${hasSaby ? '● Saby RPC API активен' : '○ Saby API (локальный режим)'}
-        </span>
-        <span style="color: ${hasBeget ? '#34d399' : '#94a3b8'};">
-          ${hasBeget ? '● Beget Cloud API настроен' : '○ Beget Cloud (по карточкам)'}
-        </span>
-        <span style="color: #60a5fa;">
-          ● CI/CD Deploy Workflow: .github/workflows/deploy.yml
-        </span>
-      </div>
-    </div>
-
-    <!-- Liquid Glass Portal Banner & Quick Switcher -->
-    <div style="background: linear-gradient(135deg, rgba(238,242,255,0.95) 0%, rgba(245,243,255,0.95) 100%); border: 1px solid #c7d2fe; border-radius: 14px; padding: 18px 22px; margin-bottom: 20px; box-shadow: 0 4px 18px rgba(99,102,241,0.08);">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
-        <div>
-          <div style="font-size: 16px; font-weight: 700; color: #1e1b4b; display: flex; align-items: center; gap: 8px;">
-            <span>✨</span> Клиентские кабинеты активны (Режим прямого доступа без паролей)
-          </div>
-          <div style="font-size: 13.5px; color: #4338ca; margin-top: 3px;">
-            Вся функциональность работает: СБИС ЭДО, Beget Cloud, SLA, мониторинг, заявки и акты.
-          </div>
-        </div>
-      </div>
-
-      <!-- Quick client switcher buttons -->
-      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding-top: 10px; border-top: 1px solid rgba(199,210,254,0.6);">
-        <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6366f1;">Быстрый вход:</span>
-        <a href="/portal/2" target="_blank" style="background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%); color: #fff; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(124,58,237,0.2);">
-          🖥️ Кабинет: ООО «Альфа-Сервис» (Клиент 2) &rarr;
-        </a>
-        <a href="/client/2" style="background: #fff; border: 1px solid #c7d2fe; color: #4338ca; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none;">
-          ⚙️ Карточка: ООО «Альфа-Сервис»
-        </a>
-        <a href="/portal/4" target="_blank" style="background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #fff; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(79,70,229,0.2);">
-          🖥️ Кабинет: ООО «Северный Вектор» (Клиент 4) &rarr;
-        </a>
-        <a href="/client/4" style="background: #fff; border: 1px solid #c7d2fe; color: #4338ca; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none;">
-          ⚙️ Карточка: ООО «Северный Вектор»
-        </a>
-      </div>
-    </div>
-
     <div class="actions-bar">
       <a href="/add_page" class="btn">+ Добавить контрагента из Saby</a>
       <button type="button" onclick="openSabySettingsModal()" class="btn" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #fff; box-shadow: 0 4px 12px rgba(2,132,199,0.25);">
         ⚙️ Интеграция Saby CRM & Ключи
       </button>
       <a href="/portal/2" target="_blank" class="btn" style="background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%); color: #5b21b6; box-shadow: none;">🖥️ Открыть Клиентский портал</a>
-      <button type="button" onclick="triggerMainGitHubSync()" class="btn" style="background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); color: #1e293b; box-shadow: none;">
-        🐙 Отправить изменения на GitHub
-      </button>
       <span style="font-size:13px; color:#94a3b8; margin-left: auto;">Всего контрагентов: ${clients.length}</span>
     </div>
 
