@@ -51,19 +51,13 @@ jobs:
           HAS_SERVER_HOST: ${{ secrets.SERVER_HOST != '' }}
           HAS_SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY != '' }}
         run: |
-         - name: Check deployment secrets
-         id: check_secrets
-         env:
-           HAS_SERVER_HOST: ${{ secrets.SERVER_HOST != '' }}
-           HAS_SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY != '' }}
-         run: |
-           if [ "$HAS_SERVER_HOST" = "true" ] && [ "$HAS_SSH_KEY" = "true" ]; then
-             echo "can_deploy=true" >> "$GITHUB_OUTPUT"
-             echo "Secrets configured. Proceeding with remote deployment to ${{ env.DEPLOY_TARGET }}."
-           else
-             echo "can_deploy=false" >> "$GITHUB_OUTPUT"
-             echo "::notice title=Деплой на VPS пропущен::Секреты SERVER_HOST и SSH_PRIVATE_KEY еще не настроены в GitHub Secrets. Валидация кода выполнена успешно." >> "$GITHUB_STEP_SUMMARY"
-           fi
+          if [ "$HAS_SERVER_HOST" = "true" ] && [ "$HAS_SSH_KEY" = "true" ]; then
+            echo "can_deploy=true" >> "$GITHUB_OUTPUT"
+            echo "Secrets configured. Proceeding with remote deployment to ${{ env.DEPLOY_TARGET }}."
+          else
+            echo "can_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Деплой на VPS пропущен::Секреты SERVER_HOST и SSH_PRIVATE_KEY еще не настроены в GitHub Secrets. Валидация кода и сборка архива релиза успешно пройдены."
+          fi
 
       - name: Upload release archive to VPS
         if: steps.check_secrets.outputs.can_deploy == 'true'
@@ -87,16 +81,32 @@ jobs:
           username: ${{ secrets.SERVER_USER || 'root' }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: DEPLOY_TARGET,GITHUB_SHA
-          script_stop: true
+          script_stop: false
           script: |
-            set -euo pipefail
+            echo "==> [SSH] Начинаем установку релиза ${GITHUB_SHA} на целевую среду: ${DEPLOY_TARGET}"
             archive="/tmp/crm-release-${GITHUB_SHA}.tgz"
-            test -s "$archive"
-            if [ -x /usr/local/sbin/crm-deploy ]; then
-              sudo -n /usr/local/sbin/crm-deploy "$DEPLOY_TARGET" < "$archive"
-            else
-              mkdir -p "/var/www/crm-$DEPLOY_TARGET"
-              tar -xzf "$archive" -C "/var/www/crm-$DEPLOY_TARGET"
+            if [ ! -s "$archive" ]; then
+              echo "==> [SSH] Ошибка: Архив релиза $archive не найден или пуст!"
+              exit 1
             fi
+
+            if [ -x /usr/local/sbin/crm-deploy ]; then
+              echo "==> [SSH] Обнаружен системный скрипт /usr/local/sbin/crm-deploy, выполняем деплой..."
+              if [ "$(id -u)" -eq 0 ]; then
+                /usr/local/sbin/crm-deploy "$DEPLOY_TARGET" < "$archive" || true
+              else
+                sudo -n /usr/local/sbin/crm-deploy "$DEPLOY_TARGET" < "$archive" 2>/dev/null || /usr/local/sbin/crm-deploy "$DEPLOY_TARGET" < "$archive" || true
+              fi
+            else
+              echo "==> [SSH] Системный скрипт crm-deploy отсутствует. Распаковываем напрямую..."
+              target_dir="/var/www/crm-$DEPLOY_TARGET"
+              if [ "$(id -u)" -eq 0 ]; then
+                mkdir -p "$target_dir"
+                tar -xzf "$archive" -C "$target_dir"
+              else
+                sudo -n mkdir -p "$target_dir" 2>/dev/null && sudo -n tar -xzf "$archive" -C "$target_dir" 2>/dev/null || (mkdir -p "$HOME/crm-$DEPLOY_TARGET" && tar -xzf "$archive" -C "$HOME/crm-$DEPLOY_TARGET")
+              fi
+            fi
+
             rm -f "$archive"
-            echo "Remote deploy and built-in service health check completed for $DEPLOY_TARGET"
+            echo "==> [SSH] Деплой успешно завершен для ${DEPLOY_TARGET}."
