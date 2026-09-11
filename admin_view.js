@@ -1141,8 +1141,8 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
                 </div>
 
                 <div class="form-group">
-                  <label>Часы:</label>
-                  <input type="number" step="0.5" min="0.1" name="hours" value="1.0" class="form-control" required>
+                  <label>Затраченное время (часы, напр. 1.5):</label>
+                  <input type="number" step="any" min="0.01" name="hours" value="1.0" class="form-control" required placeholder="Например 0.5 (30 минут) или 1.5">
                 </div>
               </div>
 
@@ -2325,7 +2325,7 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
           </div>
           <div class="form-group">
             <label>Часы:</label>
-            <input type="number" step="0.5" min="0.1" name="hours" id="edit_hours" class="form-control" required>
+            <input type="number" step="any" min="0.01" name="hours" id="edit_hours" class="form-control" required>
           </div>
         </div>
         <div class="form-group">
@@ -3285,6 +3285,46 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
       </div>
     </div>
   </div>
+
+<script>
+    function archiveClientAction(id) {
+      const reason = prompt('Укажите причину расторжения / архивации договора:', 'Договор завершен / расторгнут');
+      if (reason === null) return;
+      
+      fetch('/api/client/' + id + '/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason })
+      })
+      .then(r => r.json())
+      .then(res => {
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          alert('Ошибка архивации: ' + res.error);
+        }
+      })
+      .catch(e => alert('Ошибка сети: ' + e));
+    }
+    
+    function restoreClientAction(id) {
+      if (!confirm('Вы действительно хотите восстановить договор из архива и перевести его в статус "Активный"?')) return;
+      
+      fetch('/api/client/' + id + '/restore', {
+        method: 'POST'
+      })
+      .then(r => r.json())
+      .then(res => {
+        if (res.ok) {
+          window.location.reload();
+        } else {
+          alert('Ошибка восстановления: ' + res.error);
+        }
+      })
+      .catch(e => alert('Ошибка сети: ' + e));
+    }
+</script>
+
 </body>
 </html>`;
 }
@@ -3526,43 +3566,16 @@ export function renderNewClientPage() {
       document.getElementById('contract_number').value = parts[1] || '';
     }
 
-    function archiveClientAction(id) {
-      const reason = prompt('Укажите причину расторжения / архивации договора:', 'Договор завершен / расторгнут');
-      if (reason === null) return; // User cancelled
-      
-      fetch('/api/client/' + id + '/archive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: reason })
-      })
-      .then(r => r.json())
-      .then(res => {
-        if (res.ok) {
-          window.location.reload();
-        } else {
-          alert('Ошибка архивации: ' + res.error);
-        }
-      })
+          })
+      .catch(e => alert('Ошибка сети: ' + e));
+    }
+  
+          })
       .catch(e => alert('Ошибка сети: ' + e));
     }
 
-    function restoreClientAction(id) {
-      if (!confirm('Вы действительно хотите восстановить договор из архива и перевести его в статус "Активный"?')) return;
-      
-      fetch('/api/client/' + id + '/restore', {
-        method: 'POST'
-      })
-      .then(r => r.json())
-      .then(res => {
-        if (res.ok) {
-          window.location.reload();
-        } else {
-          alert('Ошибка восстановления: ' + res.error);
-        }
-      })
-      .catch(e => alert('Ошибка сети: ' + e));
-    }
   </script>
 </body>
-</html>`;
+</html>
+`;
 }

@@ -155,7 +155,8 @@ app.post('/change-password', (req, res) => {
 
 // Dashboard: List clients
 app.get('/', (req, res) => {
-  const clients = db.getClients();
+  const filter = req.query.filter === 'archived' ? 'archived' : 'active';
+  const clients = db.getClients(filter);
   const gitStatus = getGitStatus();
   const gitConfig = getGitHubConfig();
   const hasSaby = !!(process.env.SABY_APP_CLIENT_ID && process.env.SABY_APP_SECRET);
@@ -245,7 +246,8 @@ app.get('/', (req, res) => {
           <span style="font-size: 10px; color: #94a3b8;">▼</span>
         </button>
         <div id="user-menu" style="display: none; position: absolute; right: 0; top: 45px; background: #fff; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-radius: 8px; width: 240px; z-index: 100; border: 1px solid #f1f5f9; padding: 8px 0;">
-          <a href="#" onclick="openSabySettingsModal()" style="display: block; padding: 10px 16px; color: #334155; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">⚙️ Настройки Saby CRM & Ключи</a>
+          <a href="/?filter=${filter === 'active' ? 'archived' : 'active'}" style="display: block; padding: 10px 16px; color: #334155; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">${filter === 'active' ? '🗄️ Показать архивные' : '📁 Показать активные'}</a>
+            <a href="#" onclick="openSabySettingsModal()" style="display: block; padding: 10px 16px; color: #334155; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">⚙️ Настройки Saby CRM & Ключи</a>
           <a href="/change-password" style="display: block; padding: 10px 16px; color: #334155; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">🔑 Сменить пароль</a>
           <a href="#" onclick="resetDatabase()" style="display: block; padding: 10px 16px; color: #ef4444; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">⚠️ Сбросить всю БД</a>
           <a href="#" onclick="seedDatabase()" style="display: block; padding: 10px 16px; color: #10b981; text-decoration: none; font-size: 14px; border-bottom: 1px solid #f1f5f9;">🌱 Заполнить тестовым клиентом</a>
@@ -364,6 +366,20 @@ app.get('/', (req, res) => {
         <h4 style="margin: 0 0 12px; font-size: 14.5px; color: #0369a1; display: flex; align-items: center; gap: 6px;">
           <span>🏢</span> Интеграция с Saby CRM / СБИС (online.sbis.ru)
         </h4>
+
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; font-size: 13px; color: #1e40af; line-height: 1.5;">
+          <strong>Инструкция: Как получить ключи для интеграции с Saby CRM (СБИС):</strong>
+          <ol style="margin-top: 8px; margin-bottom: 0; padding-left: 20px;">
+            <li>Войдите в личный кабинет <strong>online.sbis.ru</strong> (с правами администратора).</li>
+            <li>Перейдите в раздел <strong>Настройки</strong> (шестеренка) &rarr; <strong>Интеграции</strong> &rarr; <strong>Внешние системы</strong> (или REST API).</li>
+            <li>Нажмите <strong>Создать приложение</strong>. Дайте ему название (например, "Интеграция с CRM").</li>
+            <li>Скопируйте <strong>Идентификатор приложения (Client ID)</strong> и вставьте в поле ниже.</li>
+            <li>Скопируйте <strong>Секретный ключ приложения (App Secret)</strong> и вставьте в поле ниже.</li>
+            <li>Если используется <strong>Сервисный ключ (Secret Key)</strong>, сгенерируйте его в разделе интеграций СБИС для пользователя системы и добавьте в поле ниже.</li>
+            <li>Сохраните изменения. Указанные ключи будут зашифрованы и сохранены локально на сервере.</li>
+          </ol>
+        </div>
+
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div>
