@@ -2240,7 +2240,7 @@ app.post('/portal/send_code', async (req, res) => {
   }
 
   // Generate 6-digit OTP code and dispatch via SMTP
-  const { code } = db.createVerificationCode(contact.id);
+  const { code } = db.createVerificationCode(contact.email);
   const mailRes = await mailer.sendLoginVerificationCode({
     toEmail: contact.email,
     contactName: contact.name,
@@ -2288,7 +2288,7 @@ app.get('/portal', async (req, res) => {
     const contact = db.getContactByToken(req.query.token);
     if (contact) {
       const client = db.getClientById(contact.client_id);
-      const { code } = db.createVerificationCode(contact.id);
+      const { code } = db.createVerificationCode(contact.email);
       const mailRes = await mailer.sendLoginVerificationCode({
         toEmail: contact.email,
         contactName: contact.name,
@@ -2378,7 +2378,7 @@ app.get('/portal/t/:token', async (req, res) => {
   }
 
   // Otherwise, require 2FA Verification
-  const { code } = db.createVerificationCode(contact.id);
+  const { code } = db.createVerificationCode(contact.email);
   const mailRes = await mailer.sendLoginVerificationCode({
     toEmail: contact.email,
     contactName: contact.name,
