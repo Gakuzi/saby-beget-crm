@@ -23,6 +23,9 @@ export function setupWebAuthn(app) {
         userVerification: 'preferred',
       });
       // Save challenge to session for verification
+      if (!req.session) { console.error('SESSION IS UNDEFINED IN generate-auth!'); res.status(500).json({error: 'Session not initialized'}); return; }
+      if (!req.session) { console.error('SESSION IS UNDEFINED IN generate-reg!'); res.status(500).json({error: 'Session not initialized'}); return; }
+      if (!req.session) { console.error('SESSION IS UNDEFINED!'); return res.status(500).json({error: 'Session not initialized'}); }
       req.session.currentChallenge = options.challenge;
       req.session.save();
       res.json(options);
@@ -60,7 +63,7 @@ export function setupWebAuthn(app) {
         expectedOrigin,
         expectedRPID: getRpId(req),
         authenticator: {
-          credentialID: passkey.id,
+          credentialID: new Uint8Array(Buffer.from(passkey.id, 'base64url')),
           credentialPublicKey: Buffer.from(passkey.public_key, 'base64'),
           counter: passkey.counter,
           transports: passkey.transports ? passkey.transports.split(',') : undefined,
@@ -93,14 +96,16 @@ export function setupWebAuthn(app) {
     if (!req.session.admin_id) return res.status(401).json({ error: 'Не авторизован' });
     
     try {
+      console.log('Generating reg options for admin:', req.session.admin_id);
       const admin = db.db.prepare('SELECT id, username, email FROM admin_users WHERE id = ?').get(req.session.admin_id);
+      console.log('Admin found:', admin);
       
       const userPasskeys = db.getAdminPasskeys(admin.id);
       
       const options = await generateRegistrationOptions({
         rpName,
         rpID: getRpId(req),
-        userID: String(admin.id), // must be a string or buffer
+        userID: new Uint8Array(Buffer.from(String(admin.id))), // must be a Uint8Array
         userName: admin.email,
         userDisplayName: admin.username || admin.email,
         attestationType: 'none',
@@ -115,6 +120,7 @@ export function setupWebAuthn(app) {
         },
       });
       
+      if (!req.session) { console.error('SESSION IS UNDEFINED!'); return res.status(500).json({error: 'Session not initialized'}); }
       req.session.currentChallenge = options.challenge;
       req.session.save();
       res.json(options);
@@ -148,7 +154,7 @@ export function setupWebAuthn(app) {
         const { credentialID, credentialPublicKey, counter, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
         
         db.savePasskey({
-          id: credentialID,
+          id: response.id,
           admin_id: req.session.admin_id,
           public_key: Buffer.from(credentialPublicKey).toString('base64'),
           counter: counter,

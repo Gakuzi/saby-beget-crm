@@ -125,12 +125,16 @@ app.get('/login', (req, res) => {
     .tab { flex: 1; text-align: center; padding: 8px; cursor: pointer; color: #64748b; font-weight: 600; border-radius: 6px; }
     .tab.active { background: #eff6ff; color: #2563eb; }
   </style>
+
 <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
 <script>
 async function registerPasskey() {
   try {
-    const resp = await fetch('/webauthn/generate-reg');
-    if (!resp.ok) throw new Error('Failed to generate options');
+    const resp = await fetch('/webauthn/generate-reg', { credentials: 'include' });
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error('Не авторизован');
+      throw new Error('Failed to generate options');
+    }
     const opts = await resp.json();
     if (opts.error) throw new Error(opts.error);
     
@@ -140,6 +144,7 @@ async function registerPasskey() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(attResp),
+      credentials: 'include'
     });
     
     const verification = await verifyResp.json();
@@ -211,7 +216,7 @@ async function registerPasskey() {
       <p id="passkey-error" style="color: #dc2626; font-size: 13px; margin-top: 8px; display: none;"></p>
     </div>
 
-    <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+    
     <script>
       function switchTab(t) {
         document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
@@ -230,13 +235,14 @@ async function registerPasskey() {
         const errorEl = document.getElementById('passkey-error');
         errorEl.style.display = 'none';
         try {
-          const resp = await fetch('/webauthn/generate-auth');
+          const resp = await fetch('/webauthn/generate-auth', { credentials: 'include' });
           const opts = await resp.json();
           if (opts.error) throw new Error(opts.error);
           
           const asseResp = await SimpleWebAuthnBrowser.startAuthentication({ optionsJSON: opts });
           
           const verifyResp = await fetch('/webauthn/verify-auth', {
+            credentials: 'include',
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(asseResp),
@@ -332,6 +338,40 @@ app.get('/workers', (req, res) => {
     button { padding: 10px 16px; background: #10b981; color: #fff; border: 0; border-radius: 6px; font-weight: 600; cursor: pointer; }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; margin-top: 20px; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; }
   </style>
+
+<script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+<script>
+async function registerPasskey() {
+  try {
+    const resp = await fetch('/webauthn/generate-reg', { credentials: 'include' });
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error('Не авторизован');
+      throw new Error('Failed to generate options');
+    }
+    const opts = await resp.json();
+    if (opts.error) throw new Error(opts.error);
+    
+    const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
+    
+    const verifyResp = await fetch('/webauthn/verify-reg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attResp),
+      credentials: 'include'
+    });
+    
+    const verification = await verifyResp.json();
+    if (verification.verified) {
+      alert('Ключ (Passkey) успешно добавлен! Теперь вы можете входить по отпечатку или Face ID.');
+    } else {
+      alert('Ошибка при сохранении ключа: ' + (verification.error || 'Неизвестная ошибка'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Не удалось зарегистрировать ключ: ' + e.message);
+  }
+}
+</script>
 </head>
 <body>
   <div class="container">
@@ -428,6 +468,40 @@ app.get('/change-password', (req, res) => {
     a { color: #6b5a57; }
     .show { display: block !important; }
   </style>
+
+<script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+<script>
+async function registerPasskey() {
+  try {
+    const resp = await fetch('/webauthn/generate-reg', { credentials: 'include' });
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error('Не авторизован');
+      throw new Error('Failed to generate options');
+    }
+    const opts = await resp.json();
+    if (opts.error) throw new Error(opts.error);
+    
+    const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
+    
+    const verifyResp = await fetch('/webauthn/verify-reg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attResp),
+      credentials: 'include'
+    });
+    
+    const verification = await verifyResp.json();
+    if (verification.verified) {
+      alert('Ключ (Passkey) успешно добавлен! Теперь вы можете входить по отпечатку или Face ID.');
+    } else {
+      alert('Ошибка при сохранении ключа: ' + (verification.error || 'Неизвестная ошибка'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Не удалось зарегистрировать ключ: ' + e.message);
+  }
+}
+</script>
 </head>
 <body>
   <div class="card">
@@ -536,6 +610,40 @@ app.get('/', (req, res) => {
       box-shadow: 0 8px 24px rgba(0,0,0,0.3); display: none; z-index: 2000;
     }
   </style>
+
+<script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+<script>
+async function registerPasskey() {
+  try {
+    const resp = await fetch('/webauthn/generate-reg', { credentials: 'include' });
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error('Не авторизован');
+      throw new Error('Failed to generate options');
+    }
+    const opts = await resp.json();
+    if (opts.error) throw new Error(opts.error);
+    
+    const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
+    
+    const verifyResp = await fetch('/webauthn/verify-reg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attResp),
+      credentials: 'include'
+    });
+    
+    const verification = await verifyResp.json();
+    if (verification.verified) {
+      alert('Ключ (Passkey) успешно добавлен! Теперь вы можете входить по отпечатку или Face ID.');
+    } else {
+      alert('Ошибка при сохранении ключа: ' + (verification.error || 'Неизвестная ошибка'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Не удалось зарегистрировать ключ: ' + e.message);
+  }
+}
+</script>
 </head>
 <body>
   <div class="container" style="position: relative;">
@@ -1810,6 +1918,40 @@ app.get('/client/:id/edit_log/:log_id', (req, res) => {
     button { padding: 10px 18px; background: linear-gradient(135deg,#ffd6c2,#ffb4a2); border: 0; border-radius: 6px; font-weight: bold; cursor: pointer; }
     a { color: #6b5a57; margin-left: 12px; }
   </style>
+
+<script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+<script>
+async function registerPasskey() {
+  try {
+    const resp = await fetch('/webauthn/generate-reg', { credentials: 'include' });
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error('Не авторизован');
+      throw new Error('Failed to generate options');
+    }
+    const opts = await resp.json();
+    if (opts.error) throw new Error(opts.error);
+    
+    const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
+    
+    const verifyResp = await fetch('/webauthn/verify-reg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attResp),
+      credentials: 'include'
+    });
+    
+    const verification = await verifyResp.json();
+    if (verification.verified) {
+      alert('Ключ (Passkey) успешно добавлен! Теперь вы можете входить по отпечатку или Face ID.');
+    } else {
+      alert('Ошибка при сохранении ключа: ' + (verification.error || 'Неизвестная ошибка'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Не удалось зарегистрировать ключ: ' + e.message);
+  }
+}
+</script>
 </head>
 <body>
   <div class="card">
@@ -1877,6 +2019,40 @@ app.post('/client/:id/create-access-link', (req, res) => {
     a { display: inline-block; margin-top: 18px; color: #202b45; font-weight: 600; text-decoration: none; }
     a:hover { text-decoration: underline; }
   </style>
+
+<script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+<script>
+async function registerPasskey() {
+  try {
+    const resp = await fetch('/webauthn/generate-reg', { credentials: 'include' });
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error('Не авторизован');
+      throw new Error('Failed to generate options');
+    }
+    const opts = await resp.json();
+    if (opts.error) throw new Error(opts.error);
+    
+    const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
+    
+    const verifyResp = await fetch('/webauthn/verify-reg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attResp),
+      credentials: 'include'
+    });
+    
+    const verification = await verifyResp.json();
+    if (verification.verified) {
+      alert('Ключ (Passkey) успешно добавлен! Теперь вы можете входить по отпечатку или Face ID.');
+    } else {
+      alert('Ошибка при сохранении ключа: ' + (verification.error || 'Неизвестная ошибка'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Не удалось зарегистрировать ключ: ' + e.message);
+  }
+}
+</script>
 </head>
 <body>
   <main class="card">
@@ -2136,7 +2312,41 @@ app.get('/public/client/:token', async (req, res) => {
   if (!client) {
     return res.status(404).send(`<!doctype html>
       <html lang="ru">
-      <head><meta charset="utf-8"><title>Ссылка недействительна</title></head>
+      <head><meta charset="utf-8"><title>Ссылка недействительна</title>
+<script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+<script>
+async function registerPasskey() {
+  try {
+    const resp = await fetch('/webauthn/generate-reg', { credentials: 'include' });
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error('Не авторизован');
+      throw new Error('Failed to generate options');
+    }
+    const opts = await resp.json();
+    if (opts.error) throw new Error(opts.error);
+    
+    const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
+    
+    const verifyResp = await fetch('/webauthn/verify-reg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attResp),
+      credentials: 'include'
+    });
+    
+    const verification = await verifyResp.json();
+    if (verification.verified) {
+      alert('Ключ (Passkey) успешно добавлен! Теперь вы можете входить по отпечатку или Face ID.');
+    } else {
+      alert('Ошибка при сохранении ключа: ' + (verification.error || 'Неизвестная ошибка'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Не удалось зарегистрировать ключ: ' + e.message);
+  }
+}
+</script>
+</head>
       <body style="font-family:sans-serif; text-align:center; padding:60px; background:#f8fafc;">
         <h2 style="color:#1e1b4b;">Ссылка клиентского кабинета недействительна или отозвана</h2>
         <p style="color:#64748b;">Запросите актуальную ссылку у вашего системного администратора.</p>
@@ -2306,6 +2516,40 @@ app.get('/client/:id/report', (req, res) => {
       table { page-break-inside: avoid; }
     }
   </style>
+
+<script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+<script>
+async function registerPasskey() {
+  try {
+    const resp = await fetch('/webauthn/generate-reg', { credentials: 'include' });
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error('Не авторизован');
+      throw new Error('Failed to generate options');
+    }
+    const opts = await resp.json();
+    if (opts.error) throw new Error(opts.error);
+    
+    const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
+    
+    const verifyResp = await fetch('/webauthn/verify-reg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attResp),
+      credentials: 'include'
+    });
+    
+    const verification = await verifyResp.json();
+    if (verification.verified) {
+      alert('Ключ (Passkey) успешно добавлен! Теперь вы можете входить по отпечатку или Face ID.');
+    } else {
+      alert('Ошибка при сохранении ключа: ' + (verification.error || 'Неизвестная ошибка'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Не удалось зарегистрировать ключ: ' + e.message);
+  }
+}
+</script>
 </head>
 <body>
   <div class="no-print" style="margin-bottom: 20px;">
@@ -2412,7 +2656,41 @@ app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   res.status(500).send(`<!doctype html>
 <html lang="ru">
-<head><meta charset="utf-8"><title>Ошибка CRM</title></head>
+<head><meta charset="utf-8"><title>Ошибка CRM</title>
+<script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
+<script>
+async function registerPasskey() {
+  try {
+    const resp = await fetch('/webauthn/generate-reg', { credentials: 'include' });
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error('Не авторизован');
+      throw new Error('Failed to generate options');
+    }
+    const opts = await resp.json();
+    if (opts.error) throw new Error(opts.error);
+    
+    const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
+    
+    const verifyResp = await fetch('/webauthn/verify-reg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(attResp),
+      credentials: 'include'
+    });
+    
+    const verification = await verifyResp.json();
+    if (verification.verified) {
+      alert('Ключ (Passkey) успешно добавлен! Теперь вы можете входить по отпечатку или Face ID.');
+    } else {
+      alert('Ошибка при сохранении ключа: ' + (verification.error || 'Неизвестная ошибка'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Не удалось зарегистрировать ключ: ' + e.message);
+  }
+}
+</script>
+</head>
 <body style="font-family:sans-serif; padding:30px;">
   <h2>Не удалось выполнить операцию</h2>
   <p>Ошибка зарегистрирована в системе.</p>
