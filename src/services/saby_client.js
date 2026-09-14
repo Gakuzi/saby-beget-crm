@@ -36,7 +36,7 @@ export function getSabyCredentials() {
     clientId,
     appSecret,
     secretKey,
-    hasCredentials: !!(clientId && appSecret)
+    hasCredentials: !!(clientId && appSecret && secretKey)
   };
 }
 
@@ -45,11 +45,18 @@ let tokenExpiresAt = 0;
 
 export async function authenticateSaby() {
   const creds = getSabyCredentials();
-  if (!creds.hasCredentials) {
+  if (!creds.clientId || !creds.appSecret) {
     return {
       ok: false,
       configured: false,
       message: 'Учетные данные Saby API не настроены (требуются ID подключения и Секрет приложения).'
+    };
+  }
+  if (!creds.secretKey) {
+    return {
+      ok: false,
+      configured: false,
+      message: 'Сервисный ключ Saby не задан. Вставьте содержимое файла ключа (.key) в настройках.'
     };
   }
 
@@ -58,65 +65,88 @@ export async function authenticateSaby() {
     return { ok: true, token: activeSabyToken, cached: true };
   }
 
-  try {
-    const authParams = {
-      app_client_id: creds.clientId,
-      app_secret: creds.appSecret
-    };
-    if (creds.secretKey && creds.secretKey.trim() !== '') {
-      authParams.secret_key = creds.secretKey;
-    }
+  const authParams = {
+    app_client_id: creds.clientId,
+    app_secret: creds.appSecret,
+    secret_key: creds.secretKey
+  };
 
-    // Use OAuth endpoint instead of JSON-RPC
-    const res = await fetch('https://online.sbis.ru/oauth/service/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify(authParams),
-      signal: AbortSignal.timeout(8000)
-    });
+  const endpoints = [
+    'https://online.sbis.ru/oauth/service/',
+    'https://online.saby.ru/oauth/service/',
+    'https://api.saby.ru/oauth/service/'
+  ];
 
-    if (!res.ok) {
+  let lastError = null;
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(authParams),
+        signal: AbortSignal.timeout(8000)
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        let parsedErr = '';
+        try {
+          const jsonErr = JSON.parse(errorText);
+          parsedErr = jsonErr.error_message || jsonErr.error?.message || jsonErr.message || errorText;
+        } catch (_) {
+          parsedErr = errorText;
+        }
+        lastError = `HTTP ${res.status}: ${parsedErr || res.statusText}`;
+        continue;
+      }
+
+      const json = await res.json();
+      if (json.error) {
+        const errMsg = json.error_message || json.error.message || (typeof json.error === 'string' ? json.error : JSON.stringify(json.error));
+        return {
+          ok: false,
+          configured: true,
+          message: `Ошибка Saby OAuth: ${errMsg}`
+        };
+      }
+
+      const token = json.access_token || json.sid || json.token || json.result;
+      if (!token) {
+        return {
+          ok: false,
+          configured: true,
+          message: `Saby не вернул access_token: ${JSON.stringify(json)}`
+        };
+      }
+
+      activeSabyToken = token;
+      tokenExpiresAt = Date.now() + 30 * 60 * 1000;
+
       return {
-        ok: false,
+        ok: true,
         configured: true,
-        status: res.status,
-        message: `HTTP ошибка авторизации Saby: ${res.status} ${res.statusText}`
+        token,
+        message: 'Успешная авторизация в Saby API (токен доступа получен).'
       };
+    } catch (err) {
+      lastError = err.message;
     }
-
-    const json = await res.json();
-    if (json.error) {
-      return {
-        ok: false,
-        configured: true,
-        message: `Ошибка Saby OAuth [${json.error_code || ''}]: ${json.error_message || json.error.message || JSON.stringify(json.error)}`
-      };
-    }
-
-    // oauth/service returns { access_token: "...", sid: "..." }
-    const token = json.access_token || json.sid || json.result || 'saby-session-active';
-    activeSabyToken = token;
-    tokenExpiresAt = Date.now() + 30 * 60 * 1000;
-
-    return {
-      ok: true,
-      configured: true,
-      token,
-      message: 'Успешная авторизация в Saby API (токен получен).'
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      configured: true,
-      message: `Ошибка подключения к Saby RPC (${SABY_RPC_URL}): ${err.message}`
-    };
   }
+
+  return {
+    ok: false,
+    configured: true,
+    message: `Не удалось связаться с Saby API: ${lastError}`
+  };
 }
 
 export async function testSabyConnection() {
+  activeSabyToken = null;
+  tokenExpiresAt = 0;
   const auth = await authenticateSaby();
   return auth;
 }

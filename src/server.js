@@ -913,10 +913,10 @@ async function registerPasskey() {
         <!-- TAB 1: SABY -->
         <div id="cfg-pane-saby" class="cfg-tab-pane">
           <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 12.5px; color: #166534; line-height: 1.5;">
-            ✅ <strong>Ключи и сертификаты не требуются!</strong><br>
-            Для авторизации в API Saby (СБИС) нужны только <strong>ID подключения</strong> и <strong>Секрет приложения</strong> из личного кабинета разработчика (<a href="https://online.sbis.ru/developers" target="_blank" style="color: #15803d; text-decoration: underline;">online.sbis.ru/developers</a>).
+            🔑 <strong>Интеграция с Saby API (СБИС):</strong><br>
+            Для синхронизации договоров, актов и заявок Saby использует OAuth по сервисному ключу. Укажите <strong>ID подключения</strong>, <strong>Секрет приложения</strong> и вставьте <strong>текст сервисного ключа</strong> из файла <code>.key</code> (или выберите файл для авто-вставки).
           </div>
-          <div class="modal-grid-2" style="margin-bottom: 16px;">
+          <div class="modal-grid-2" style="margin-bottom: 14px;">
             <div>
               <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">ID подключения (app_client_id):</label>
               <input type="text" id="cfg-saby-client-id" placeholder="Например: 1234abcd-5678-..." style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
@@ -926,9 +926,22 @@ async function registerPasskey() {
               <input type="password" id="cfg-saby-app-secret" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
             </div>
           </div>
+
+          <div style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="font-size: 12px; font-weight: 600; color: #475569;">Текст сервисного ключа (содержимое файла .key):</label>
+              <label style="cursor: pointer; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 6px; font-size: 11.5px; color: #334155; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                📂 Вставить из файла .key / .txt
+                <input type="file" id="cfg-saby-key-file" accept=".key,.txt,.pem" style="display: none;" onchange="loadKeyFileToText(this)">
+              </label>
+            </div>
+            <textarea id="cfg-saby-secret-key" placeholder="Вставьте сюда текстовое содержимое файла ключа (.key / .txt / PEM)..." style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-family: monospace; min-height: 90px; resize: vertical; line-height: 1.4;"></textarea>
+            <div id="cfg-saby-key-status" style="font-size: 11.5px; margin-top: 5px; color: #64748b;"></div>
+          </div>
+
           <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
             <button type="button" id="cfg-test-saby-btn" onclick="testSabyFromModal()" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">⚡ Проверить связь с Saby</button>
-            <span style="font-size: 12px; color: #64748b;">Шлюз: online.sbis.ru/oauth/service/</span>
+            <span style="font-size: 12px; color: #64748b;">Шлюзы: online.sbis.ru / online.saby.ru</span>
           </div>
         </div>
 
@@ -1205,6 +1218,23 @@ async function registerPasskey() {
       }
     }
 
+    function loadKeyFileToText(input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const textarea = document.getElementById('cfg-saby-secret-key');
+        if (textarea) {
+          textarea.value = e.target.result;
+          const status = document.getElementById('cfg-saby-key-status');
+          if (status) {
+            status.innerHTML = '<span style="color:#0284c7; font-weight:600;">✓ Текст из файла ' + file.name + ' вставлен в поле (' + file.size + ' байт)</span>';
+          }
+        }
+      };
+      reader.readAsText(file);
+    }
+
     // Saby & Integration Settings Modal
     async function openSabySettingsModal() {
       const modal = document.getElementById('saby-settings-modal');
@@ -1225,9 +1255,18 @@ async function registerPasskey() {
           const safeSet = (id, val) => { const e = document.getElementById(id); if (e) e.value = val; };
           const safeText = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
           
-          // Saby (Only ID & Secret)
+          // Saby
           safeSet('cfg-saby-client-id', s.saby_app_client_id || '');
           safeSet('cfg-saby-app-secret', s.has_saby_secret ? '••••••••' : '');
+          safeSet('cfg-saby-secret-key', '');
+          const sabyKeyStatus = document.getElementById('cfg-saby-key-status');
+          if (sabyKeyStatus) {
+            if (s.has_saby_key) {
+              sabyKeyStatus.innerHTML = '<span style="color:#15803d; font-weight:600;">✓ Сервисный ключ сохранен в системе</span> (оставьте поле пустым, если не требуется замена).';
+            } else {
+              sabyKeyStatus.innerHTML = '<span style="color:#b45309; font-weight:600;">⚠️ Сервисный ключ еще не добавлен.</span> Вставьте текст ключа или выберите файл .key.';
+            }
+          }
           
           // Beget
           safeSet('cfg-beget-login', s.beget_login || '');
@@ -1325,9 +1364,11 @@ async function registerPasskey() {
       btn.textContent = 'Сохранение...';
 
       const safeGet = (id) => { const e = document.getElementById(id); return e ? e.value : ''; };
+      const secretKeyVal = safeGet('cfg-saby-secret-key');
       const payload = {
         saby_app_client_id: safeGet('cfg-saby-client-id'),
         saby_app_secret: safeGet('cfg-saby-app-secret'),
+        saby_secret_key: secretKeyVal,
         beget_login: safeGet('cfg-beget-login'),
         beget_password: safeGet('cfg-beget-pass'),
         backup_webhook_secret: safeGet('cfg-backup-secret'),
@@ -1452,7 +1493,8 @@ async function registerPasskey() {
 
       const payload = {
         saby_app_client_id: safeGet('cfg-saby-client-id'),
-        saby_app_secret: safeGet('cfg-saby-app-secret')
+        saby_app_secret: safeGet('cfg-saby-app-secret'),
+        saby_secret_key: safeGet('cfg-saby-secret-key')
       };
 
       try {
@@ -1978,7 +2020,7 @@ app.post('/api/settings/beget/test', async (req, res) => {
 app.post('/api/settings/saby/test', async (req, res) => {
   try {
     const { saby_app_client_id, saby_app_secret, saby_secret_key } = req.body || {};
-    if (saby_app_client_id) {
+    if (saby_app_client_id || saby_app_secret || saby_secret_key) {
       settingsManager.saveSettings({ saby_app_client_id, saby_app_secret, saby_secret_key });
     }
     const testRes = await testSabyConnection();
