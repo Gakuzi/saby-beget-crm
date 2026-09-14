@@ -50,28 +50,26 @@ setupWebAuthn(app);
 // Authentication middleware (Bypassed: open access mode so interface and client cabinets work seamlessly without secrets or login blocks)
 
 function requireAdmin(req, res, next) {
-  // Allow open access to portal, login, health, api auth routes
-  const openRoutes = ['/login', '/login_otp', '/healthz', '/portal'];
+  const openRoutes = ['/login', '/login_otp', '/healthz', '/portal', '/webauthn', '/photo_'];
   if (openRoutes.some(route => req.path.startsWith(route))) {
     return next();
   }
-  
-  // Also allow static assets if any, though we don't have a static dir mapped here
   
   if (req.session && req.session.admin_id) {
     return next();
   }
   
-  // Not logged in, save next url and redirect
-  const nextUrl = req.originalUrl;
+  let nextUrl = req.originalUrl;
+  if (req.method !== 'GET') {
+    if (nextUrl.includes('/update_full')) {
+      nextUrl = nextUrl.replace('/update_full', '');
+    } else {
+      nextUrl = '/';
+    }
+  }
   res.redirect('/login?next=' + encodeURIComponent(nextUrl));
 }
 
-
-app.use((req, res, next) => {
-  res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; font-src * data:;");
-  next();
-});
 
 app.use(requireAdmin);
 
