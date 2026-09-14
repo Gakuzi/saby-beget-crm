@@ -36,6 +36,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.json());
 
+// Favicon handler to avoid 404
+app.get('/favicon.ico', (req, res) => {
+  res.type('image/svg+xml').send('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📊</text></svg>');
+});
+
 // Session configuration
 app.use(
   session({
@@ -1269,7 +1274,17 @@ async function registerPasskey() {
       reader.readAsText(file);
     }
 
+    function safeGet(id) {
+      const e = document.getElementById(id);
+      return e ? e.value : '';
+    }
+
     // Saby & Integration Settings Modal
+    function closeSabySettingsModal() {
+      const modal = document.getElementById('saby-settings-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
     async function openSabySettingsModal() {
       const modal = document.getElementById('saby-settings-modal');
       modal.style.display = 'flex';
@@ -1307,13 +1322,12 @@ async function registerPasskey() {
           safeSet('cfg-beget-pass', ''); // clean for placeholder
           const begetPassStatus = document.getElementById('cfg-beget-pass-status');
           if (begetPassStatus) {
+            const bp = document.getElementById('cfg-beget-pass');
             if (s.has_beget_password) {
               begetPassStatus.textContent = '✓ Пароль сохранен в системе';
-              const bp = document.getElementById('cfg-beget-pass');
               if (bp) bp.placeholder = 'Оставьте пустым, если не меняете';
             } else {
               begetPassStatus.textContent = '⚠️ Пароль не установлен';
-              const bp = document.getElementById('cfg-beget-pass');
               if (bp) bp.placeholder = 'Введите пароль от API';
             }
           }
@@ -1334,12 +1348,13 @@ async function registerPasskey() {
           safeSet('cfg-smtp-pass', '');
           const passStatus = document.getElementById('cfg-smtp-pass-status');
           if (passStatus) {
+            const passInput = document.getElementById('cfg-smtp-pass');
             if (s.has_smtp_password) {
               passStatus.textContent = '✓ Рабочий пароль сохранен в системе';
-              passInput.placeholder = 'Оставьте пустым, если не меняете';
+              if (passInput) passInput.placeholder = 'Оставьте пустым, если не меняете';
             } else {
               passStatus.textContent = '⚠️ Пароль не установлен';
-              passInput.placeholder = 'Введите пароль';
+              if (passInput) passInput.placeholder = 'Введите пароль';
             }
           }
         }
@@ -1508,10 +1523,10 @@ async function registerPasskey() {
       } catch (err) {
         box.style.background = '#fef2f2';
         box.style.color = '#991b1b';
-        box.innerHTML = '<strong>❌ Сетевая ошибка:</strong> ' + err.message;
+        box.innerHTML = '<strong>Ошибка:</strong> ' + err.message;
       } finally {
         btn.disabled = false;
-        btn.textContent = '✉️ Проверить отправку тестового письма';
+        btn.textContent = 'Проверить отправку тестового письма';
       }
     }
 
