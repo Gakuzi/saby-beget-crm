@@ -36,7 +36,7 @@ export function getSabyCredentials() {
     clientId,
     appSecret,
     secretKey,
-    hasCredentials: !!(clientId && appSecret && secretKey)
+    hasCredentials: !!(clientId && appSecret)
   };
 }
 
@@ -49,7 +49,7 @@ export async function authenticateSaby() {
     return {
       ok: false,
       configured: false,
-      message: 'Учетные данные Saby API не настроены (требуются ID подключения, Защищенный ключ и Сервисный ключ).'
+      message: 'Учетные данные Saby API не настроены (требуются ID подключения и Секрет приложения).'
     };
   }
 

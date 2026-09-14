@@ -709,12 +709,20 @@ app.get('/', (req, res) => {
 
     /* Modal */
     .modal-overlay {
-      position: fixed; inset: 0; background: rgba(15,23,42,0.5); backdrop-filter: blur(4px);
-      display: none; align-items: flex-start; justify-content: center; z-index: 1000; padding: 20px; overflow-y: auto;
+      position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center; z-index: 1000; padding: 16px; box-sizing: border-box;
     }
     .modal-card {
-      background: #ffffff; border-radius: 16px; max-width: 620px; width: 100%; padding: 24px;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.25); box-sizing: border-box; margin: 40px auto;
+      background: #ffffff; border-radius: 16px; max-width: 680px; width: 100%; max-height: 90vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); box-sizing: border-box; margin: auto;
+    }
+    .modal-card-body {
+      padding: 20px; overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch;
+    }
+    .modal-card-footer {
+      padding: 12px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc;
+      display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
     }
     .toast {
       position: fixed; bottom: 20px; right: 20px; background: #1e1b4b; color: #fff;
@@ -729,7 +737,9 @@ app.get('/', (req, res) => {
       .header-bar { flex-direction: column; align-items: stretch; gap: 12px; margin-top: 10px; }
       .actions-bar { flex-direction: column; align-items: stretch; }
       .btn { justify-content: center; width: 100%; box-sizing: border-box; }
-      .modal-card { width: 100%; padding: 16px; /*max-height: 90vh;*/ }
+      .modal-card { width: 100%; max-height: 96vh; border-radius: 12px; }
+      .modal-card-body { padding: 14px; }
+      .modal-card-footer { padding: 10px 14px; }
       .modal-grid-2 { grid-template-columns: 1fr; gap: 8px; }
       table, thead, tbody, th, td, tr { display: block; }
       thead tr { position: absolute; top: -9999px; left: -9999px; }
@@ -881,151 +891,158 @@ async function registerPasskey() {
 
   <!-- Modal: Saby CRM & Hosting Global Configuration -->
   <div id="saby-settings-modal" class="modal-overlay">
-    <div class="modal-card" style="max-width: 750px; width: 100%; box-sizing: border-box;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
-        <h3 style="margin: 0; font-size: 18px; color: #1e1b4b;">⚙️ Глобальные настройки интеграций</h3>
-        <button type="button" onclick="closeSabySettingsModal()" style="background: transparent; border: none; font-size: 22px; cursor: pointer; color: #94a3b8;">&times;</button>
-      </div>
-      
-      <!-- Saby API Section -->
-      <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <h4 style="margin: 0; font-size: 15px; color: #0f172a;">API СБИС (Saby)</h4>
-          <button type="button" id="cfg-test-saby-btn" onclick="testSabyFromModal()" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer;">⚡ Проверить связь с Saby</button>
-        </div>
-        <div class="modal-grid-2" style="margin-bottom: 12px;">
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">ID подключения (app_client_id):</label>
-            <input type="text" id="cfg-saby-client-id" placeholder="Например: 1234abcd-..." style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-          </div>
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Секрет приложения (app_secret):</label>
-            <input type="password" id="cfg-saby-app-secret" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-          </div>
-        </div>
-        <div>
-          <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Защищенный ключ (сертификат .key):</label>
-          <div style="display: flex; gap: 10px; align-items: flex-start;">
-            <textarea id="cfg-saby-secret-key" placeholder="Вставьте содержимое файла ключа (.key) сюда..." style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-family: monospace; min-height: 80px;"></textarea>
-            <div id="cfg-saby-key-status" style="font-size: 11px; margin-top: 4px; color: #64748b;">Здесь будет статус загрузки ключа.</div>
-          </div>
-        </div>
+    <div class="modal-card" style="max-width: 720px; width: 100%;">
+      <!-- Header -->
+      <div style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #ffffff; flex-shrink: 0;">
+        <h3 style="margin: 0; font-size: 18px; color: #1e1b4b; display: flex; align-items: center; gap: 8px;">
+          <span>⚙️</span> Глобальные настройки интеграций
+        </h3>
+        <button type="button" onclick="closeSabySettingsModal()" style="background: transparent; border: none; font-size: 24px; line-height: 1; cursor: pointer; color: #94a3b8; padding: 0 4px;" title="Закрыть">&times;</button>
       </div>
 
-      <!-- Beget API Section -->
-      <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <h4 style="margin: 0; font-size: 15px; color: #0f172a;">API Beget (Хостинг)</h4>
-          <button type="button" id="cfg-test-beget-btn" onclick="testBegetFromModal()" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer;">⚡ Проверить связь с Beget</button>
-        </div>
-        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #1e40af; line-height: 1.5;">
-          💡 <strong>Инструкция по API Beget:</strong><br>
-          API Beget не использует отдельный "API-ключ". В качестве доступа используется ваш <strong>основной логин</strong> (имя аккаунта, например <code>klimov_beget</code>) и <strong>отдельный пароль для API</strong>.<br>
-          Для создания/восстановления пароля API: зайдите в панель управления Beget &rarr; раздел "Настройки" (или "Управление аккаунтом") &rarr; <strong>Пароль для API</strong>. Установите там пароль и впишите его сюда.
-        </div>
-        <div class="modal-grid-2">
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Логин аккаунта Beget:</label>
-            <input type="text" id="cfg-beget-login" placeholder="klimov_beget" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+      <!-- Navigation Tabs inside Modal -->
+      <div style="display: flex; gap: 6px; padding: 10px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; overflow-x: auto; flex-shrink: 0;">
+        <button type="button" id="cfg-tab-saby" class="cfg-tab-btn" onclick="switchSettingsTab('saby', this)" style="padding: 7px 14px; border-radius: 8px; border: 1px solid #bae6fd; background: #eff6ff; color: #0284c7; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap;">⚡ Saby (СБИС)</button>
+        <button type="button" id="cfg-tab-beget" class="cfg-tab-btn" onclick="switchSettingsTab('beget', this)" style="padding: 7px 14px; border-radius: 8px; border: 1px solid #e2e8f0; background: #ffffff; color: #475569; font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap;">☁️ Beget Хостинг</button>
+        <button type="button" id="cfg-tab-backups" class="cfg-tab-btn" onclick="switchSettingsTab('backups', this)" style="padding: 7px 14px; border-radius: 8px; border: 1px solid #e2e8f0; background: #ffffff; color: #475569; font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap;">💾 Резервные копии</button>
+        <button type="button" id="cfg-tab-smtp" class="cfg-tab-btn" onclick="switchSettingsTab('smtp', this)" style="padding: 7px 14px; border-radius: 8px; border: 1px solid #e2e8f0; background: #ffffff; color: #475569; font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap;">✉️ Почта (SMTP)</button>
+      </div>
+
+      <!-- Scrollable Body -->
+      <div class="modal-card-body">
+        <!-- TAB 1: SABY -->
+        <div id="cfg-pane-saby" class="cfg-tab-pane">
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 12.5px; color: #166534; line-height: 1.5;">
+            ✅ <strong>Ключи и сертификаты не требуются!</strong><br>
+            Для авторизации в API Saby (СБИС) нужны только <strong>ID подключения</strong> и <strong>Секрет приложения</strong> из личного кабинета разработчика (<a href="https://online.sbis.ru/developers" target="_blank" style="color: #15803d; text-decoration: underline;">online.sbis.ru/developers</a>).
           </div>
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Пароль от API Beget:</label>
-            <div style="display: flex; gap: 6px;">
-              <input type="password" id="cfg-beget-pass" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-              <button type="button" onclick="const p=document.getElementById('cfg-beget-pass'); p.type=p.type==='password'?'text':'password';" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:0 8px; border-radius:6px; cursor:pointer;" title="Показать/скрыть">👁️</button>
+          <div class="modal-grid-2" style="margin-bottom: 16px;">
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">ID подключения (app_client_id):</label>
+              <input type="text" id="cfg-saby-client-id" placeholder="Например: 1234abcd-5678-..." style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
             </div>
-            <div id="cfg-beget-pass-status" style="font-size: 11px; margin-top: 4px; color: #059669; font-weight: 500;"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Backup Alerts -->
-      <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
-        <h4 style="margin: 0 0 12px 0; font-size: 15px; color: #0f172a;">Бекапы и Алерты</h4>
-        <div class="modal-grid-2">
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Webhook Secret для агентов:</label>
-            <input type="password" id="cfg-backup-secret" placeholder="Секретный токен для приема бекапов" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-          </div>
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Email для срочных алертов:</label>
-            <input type="email" id="cfg-backup-email" placeholder="EKlimov84@gmail.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-          </div>
-        </div>
-      </div>
-
-      <!-- SMTP Settings Section -->
-      <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <h4 style="margin: 0; font-size: 15px; color: #0f172a;">Почта (SMTP) для уведомлений</h4>
-          <button type="button" id="cfg-test-smtp-btn" onclick="testSmtpFromModal()" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer;">✉️ Проверить отправку SMTP</button>
-        </div>
-        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #1e40af; line-height: 1.5;">
-          💡 <strong>Для почты Beget:</strong> Сервер: <code>smtp.beget.com</code>, Порт: <code>465</code>, Шифрование: <code>SSL</code>.<br> Логин и Email отправителя должны совпадать (например <code>noreply@e-klimov.ru</code>).
-        </div>
-        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">SMTP Сервер:</label>
-            <input type="text" id="cfg-smtp-host" placeholder="smtp.beget.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-          </div>
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Порт:</label>
-            <input type="number" id="cfg-smtp-port" placeholder="465" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-          </div>
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Шифрование:</label>
-            <select id="cfg-smtp-secure" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff;">
-              <option value="true">SSL (Порт 465)</option>
-              <option value="false">STARTTLS / Нет</option>
-            </select>
-          </div>
-        </div>
-        <div class="modal-grid-2" style="margin-bottom: 12px;">
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Логин / Email ящика:</label>
-            <input type="email" id="cfg-smtp-user" autocomplete="off" placeholder="noreply@e-klimov.ru" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-          </div>
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Пароль от почтового ящика:</label>
-            <div style="display: flex; gap: 6px;">
-              <input type="password" id="cfg-smtp-pass" autocomplete="new-password" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
-              <button type="button" onclick="const p=document.getElementById('cfg-smtp-pass'); p.type=p.type==='password'?'text':'password';" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:0 8px; border-radius:6px; cursor:pointer;" title="Показать/скрыть пароль">👁️</button>
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">Секрет приложения (app_secret):</label>
+              <input type="password" id="cfg-saby-app-secret" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
             </div>
-            <div id="cfg-smtp-pass-status" style="font-size: 11.5px; margin-top: 3px; color: #059669; font-weight: 500;"></div>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+            <button type="button" id="cfg-test-saby-btn" onclick="testSabyFromModal()" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">⚡ Проверить связь с Saby</button>
+            <span style="font-size: 12px; color: #64748b;">Шлюз: online.sbis.ru/oauth/service/</span>
           </div>
         </div>
-        <div class="modal-grid-2">
-          <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Email отправителя (From):</label>
-            <input type="email" id="cfg-smtp-from-email" autocomplete="off" placeholder="noreply@e-klimov.ru" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+
+        <!-- TAB 2: BEGET -->
+        <div id="cfg-pane-beget" class="cfg-tab-pane" style="display: none;">
+          <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 12.5px; color: #1e40af; line-height: 1.5;">
+            💡 <strong>API Beget (Хостинг):</strong> Использует ваш <strong>основной логин аккаунта</strong> и <strong>пароль для API</strong> (задается в панели Beget &rarr; раздел «Пароль для API»).
+          </div>
+          <div class="modal-grid-2" style="margin-bottom: 16px;">
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">Логин аккаунта Beget:</label>
+              <input type="text" id="cfg-beget-login" placeholder="klimov_beget" style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            </div>
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">Пароль от API Beget:</label>
+              <div style="display: flex; gap: 6px;">
+                <input type="password" id="cfg-beget-pass" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                <button type="button" onclick="const p=document.getElementById('cfg-beget-pass'); p.type=p.type==='password'?'text':'password';" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:0 10px; border-radius:6px; cursor:pointer;" title="Показать/скрыть">👁️</button>
+              </div>
+              <div id="cfg-beget-pass-status" style="font-size: 11px; margin-top: 4px; color: #059669; font-weight: 500;"></div>
+            </div>
           </div>
           <div>
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Имя отправителя:</label>
-            <input type="text" id="cfg-smtp-from-name" placeholder="IT-сопровождение | Климов Евгений" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            <button type="button" id="cfg-test-beget-btn" onclick="testBegetFromModal()" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">⚡ Проверить связь с Beget</button>
           </div>
-          <div>
+        </div>
+
+        <!-- TAB 3: BACKUPS -->
+        <div id="cfg-pane-backups" class="cfg-tab-pane" style="display: none;">
+          <div class="modal-grid-2" style="margin-bottom: 16px;">
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">Webhook Secret для агентов:</label>
+              <input type="password" id="cfg-backup-secret" placeholder="Секретный токен для приема бэкапов" style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            </div>
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">Email для срочных алертов:</label>
+              <input type="email" id="cfg-backup-email" placeholder="EKlimov84@gmail.com" style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: SMTP -->
+        <div id="cfg-pane-smtp" class="cfg-tab-pane" style="display: none;">
+          <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: #1e40af; line-height: 1.5;">
+            💡 <strong>Быстрый выбор провайдера:</strong>
+            <div style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
+              <button type="button" onclick="applySmtpPreset('beget')" style="background:#fff; border:1px solid #93c5fd; padding:3px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Beget</button>
+              <button type="button" onclick="applySmtpPreset('yandex')" style="background:#fff; border:1px solid #93c5fd; padding:3px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Яндекс</button>
+              <button type="button" onclick="applySmtpPreset('mailru')" style="background:#fff; border:1px solid #93c5fd; padding:3px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Mail.ru</button>
+              <button type="button" onclick="applySmtpPreset('gmail')" style="background:#fff; border:1px solid #93c5fd; padding:3px 8px; border-radius:4px; font-size:11px; cursor:pointer;">Gmail</button>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">SMTP Сервер:</label>
+              <input type="text" id="cfg-smtp-host" placeholder="smtp.beget.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            </div>
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Порт:</label>
+              <input type="number" id="cfg-smtp-port" placeholder="465" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            </div>
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Шифрование:</label>
+              <select id="cfg-smtp-secure" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff;">
+                <option value="true">SSL (Порт 465)</option>
+                <option value="false">STARTTLS / Нет</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-grid-2" style="margin-bottom: 12px;">
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Логин / Email ящика:</label>
+              <input type="email" id="cfg-smtp-user" autocomplete="off" placeholder="noreply@e-klimov.ru" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            </div>
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Пароль от почтового ящика:</label>
+              <div style="display: flex; gap: 6px;">
+                <input type="password" id="cfg-smtp-pass" autocomplete="new-password" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                <button type="button" onclick="const p=document.getElementById('cfg-smtp-pass'); p.type=p.type==='password'?'text':'password';" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:0 8px; border-radius:6px; cursor:pointer;" title="Показать/скрыть">👁️</button>
+              </div>
+              <div id="cfg-smtp-pass-status" style="font-size: 11px; margin-top: 3px; color: #059669; font-weight: 500;"></div>
+            </div>
+          </div>
+          <div class="modal-grid-2" style="margin-bottom: 12px;">
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Email отправителя (From):</label>
+              <input type="email" id="cfg-smtp-from-email" autocomplete="off" placeholder="noreply@e-klimov.ru" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            </div>
+            <div>
+              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Имя отправителя:</label>
+              <input type="text" id="cfg-smtp-from-name" placeholder="IT-сопровождение | Климов Евгений" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            </div>
+          </div>
+          <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Email админа (куда слать ошибки):</label>
             <input type="email" id="cfg-admin-notify-email" placeholder="admin@domain.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
           </div>
+          <div>
+            <button type="button" id="cfg-test-smtp-btn" onclick="testSmtpFromModal()" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">✉️ Проверить отправку SMTP</button>
+          </div>
         </div>
+
+        <div id="cfg-result-box" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px; font-size: 13px; line-height: 1.4;"></div>
       </div>
-      
-      <!-- Action Buttons -->
-      <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
-        <div style="display: flex; gap: 8px;">
-          <button type="button" id="cfg-save-btn" onclick="saveSabyGlobalSettings()" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer;">
-            💾 Сохранить параметры
-          </button>
-          <button type="button" id="cfg-test-saby-btn" onclick="testSabyFromModal()" style="background: #f1f5f9; color: #0369a1; border: 1px solid #bae6fd; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer;">
-            ⚡ Проверить связь с Saby
-          </button>
-        </div>
-        <button type="button" onclick="closeSabySettingsModal()" style="background: #f8fafc; border: 1px solid #cbd5e1; color: #64748b; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer;">
+
+      <!-- Footer Buttons -->
+      <div class="modal-card-footer">
+        <button type="button" id="cfg-save-btn" onclick="saveSabyGlobalSettings()" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #fff; border: none; padding: 10px 22px; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer;">
+          💾 Сохранить параметры
+        </button>
+        <button type="button" onclick="closeSabySettingsModal()" style="background: #f8fafc; border: 1px solid #cbd5e1; color: #64748b; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer;">
           Закрыть
         </button>
       </div>
-
-      <div id="cfg-result-box" style="display: none; margin-top: 14px; padding: 12px; border-radius: 8px; font-size: 13px; line-height: 1.4;"></div>
     </div>
   </div>
 
@@ -1168,12 +1185,37 @@ async function registerPasskey() {
       }
     }
 
+    function switchSettingsTab(tabName, btn) {
+      document.querySelectorAll('.cfg-tab-pane').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.cfg-tab-btn').forEach(el => {
+        el.classList.remove('active');
+        el.style.background = '#ffffff';
+        el.style.color = '#475569';
+        el.style.borderColor = '#e2e8f0';
+        el.style.fontWeight = '600';
+      });
+      const activePane = document.getElementById('cfg-pane-' + tabName);
+      if (activePane) activePane.style.display = 'block';
+      if (btn) {
+        btn.classList.add('active');
+        btn.style.background = '#eff6ff';
+        btn.style.color = '#0284c7';
+        btn.style.borderColor = '#bae6fd';
+        btn.style.fontWeight = '700';
+      }
+    }
+
     // Saby & Integration Settings Modal
     async function openSabySettingsModal() {
       const modal = document.getElementById('saby-settings-modal');
       modal.style.display = 'flex';
       const box = document.getElementById('cfg-result-box');
       box.style.display = 'none';
+
+      // Default to Saby tab
+      const firstTabBtn = document.getElementById('cfg-tab-saby');
+      if (firstTabBtn) switchSettingsTab('saby', firstTabBtn);
+
       try {
         const res = await fetch('/api/settings/global');
         const data = await res.json();
@@ -1183,11 +1225,9 @@ async function registerPasskey() {
           const safeSet = (id, val) => { const e = document.getElementById(id); if (e) e.value = val; };
           const safeText = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
           
-          // Saby
+          // Saby (Only ID & Secret)
           safeSet('cfg-saby-client-id', s.saby_app_client_id || '');
           safeSet('cfg-saby-app-secret', s.has_saby_secret ? '••••••••' : '');
-          safeSet('cfg-saby-secret-key', s.has_saby_key ? 'HIDDEN' : '');
-          safeText('cfg-saby-key-status', s.has_saby_key ? '✓ Ключ сохранен' : '⚠️ Ключ не загружен');
           
           // Beget
           safeSet('cfg-beget-login', s.beget_login || '');
@@ -1285,11 +1325,9 @@ async function registerPasskey() {
       btn.textContent = 'Сохранение...';
 
       const safeGet = (id) => { const e = document.getElementById(id); return e ? e.value : ''; };
-      const secretKeyVal = safeGet('cfg-saby-secret-key');
       const payload = {
         saby_app_client_id: safeGet('cfg-saby-client-id'),
         saby_app_secret: safeGet('cfg-saby-app-secret'),
-        saby_secret_key: secretKeyVal === 'HIDDEN' ? '' : secretKeyVal,
         beget_login: safeGet('cfg-beget-login'),
         beget_password: safeGet('cfg-beget-pass'),
         backup_webhook_secret: safeGet('cfg-backup-secret'),
@@ -1414,8 +1452,7 @@ async function registerPasskey() {
 
       const payload = {
         saby_app_client_id: safeGet('cfg-saby-client-id'),
-        saby_app_secret: safeGet('cfg-saby-app-secret'),
-        saby_secret_key: safeGet('cfg-saby-secret-key') === 'HIDDEN' ? '' : safeGet('cfg-saby-secret-key')
+        saby_app_secret: safeGet('cfg-saby-app-secret')
       };
 
       try {
