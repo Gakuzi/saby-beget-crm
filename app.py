@@ -112,7 +112,9 @@ def signal_handler(signum, frame):
 def main():
     global node_process
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    server_js = os.path.join(base_dir, "server.js")
+    server_js = os.path.join(base_dir, "src", "server.js")
+    if not os.path.isfile(server_js):
+        server_js = os.path.join(base_dir, "server.js")
 
     if not os.path.isfile(server_js):
         print(f"[CRM Supervisor] Error: server.js not found at {server_js}")
