@@ -751,12 +751,15 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
             Основание: <strong>${client.archived_reason || 'Договор завершен'}</strong>. Все данные, журналы работ, доступы и акты защищены и сохранены в базе данных SQLite.
           </div>
         </div>
-        <div style="display: flex; gap: 10px;">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
           <a href="/client/${client.id}/dossier" target="_blank" class="btn btn-primary" style="background: #0f172a;">
             ⚖️ Открыть судебное досье
           </a>
           <button type="button" onclick="restoreClientAction(${client.id})" class="btn" style="background: #ffffff; color: #166534; border: 1px solid #86efac; font-weight: 700;">
             ♻️ Восстановить в активные
+          </button>
+          <button type="button" onclick="hardDeleteClientAction(${client.id}, '${(client.company_name || '').replace(/'/g, "\\'")}', '${client.inn || ''}')" class="btn" style="background: #dc2626; color: #ffffff; border: 1px solid #b91c1c; font-weight: 700;">
+            🗑️ Удалить навсегда из базы
           </button>
         </div>
       </div>
@@ -3469,6 +3472,29 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
         }
       })
       .catch(e => alert('Ошибка сети: ' + e));
+    }
+
+    function hardDeleteClientAction(id, name, inn) {
+      const msg = 'ВНИМАНИЕ!\n\nВы действительно хотите НАВСЕГДА удалить контрагента "' + (name || 'Клиент') + '"' + (inn ? ' (ИНН: ' + inn + ')' : '') + ' из базы данных SQLite?\n\nВсе связанные данные, акты, доступы, история и логи будут стёрты без возможности восстановления, а ИНН полностью освободится.\n\nПродолжить?';
+      if (!confirm(msg)) return;
+
+      const check = prompt('Для окончательного подтверждения введите слово УДАЛИТЬ:');
+      if (!check || (check.trim().toUpperCase() !== 'УДАЛИТЬ' && check.trim().toLowerCase() !== 'delete')) {
+        alert('Удаление отменено.');
+        return;
+      }
+
+      fetch('/api/client/' + id + '/delete', { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+          if (res.ok) {
+            alert('Контрагент полностью и навсегда удален из базы данных.');
+            window.location.href = '/?filter=archived';
+          } else {
+            alert('Ошибка удаления: ' + (res.error || 'Неизвестная ошибка'));
+          }
+        })
+        .catch(e => alert('Ошибка сети: ' + e));
     }
 </script>
 

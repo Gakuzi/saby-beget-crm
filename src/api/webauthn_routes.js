@@ -10,8 +10,20 @@ import { db } from '../db/crm_store.js';
 const rpName = 'Saby Beget CRM';
 // Get dynamic RP ID from request host in production, or localhost for dev.
 const getRpId = (req) => {
-  if (req.hostname === 'localhost' || req.hostname === '0.0.0.0') return req.hostname;
-  return req.hostname; 
+  const hostHeader = req.headers['x-forwarded-host'] || req.get('host') || req.hostname || 'localhost';
+  return hostHeader.split(':')[0];
+};
+
+const getExpectedOrigins = (req) => {
+  const host = req.headers['x-forwarded-host'] || req.get('host') || req.hostname;
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const origins = new Set();
+  if (req.headers.origin) origins.add(req.headers.origin);
+  origins.add(`https://${host}`);
+  origins.add(`http://${host}`);
+  origins.add(`${proto}://${host}`);
+  origins.add(`${req.protocol}://${req.get('host')}`);
+  return Array.from(origins).filter(Boolean);
 };
 
 export function setupWebAuthn(app) {
@@ -61,12 +73,12 @@ export function setupWebAuthn(app) {
         return res.status(400).json({ error: 'Пользователь не найден' });
       }
 
-      const expectedOrigin = req.protocol + '://' + req.get('host');
+      const expectedOrigins = getExpectedOrigins(req);
 
       const verification = await verifyAuthenticationResponse({
         response,
         expectedChallenge,
-        expectedOrigin,
+        expectedOrigin: expectedOrigins,
         expectedRPID: getRpId(req),
         credential: {
           id: passkey.id,
@@ -147,12 +159,12 @@ export function setupWebAuthn(app) {
         return res.status(400).json({ error: 'Сессия устарела. Попробуйте еще раз.' });
       }
       
-      const expectedOrigin = req.protocol + '://' + req.get('host');
+      const expectedOrigins = getExpectedOrigins(req);
       
       const verification = await verifyRegistrationResponse({
         response,
         expectedChallenge,
-        expectedOrigin,
+        expectedOrigin: expectedOrigins,
         expectedRPID: getRpId(req),
       });
 

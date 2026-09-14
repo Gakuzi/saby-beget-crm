@@ -21,12 +21,20 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+app.set('trust proxy', 1);
+
+// Permissive CSP to prevent browser plugins or strict proxy defaults from blocking images and assets
+app.use((req, res, next) => {
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob: https: http:; font-src * data:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline';"
+  );
+  next();
+});
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.json());
-app.use((req,res,next)=>{console.log('Proto:', req.protocol, 'Secure:', req.secure, 'Headers:', req.headers['x-forwarded-proto']); next();});
-
-app.set('trust proxy', 1);
 
 // Session configuration
 app.use(
@@ -34,7 +42,7 @@ app.use(
     secret: process.env.SESSION_SECRET || 'crm-saby-beget-secret-2024',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 24 * 60 * 60 * 1000, secure: true, sameSite: 'none' }
+    cookie: { maxAge: 24 * 60 * 60 * 1000, secure: 'auto', sameSite: 'lax' }
   })
 );
 
@@ -47,8 +55,24 @@ app.use((req, res, next) => {
 
 setupWebAuthn(app);
 
-// Authentication middleware (Bypassed: open access mode so interface and client cabinets work seamlessly without secrets or login blocks)
+// Helper to sanitize nextUrl and prevent redirects to POST/action endpoints
+function sanitizeNextUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return '/';
+  let url = rawUrl.trim();
+  if (url.includes('/update_full')) {
+    const m = url.match(/\/client\/(\d+)/);
+    return m ? `/client/${m[1]}` : '/';
+  }
+  if (url.includes('/delete') || url.includes('/archive') || url.includes('/restore') || url.includes('/sync') || url.includes('/login') || url.includes('/logout')) {
+    return '/';
+  }
+  if (!url.startsWith('/') || url.startsWith('//')) {
+    return '/';
+  }
+  return url;
+}
 
+// Authentication middleware
 function requireAdmin(req, res, next) {
   const openRoutes = ['/login', '/login_otp', '/healthz', '/portal', '/webauthn', '/photo_'];
   if (openRoutes.some(route => req.path.startsWith(route))) {
@@ -59,14 +83,7 @@ function requireAdmin(req, res, next) {
     return next();
   }
   
-  let nextUrl = req.originalUrl;
-  if (req.method !== 'GET') {
-    if (nextUrl.includes('/update_full')) {
-      nextUrl = nextUrl.replace('/update_full', '');
-    } else {
-      nextUrl = '/';
-    }
-  }
+  const nextUrl = sanitizeNextUrl(req.originalUrl);
   res.redirect('/login?next=' + encodeURIComponent(nextUrl));
 }
 
@@ -110,7 +127,7 @@ app.get('/healthz', (req, res) => {
 
 app.get('/login', (req, res) => {
   const msg = req.query.msg || '';
-  const nextUrl = req.query.next || '/';
+  const nextUrl = sanitizeNextUrl(req.query.next || '/');
   res.send(`<!doctype html>
 <html lang="ru">
 <head>
@@ -254,7 +271,11 @@ async function registerPasskey() {
           
           const verification = await verifyResp.json();
           if (verification.verified) {
-            window.location.href = "${nextUrl}";
+            let nextTarget = "${nextUrl}";
+            if (!nextTarget || nextTarget.includes('/update_full') || nextTarget.includes('/login')) {
+              nextTarget = '/';
+            }
+            window.location.replace(nextTarget);
           } else {
             throw new Error(verification.error || 'Ошибка проверки ключа');
           }
@@ -273,14 +294,15 @@ async function registerPasskey() {
 app.post('/login', (req, res) => {
   const { login, password, next } = req.body;
   const admin = db.verifyAdminCredentials(login, password);
+  const safeNext = sanitizeNextUrl(next);
   if (!admin) {
-    return res.redirect('/login?msg=' + encodeURIComponent('Неверный логин или пароль') + '&next=' + encodeURIComponent(next || '/'));
+    return res.redirect('/login?msg=' + encodeURIComponent('Неверный логин или пароль') + '&next=' + encodeURIComponent(safeNext));
   }
   
   req.session.admin_id = admin.id;
   req.session.crm_admin_user = admin.username || admin.email;
   db.setAdminLastLogin(admin.id);
-  req.session.save(() => { res.redirect(next || '/'); });
+  req.session.save(() => { res.redirect(safeNext); });
 });
 
 const otps = new Map(); // Store OTPs in memory for simplicity
@@ -839,9 +861,13 @@ async function registerPasskey() {
                 : `<span class="badge">Не задан</span>`}
             </td>
             <td style="text-align: right;">
-              <div style="display: flex; justify-content: flex-end; gap: 8px;">
-                <a href="/client/${c.id}" class="card-link" style="background: #f1f5f9; color: #475569; font-size: 13px; padding: 6px 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; border-radius: 8px;">⚙️ Настройки</a>
-                <a href="/portal/${c.id}" target="_blank" class="card-link" style="background: #f8fafc; color: #6366f1; font-size: 13px; padding: 6px 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e0e7ff; border-radius: 8px;">🖥️ Портал</a>
+              <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
+                <a href="/client/${c.id}" class="card-link" style="background: #f1f5f9; color: #475569; font-size: 13px; padding: 6px 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; border-radius: 8px;">⚙️ Карточка</a>
+                ${filter === 'archived' ? `
+                  <button type="button" onclick="hardDeleteFromDashboard(${c.id}, '${(c.company_name || '').replace(/'/g, "\\'")}', '${c.inn || ''}')" style="background: #fee2e2; color: #b91c1c; border: 1px solid #fecdd3; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">🗑️ Удалить из базы</button>
+                ` : `
+                  <a href="/portal/${c.id}" target="_blank" class="card-link" style="background: #f8fafc; color: #6366f1; font-size: 13px; padding: 6px 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e0e7ff; border-radius: 8px;">🖥️ Портал</a>
+                `}
               </div>
             </td>
           </tr>
@@ -1541,6 +1567,29 @@ async function registerPasskey() {
            else alert('Ошибка: ' + res.error);
         });
     }
+
+    function hardDeleteFromDashboard(id, name, inn) {
+      const msg = 'ВНИМАНИЕ!\n\nВы действительно хотите НАВСЕГДА удалить контрагента "' + (name || 'Клиент') + '"' + (inn ? ' (ИНН: ' + inn + ')' : '') + ' из базы данных SQLite?\n\nВсе связанные данные, акты, доступы, история и логи будут стёрты без возможности восстановления, а ИНН полностью освободится.\n\nПродолжить?';
+      if (!confirm(msg)) return;
+
+      const check = prompt('Для окончательного подтверждения введите слово УДАЛИТЬ:');
+      if (!check || (check.trim().toUpperCase() !== 'УДАЛИТЬ' && check.trim().toLowerCase() !== 'delete')) {
+        alert('Удаление отменено.');
+        return;
+      }
+
+      fetch('/api/client/' + id + '/delete', { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+          if (res.ok) {
+            alert('Контрагент полностью и навсегда удален из базы данных.');
+            window.location.reload();
+          } else {
+            alert('Ошибка удаления: ' + (res.error || 'Неизвестная ошибка'));
+          }
+        })
+        .catch(e => alert('Ошибка сети: ' + e));
+    }
     
 
     </script>
@@ -1654,6 +1703,10 @@ app.get('/client/:id', (req, res) => {
 });
 
 // Full Client Update (Settings Tab & Keys Tab)
+app.get('/client/:id/update_full', (req, res) => {
+  res.redirect('/client/' + req.params.id);
+});
+
 app.post('/client/:id/update_full', (req, res) => {
   const clientId = req.params.id;
   const activeTab = req.body.active_tab || 'settings';
@@ -1830,6 +1883,27 @@ app.post('/api/client/:id/restore', (req, res) => {
   try {
     db.restoreClient(req.params.id);
     res.json({ ok: true, message: 'Договор восстановлен, клиент активен.' });
+  } catch(e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Permanently purge client from SQLite database (Hard delete)
+app.post('/api/client/:id/delete', (req, res) => {
+  try {
+    const ok = db.hardDeleteClient(req.params.id);
+    if (!ok) return res.status(404).json({ ok: false, error: 'Контрагент не найден в базе данных.' });
+    res.json({ ok: true, message: 'Контрагент и все связанные данные безвозвратно удалены из базы данных.' });
+  } catch(e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/client/:id/hard-delete', (req, res) => {
+  try {
+    const ok = db.hardDeleteClient(req.params.id);
+    if (!ok) return res.status(404).json({ ok: false, error: 'Контрагент не найден в базе данных.' });
+    res.json({ ok: true, message: 'Контрагент и все связанные данные безвозвратно удалены из базы данных.' });
   } catch(e) {
     res.status(500).json({ ok: false, error: e.message });
   }

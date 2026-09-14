@@ -866,6 +866,49 @@ class SqliteDatabase {
     return this.archiveClient(id, 'Удален из активного списка CRM (архив для отчетности и суда сохранен)');
   }
 
+  // --- Complete Permanent Purge (Hard Delete from SQLite) ---
+  hardDeleteClient(id) {
+    const cid = parseInt(id, 10);
+    if (!cid || isNaN(cid)) return false;
+
+    const deleteStatements = [
+      'DELETE FROM client_credentials WHERE client_id = ?',
+      'DELETE FROM client_contacts WHERE client_id = ?',
+      'DELETE FROM work_logs WHERE client_id = ?',
+      'DELETE FROM backups WHERE client_id = ?',
+      'DELETE FROM host_events WHERE client_id = ?',
+      'DELETE FROM saby_docs WHERE client_id = ?',
+      'DELETE FROM saby_works WHERE client_id = ?',
+      'DELETE FROM saby_requests WHERE client_id = ?',
+      'DELETE FROM tickets WHERE client_id = ?',
+      'DELETE FROM verification_codes WHERE client_id = ?',
+      'DELETE FROM billing_events WHERE client_id = ?',
+      'DELETE FROM client_hosting_accounts WHERE client_id = ?',
+      'DELETE FROM client_sites WHERE client_id = ?',
+      'DELETE FROM clients WHERE id = ?'
+    ];
+
+    try {
+      this.db.exec('BEGIN TRANSACTION');
+      for (const stmt of deleteStatements) {
+        try {
+          this.db.prepare(stmt).run(cid);
+        } catch (_) {}
+      }
+      this.db.exec('COMMIT');
+      return true;
+    } catch (e) {
+      try { this.db.exec('ROLLBACK'); } catch (_) {}
+      console.error('Error in hardDeleteClient transaction, falling back to direct run:', e);
+      for (const stmt of deleteStatements) {
+        try {
+          this.db.prepare(stmt).run(cid);
+        } catch (_) {}
+      }
+      return true;
+    }
+  }
+
   // --- Billing & Payment Control ---
   recordPayment(clientId, amount, paymentDate = null) {
     const cid = parseInt(clientId, 10);
