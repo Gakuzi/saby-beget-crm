@@ -386,7 +386,7 @@ async function registerPasskey() {
       <a href="/">&larr; В панель управления</a>
     </div>
     
-    <table>
+    <div class="table-responsive" style="overflow-x: auto; -webkit-overflow-scrolling: touch;"><table>
       <thead>
         <tr>
           <th>Имя / Логин</th>
@@ -407,7 +407,7 @@ async function registerPasskey() {
           </tr>
         `).join('')}
       </tbody>
-    </table>
+    </table></div>
 
     <h3 style="margin-top:40px;">+ Добавить сотрудника</h3>
     <form method="post" action="/workers/add" class="form-grid">
@@ -467,6 +467,7 @@ app.get('/change-password', (req, res) => {
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
+  <link rel="icon" href="/photo_2026-09-14_14-16-17.jpg">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Установка нового пароля</title>
   <link rel="stylesheet" href="/style.css">
@@ -711,11 +712,11 @@ app.get('/', (req, res) => {
     /* Modal */
     .modal-overlay {
       position: fixed; inset: 0; background: rgba(15,23,42,0.5); backdrop-filter: blur(4px);
-      display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px;
+      display: none; align-items: flex-start; justify-content: center; z-index: 1000; padding: 20px; overflow-y: auto;
     }
     .modal-card {
       background: #ffffff; border-radius: 16px; max-width: 620px; width: 100%; padding: 24px;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.25); box-sizing: border-box; margin: 40px auto;
     }
     .toast {
       position: fixed; bottom: 20px; right: 20px; background: #1e1b4b; color: #fff;
@@ -727,10 +728,10 @@ app.get('/', (req, res) => {
     @media (max-width: 768px) {
       body { padding: 10px; }
       .container { padding: 16px; border-radius: 8px; }
-      .header-bar { flex-direction: column; align-items: stretch; gap: 12px; }
+      .header-bar { flex-direction: column; align-items: stretch; gap: 12px; margin-top: 10px; }
       .actions-bar { flex-direction: column; align-items: stretch; }
       .btn { justify-content: center; width: 100%; box-sizing: border-box; }
-      .modal-card { width: 100%; padding: 16px; max-height: 90vh; overflow-y: auto; }
+      .modal-card { width: 100%; padding: 16px; /*max-height: 90vh;*/ }
       .modal-grid-2 { grid-template-columns: 1fr; gap: 8px; }
       table, thead, tbody, th, td, tr { display: block; }
       thead tr { position: absolute; top: -9999px; left: -9999px; }
@@ -782,7 +783,7 @@ async function registerPasskey() {
   <div class="container" style="position: relative;">
     
     <div class="header-bar">
-      <h2 style="font-weight: 800; font-size: 24px;">CRM-система</h2>
+      <h2 style="font-weight: 800; font-size: 24px; display: flex; align-items: center; gap: 12px;"><img src="/photo_2026-09-14_14-16-17.jpg" alt="Logo" style="width: 32px; height: 32px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"> CRM-система</h2>
       <div class="user-info" style="display:flex; align-items:center; gap:16px;">
         <span style="font-weight: 600; color: #475569;">👤 ${req.session.crm_admin_user || 'Администратор'}</span>
         <a href="/?filter=${filter === 'active' ? 'archived' : 'active'}" style="font-size:13px; font-weight:600; color:#3b82f6;">${filter === 'active' ? '🗄️ Архив' : '📁 Активные'}</a>
@@ -803,7 +804,7 @@ async function registerPasskey() {
       <span style="font-size:13px; color:#94a3b8;">Всего контрагентов: ${clients.length}</span>
     </div>
 
-    <table>
+    <div class="table-responsive" style="overflow-x: auto; -webkit-overflow-scrolling: touch;"><table>
       <thead>
         <tr>
           <th>Компания / ИНН</th>
@@ -838,7 +839,7 @@ async function registerPasskey() {
           </tr>
         `).join('')}
       </tbody>
-    </table>
+    </table></div>
   </div>
 
   <!-- Modal: GitHub & CI/CD Diagnostics -->
@@ -882,7 +883,7 @@ async function registerPasskey() {
 
   <!-- Modal: Saby CRM & Hosting Global Configuration -->
   <div id="saby-settings-modal" class="modal-overlay">
-    <div class="modal-card" style="max-width: 750px; max-height: 90vh; overflow-y: auto; width: 95%;">
+    <div class="modal-card" style="max-width: 750px; width: 100%; box-sizing: border-box;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
         <h3 style="margin: 0; font-size: 18px; color: #1e1b4b;">⚙️ Глобальные настройки интеграций</h3>
         <button type="button" onclick="closeSabySettingsModal()" style="background: transparent; border: none; font-size: 22px; cursor: pointer; color: #94a3b8;">&times;</button>
@@ -2754,7 +2755,7 @@ async function registerPasskey() {
   <p style="font-size: 20px; font-weight: bold; color: #27ae60;">${balance}</p>
 
   <h2>🌐 Домены и SSL-сертификаты</h2>
-  <table>
+  <div class="table-responsive" style="overflow-x: auto; -webkit-overflow-scrolling: touch;"><table>
     <thead>
       <tr>
         <th>Домен</th>
@@ -2771,11 +2772,11 @@ async function registerPasskey() {
         </tr>
       `).join('')}
     </tbody>
-  </table>
+  </table></div>
 
   <h2>💾 Резервные копии хостинга (${backups.length} шт.)</h2>
   ${backups.length > 0 ? `
-    <table>
+    <div class="table-responsive" style="overflow-x: auto; -webkit-overflow-scrolling: touch;"><table>
       <thead>
         <tr>
           <th>Сайт / Источник</th>
@@ -2794,14 +2795,14 @@ async function registerPasskey() {
           </tr>
         `).join('')}
       </tbody>
-    </table>
+    </table></div>
   ` : `
     <p class="no-data">Бэкапы за выбранный период отсутствуют</p>
   `}
 
   <h2>📋 Выполненные работы и обращения (${logs.length} шт., всего ${totalHours.toFixed(1)} ч.)</h2>
   ${logs.length > 0 ? `
-    <table>
+    <div class="table-responsive" style="overflow-x: auto; -webkit-overflow-scrolling: touch;"><table>
       <thead>
         <tr>
           <th>Дата выполнения</th>
@@ -2822,7 +2823,7 @@ async function registerPasskey() {
           <td style="text-align:center;">${totalHours.toFixed(1)} ч.</td>
         </tr>
       </tbody>
-    </table>
+    </table></div>
   ` : `
     <p class="no-data">Работы за выбранный период не зафиксированы</p>
   `}

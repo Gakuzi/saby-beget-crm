@@ -49,6 +49,7 @@ export function renderPortalPage({ client, contact = null, token = '', activeTab
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
+  <link rel="icon" href="/photo_2026-09-14_14-16-17.jpg">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Личный кабинет — ${client.company_name} | Klimov CRM</title>
@@ -2132,6 +2133,7 @@ export function renderPortalLoginPage({ error = null, message = null, initialEma
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
+  <link rel="icon" href="/photo_2026-09-14_14-16-17.jpg">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Вход в Личный кабинет — Клиентский портал | Klimov CRM</title>
@@ -2396,6 +2398,7 @@ export function renderPortalVerifyPage({ contact, client, token = '', error = nu
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
+  <link rel="icon" href="/photo_2026-09-14_14-16-17.jpg">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Подтверждение входа — ${client.company_name} | Klimov CRM</title>
