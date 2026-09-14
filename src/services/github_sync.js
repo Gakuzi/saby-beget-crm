@@ -6,11 +6,12 @@ import { settingsManager } from '../config/settings_manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '../../');
 
 // In-memory sync logs (persisted across restarts in crm_sync_history.json if needed)
 let syncHistory = [];
 
-const SYNC_LOG_FILE = path.join(__dirname, '.github_sync_history.json');
+const SYNC_LOG_FILE = path.join(projectRoot, '.github_sync_history.json');
 try {
   if (fs.existsSync(SYNC_LOG_FILE)) {
     syncHistory = JSON.parse(fs.readFileSync(SYNC_LOG_FILE, 'utf8'));
@@ -35,7 +36,7 @@ try {
 }
 
 // Helper to run git command safely
-function runGit(args, cwd = __dirname) {
+function runGit(args, cwd = projectRoot) {
   try {
     const cmd = `git config --global --add safe.directory "*" 2>/dev/null; git ${args}`;
     const output = execSync(cmd, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
@@ -100,7 +101,7 @@ export function getGitHubConfig() {
 }
 
 export function initGitRepoIfNeeded() {
-  const gitDir = path.join(__dirname, '.git');
+  const gitDir = path.join(projectRoot, '.git');
   let initialized = fs.existsSync(gitDir);
 
   if (!initialized) {

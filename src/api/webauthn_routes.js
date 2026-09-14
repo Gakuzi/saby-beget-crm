@@ -29,10 +29,17 @@ const getExpectedOrigins = (req) => {
 export function setupWebAuthn(app) {
   app.get('/webauthn/generate-auth', async (req, res) => {
     try {
-      // In a real app we might ask for email first, but for simplicity we can allow passkey discoverable credentials (usernameless login)
+      // Find all registered passkeys to direct platform authenticators (Touch ID / Face ID)
+      const allPasskeys = db.db.prepare('SELECT id, transports FROM admin_passkeys').all();
+      const allowCredentials = allPasskeys.map(pk => ({
+        id: pk.id,
+        transports: pk.transports ? pk.transports.split(',') : ['internal'],
+      }));
+
       const options = await generateAuthenticationOptions({
         rpID: getRpId(req),
         userVerification: 'preferred',
+        allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
       });
       // Save challenge to session for verification
       if (!req.session) { console.error('SESSION IS UNDEFINED IN generate-auth!'); res.status(500).json({error: 'Session not initialized'}); return; }
@@ -133,7 +140,8 @@ export function setupWebAuthn(app) {
           transports: pk.transports ? pk.transports.split(',') : undefined,
         })),
         authenticatorSelection: {
-          residentKey: 'required',
+          authenticatorAttachment: 'platform',
+          residentKey: 'preferred',
           userVerification: 'preferred',
         },
       });

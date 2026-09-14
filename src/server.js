@@ -309,39 +309,47 @@ const otps = new Map(); // Store OTPs in memory for simplicity
 
 app.post('/login_otp_request', async (req, res) => {
   const { email, next } = req.body;
+  const safeNext = sanitizeNextUrl(next);
   
   // Check if admin exists
-  const admin = db.db.prepare('SELECT * FROM admin_users WHERE LOWER(email) = LOWER(?)').get(email.trim());
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const admin = db.db.prepare('SELECT * FROM admin_users WHERE LOWER(email) = LOWER(?)').get(cleanEmail);
   if (!admin) {
-    return res.redirect('/login?msg=' + encodeURIComponent('Email не найден в списке администраторов') + '&next=' + encodeURIComponent(next || '/'));
+    return res.redirect('/login?msg=' + encodeURIComponent('Email не найден в списке администраторов') + '&next=' + encodeURIComponent(safeNext));
   }
   
   const code = Math.floor(100000 + Math.random() * 900000).toString();
-  otps.set(email.trim(), { code, expires: Date.now() + 10 * 60 * 1000 });
+  otps.set(cleanEmail, { code, expires: Date.now() + 10 * 60 * 1000 });
   
-  // Send email
-  const { mailer } = await import('./services/mailer.js');
-  await mailer.sendAdminLoginOtp(email.trim(), code);
-  
-  res.redirect('/login?show_otp=1&type=success&msg=' + encodeURIComponent('Код отправлен на почту') + '&email=' + encodeURIComponent(email.trim()) + '&next=' + encodeURIComponent(next || '/'));
+  try {
+    // Send email
+    const { mailer } = await import('./services/mailer.js');
+    await mailer.sendAdminLoginOtp(cleanEmail, code);
+    res.redirect('/login?show_otp=1&type=success&msg=' + encodeURIComponent('Код отправлен на почту ' + cleanEmail) + '&email=' + encodeURIComponent(cleanEmail) + '&next=' + encodeURIComponent(safeNext));
+  } catch (err) {
+    console.error('SMTP Error in login_otp_request:', err);
+    res.redirect('/login?msg=' + encodeURIComponent('Ошибка отправки SMTP: ' + (err.message || 'Не удалось отправить письмо')) + '&next=' + encodeURIComponent(safeNext));
+  }
 });
 
 app.post('/login_otp_verify', (req, res) => {
   const { email, code, next } = req.body;
-  const record = otps.get(email.trim());
+  const safeNext = sanitizeNextUrl(next);
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const record = otps.get(cleanEmail);
   
-  if (!record || record.code !== code.trim() || record.expires < Date.now()) {
-    return res.redirect('/login?msg=' + encodeURIComponent('Неверный или просроченный код') + '&next=' + encodeURIComponent(next || '/'));
+  if (!record || record.code !== (code || '').trim() || record.expires < Date.now()) {
+    return res.redirect('/login?msg=' + encodeURIComponent('Неверный или просроченный код') + '&next=' + encodeURIComponent(safeNext));
   }
   
-  otps.delete(email.trim());
-  const admin = db.db.prepare('SELECT * FROM admin_users WHERE LOWER(email) = LOWER(?)').get(email.trim());
+  otps.delete(cleanEmail);
+  const admin = db.db.prepare('SELECT * FROM admin_users WHERE LOWER(email) = LOWER(?)').get(cleanEmail);
   
   req.session.admin_id = admin.id;
   req.session.crm_admin_user = admin.username || admin.email;
   
   db.setAdminLastLogin(admin.id);
-  req.session.save(() => { res.redirect(next || '/'); });
+  req.session.save(() => { res.redirect(safeNext); });
 });
 
 // Workers Management
