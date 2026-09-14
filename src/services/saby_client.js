@@ -229,3 +229,99 @@ export async function fetchSabyContracts(inn) {
     return { ok: false, error: err.message, contracts: [] };
   }
 }
+
+export async function fetchSabyRequests(inn) {
+  const auth = await authenticateSaby();
+  if (!auth.ok) return { ok: false, error: auth.message, requests: [] };
+
+  try {
+    const payload = {
+      jsonrpc: '2.0',
+      method: 'СБИС.СписокДокументов',
+      params: {
+        Фильтр: {
+          Регламент: 'Обращение',
+          КонтрагентИНН: inn
+        }
+      },
+      id: 4
+    };
+    
+    const res = await fetch(SABY_RPC_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json-rpc; charset=utf-8',
+        'X-SBISAccessToken': auth.token || ''
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(6000)
+    });
+    
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, requests: [] };
+    const json = await res.json();
+    if (json.error) return { ok: false, error: json.error.message, requests: [] };
+    
+    const rawList = json.result?.Документы || json.result || [];
+    const requests = rawList.map((d, i) => ({
+      id: d.Идентификатор || `saby-req-${i}`,
+      number: d.Номер || `№ ${i + 1}`,
+      subject: d.Название || d.Тема || 'Обращение',
+      date: d.Дата || new Date().toISOString().slice(0, 10),
+      status: d.Статус || 'В работе',
+      executor: d.Ответственный || 'Не назначен'
+    }));
+    
+    return { ok: true, requests };
+  } catch (err) {
+    return { ok: false, error: err.message, requests: [] };
+  }
+}
+
+export async function fetchSabyWorks(inn) {
+  const auth = await authenticateSaby();
+  if (!auth.ok) return { ok: false, error: auth.message, works: [] };
+
+  try {
+    const payload = {
+      jsonrpc: '2.0',
+      method: 'СБИС.СписокДокументов',
+      params: {
+        Фильтр: {
+          Регламент: 'Акт выполненных работ',
+          КонтрагентИНН: inn
+        }
+      },
+      id: 5
+    };
+    
+    const res = await fetch(SABY_RPC_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json-rpc; charset=utf-8',
+        'X-SBISAccessToken': auth.token || ''
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(6000)
+    });
+    
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, works: [] };
+    const json = await res.json();
+    if (json.error) return { ok: false, error: json.error.message, works: [] };
+    
+    const rawList = json.result?.Документы || json.result || [];
+    const works = rawList.map((d, i) => ({
+      id: d.Идентификатор || `saby-work-${i}`,
+      document_number: d.Номер || `№ ${i + 1}`,
+      date: d.Дата || new Date().toISOString().slice(0, 10),
+      work_name: d.Название || 'Услуги по договору',
+      quantity: d.Количество || 1,
+      unit: d.ЕдИзмерения || 'шт',
+      price: d.Цена || (d.Сумма || 0),
+      sum: d.Сумма || 0
+    }));
+    
+    return { ok: true, works };
+  } catch (err) {
+    return { ok: false, error: err.message, works: [] };
+  }
+}

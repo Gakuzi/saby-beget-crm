@@ -179,19 +179,33 @@ class SqliteDatabase {
         FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
       );
 
-      CREATE TABLE IF NOT EXISTS saby_docs (
+      CREATE TABLE IF NOT EXISTS saby_docs ( id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER, saby_id TEXT, type TEXT, number TEXT, date TEXT, sum REAL, status TEXT, url TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP );
+      CREATE TABLE IF NOT EXISTS saby_works (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        client_id INTEGER NOT NULL,
-        doc_id TEXT,
-        doc_number TEXT,
-        title TEXT,
+        client_id INTEGER,
+        saby_id TEXT,
+        document_number TEXT,
         date TEXT,
-        amount REAL DEFAULT 0,
-        status TEXT DEFAULT 'Подписан',
-        saby_state TEXT DEFAULT 'synced',
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+        work_name TEXT,
+        quantity REAL,
+        unit TEXT,
+        price REAL,
+        sum REAL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
+      
+      CREATE TABLE IF NOT EXISTS saby_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER,
+        saby_id TEXT,
+        number TEXT,
+        date TEXT,
+        subject TEXT,
+        status TEXT,
+        executor TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
 
       CREATE TABLE IF NOT EXISTS tickets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -641,6 +655,67 @@ class SqliteDatabase {
     return this.getClientById(clientId);
   }
 
+
+  async syncWithSaby(clientId) {
+    const client = this.getClientById(clientId);
+    if (!client || !client.inn) throw new Error('Клиент или ИНН не найден');
+    
+    const { fetchSabyContracts, fetchSabyRequests, fetchSabyWorks } = await import('../services/saby_client.js');
+    
+    let added = 0, updated = 0;
+    
+    const resContracts = await fetchSabyContracts(client.inn);
+    if (resContracts.ok && resContracts.contracts) {
+      for (const doc of resContracts.contracts) {
+        const existing = this.db.prepare('SELECT id FROM saby_docs WHERE client_id = ? AND saby_id = ?').get(clientId, doc.id);
+        if (existing) {
+          this.db.prepare('UPDATE saby_docs SET type = ?, number = ?, date = ?, status = ? WHERE id = ?')
+            .run('Договор', doc.number, doc.date, doc.status, existing.id);
+          updated++;
+        } else {
+          this.db.prepare('INSERT INTO saby_docs (client_id, saby_id, type, number, date, status, sum) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .run(clientId, doc.id, 'Договор', doc.number, doc.date, doc.status, parseFloat(doc.sum || 0));
+          added++;
+        }
+      }
+    }
+    
+    const resReqs = await fetchSabyRequests(client.inn);
+    if (resReqs.ok && resReqs.requests) {
+      for (const req of resReqs.requests) {
+        const existing = this.db.prepare('SELECT id FROM saby_requests WHERE client_id = ? AND saby_id = ?').get(clientId, req.id);
+        if (existing) {
+          this.db.prepare('UPDATE saby_requests SET number = ?, date = ?, subject = ?, status = ?, executor = ? WHERE id = ?')
+            .run(req.number, req.date, req.subject, req.status, req.executor, existing.id);
+          updated++;
+        } else {
+          this.db.prepare('INSERT INTO saby_requests (client_id, saby_id, number, date, subject, status, executor) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .run(clientId, req.id, req.number, req.date, req.subject, req.status, req.executor);
+          added++;
+        }
+      }
+    }
+    
+    const resWorks = await fetchSabyWorks(client.inn);
+    if (resWorks.ok && resWorks.works) {
+      for (const w of resWorks.works) {
+        const existing = this.db.prepare('SELECT id FROM saby_works WHERE client_id = ? AND saby_id = ?').get(clientId, w.id);
+        if (existing) {
+          this.db.prepare('UPDATE saby_works SET document_number = ?, date = ?, work_name = ?, quantity = ?, unit = ?, price = ?, sum = ? WHERE id = ?')
+            .run(w.document_number, w.date, w.work_name, w.quantity, w.unit, w.price, w.sum, existing.id);
+          updated++;
+        } else {
+          this.db.prepare('INSERT INTO saby_works (client_id, saby_id, document_number, date, work_name, quantity, unit, price, sum) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(clientId, w.id, w.document_number, w.date, w.work_name, w.quantity, w.unit, w.price, w.sum);
+          added++;
+        }
+      }
+    }
+    
+    return { ok: true, message: `Синхронизация завершена. Добавлено: ${added}, Обновлено: ${updated}` };
+  }
+
+
   updateClientFull(id, data) {
     const client = this.getClientById(id);
     if (!client) return null;
@@ -1029,9 +1104,19 @@ class SqliteDatabase {
   }
 
   // --- Saby Docs ---
+
   getSabyDocs(clientId) {
     return this.db.prepare('SELECT * FROM saby_docs WHERE client_id = ? ORDER BY date DESC, id DESC').all(parseInt(clientId, 10));
   }
+
+  getSabyWorks(clientId) {
+    return this.db.prepare('SELECT * FROM saby_works WHERE client_id = ? ORDER BY date DESC, id DESC').all(parseInt(clientId, 10));
+  }
+
+  getSabyRequests(clientId) {
+    return this.db.prepare('SELECT * FROM saby_requests WHERE client_id = ? ORDER BY date DESC, id DESC').all(parseInt(clientId, 10));
+  }
+
 
   addSabyDoc(clientId, { doc_id, doc_number, title, date, amount, status = 'Подписан' }) {
     const now = new Date().toISOString();

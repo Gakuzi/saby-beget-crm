@@ -68,6 +68,11 @@ function requireAdmin(req, res, next) {
 }
 
 
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; font-src * data:;");
+  next();
+});
+
 app.use(requireAdmin);
 
 // Helper for dates in Russian
@@ -295,7 +300,7 @@ app.post('/login_otp_request', async (req, res) => {
   otps.set(email.trim(), { code, expires: Date.now() + 10 * 60 * 1000 });
   
   // Send email
-  const { mailer } = await import('./mailer.js');
+  const { mailer } = await import('./services/mailer.js');
   await mailer.sendAdminLoginOtp(email.trim(), code);
   
   res.redirect('/login?show_otp=1&type=success&msg=' + encodeURIComponent('Код отправлен на почту') + '&email=' + encodeURIComponent(email.trim()) + '&next=' + encodeURIComponent(next || '/'));
@@ -902,8 +907,7 @@ async function registerPasskey() {
         <div>
           <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 4px;">Защищенный ключ (сертификат .key):</label>
           <div style="display: flex; gap: 10px; align-items: flex-start;">
-            <input type="file" id="cfg-saby-file" accept=".key" style="font-size: 12px; width: 100%; max-width: 300px;">
-            <input type="hidden" id="cfg-saby-secret-key">
+            <textarea id="cfg-saby-secret-key" placeholder="Вставьте содержимое файла ключа (.key) сюда..." style="width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-family: monospace; min-height: 80px;"></textarea>
             <div id="cfg-saby-key-status" style="font-size: 11px; margin-top: 4px; color: #64748b;">Здесь будет статус загрузки ключа.</div>
           </div>
         </div>
