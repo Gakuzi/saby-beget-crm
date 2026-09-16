@@ -760,7 +760,7 @@ async function registerPasskey() {
         <span style="font-weight: 600; color: #475569;">👤 ${req.session.crm_admin_user || 'Администратор'}</span>
         <a href="/?filter=${filter === 'active' ? 'archived' : 'active'}" style="font-size:13px; font-weight:600; color:#3b82f6;">${filter === 'active' ? '🗄️ Архив' : '📁 Активные'}</a>
         <a href="/workers" style="font-size:13px; font-weight:600;">👥 Сотрудники</a>
-        <a href="#" onclick="openSabySettingsModal()" style="font-size:13px; font-weight:600;">⚙️ Настройки (Почта / Saby / Beget)</a>
+        <a href="/settings" onclick="event.preventDefault(); openSabySettingsModal();" style="font-size:13px; font-weight:600;">⚙️ Настройки (Почта / Saby / Beget)</a>
         <a href="#" onclick="registerPasskey()" style="font-size:13px; font-weight:600; color:#10b981;">🛡️ Создать Passkey</a>
         <a href="/change-password" style="font-size:13px; font-weight:600;">🔑 Пароль</a>
         <a href="/logout" style="font-size:13px; font-weight:600; color:#ef4444;">🚪 Выйти</a>
@@ -1214,15 +1214,17 @@ async function registerPasskey() {
       if (modal) modal.style.display = 'none';
     }
 
-    async function openSabySettingsModal() {
+    async function openSabySettingsModal(targetTab) {
       const modal = document.getElementById('saby-settings-modal');
+      if (!modal) return;
       modal.style.display = 'flex';
       const box = document.getElementById('cfg-result-box');
-      box.style.display = 'none';
+      if (box) box.style.display = 'none';
 
-      // Default to Saby tab
-      const firstTabBtn = document.getElementById('cfg-tab-saby');
-      if (firstTabBtn) switchSettingsTab('saby', firstTabBtn);
+      // Switch to target tab or Saby tab
+      const tabName = targetTab || 'saby';
+      const tabBtn = document.getElementById('cfg-tab-' + tabName) || document.getElementById('cfg-tab-saby');
+      if (tabBtn) switchSettingsTab(tabName, tabBtn);
 
       try {
         const res = await fetch('/api/settings/global');
@@ -1560,11 +1562,25 @@ async function registerPasskey() {
         .catch(e => alert('Ошибка сети: ' + e));
     }
     
+    // Auto-open settings modal if requested via URL (?open_settings=1 or #settings)
+    window.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.has('open_settings') || window.location.hash === '#settings') {
+        const tab = urlParams.get('tab') || 'saby';
+        openSabySettingsModal(tab);
+      }
+    });
 
     </script>
 
   </body>
 </html>`);
+});
+
+// Settings direct route
+app.get('/settings', requireAdmin, (req, res) => {
+  const tab = req.query.tab || 'saby';
+  res.redirect('/?open_settings=1&tab=' + encodeURIComponent(tab));
 });
 
 // Add client page (Apple Liquid Glass)

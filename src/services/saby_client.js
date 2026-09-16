@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { settingsManager } from '../config/settings_manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -8,13 +9,15 @@ const __dirname = path.dirname(__filename);
 const SABY_RPC_URL = 'https://online.sbis.ru/service/sbis-rpc.service';
 
 export function getSabyCredentials() {
-  let clientId = (process.env.SABY_APP_CLIENT_ID || '').trim();
-  let appSecret = (process.env.SABY_APP_SECRET || '').trim();
-  let secretKey = (process.env.SABY_SECRET_KEY || '').trim();
+  const conf = settingsManager ? settingsManager.getRawSettings() : {};
+  let clientId = (process.env.SABY_APP_CLIENT_ID || conf.saby_app_client_id || '').trim();
+  let appSecret = (process.env.SABY_APP_SECRET || conf.saby_app_secret || '').trim();
+  let secretKey = (process.env.SABY_SECRET_KEY || conf.saby_secret_key || '').trim();
 
   // Also check .saby_config files
   const candidates = [
     path.join(__dirname, '.saby_config'),
+    path.join(process.cwd(), '.saby_config'),
     '/opt/backup-reports/.saby_config'
   ];
 
@@ -155,7 +158,7 @@ export async function fetchEgrulCompany(inn) {
   try {
     const res = await fetch(`https://egrul.itsoft.ru/${inn}.json`, {
       headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(1500),
       redirect: 'follow'
     });
     if (!res.ok) return null;
@@ -210,7 +213,11 @@ export async function fetchEgrulCompany(inn) {
   return null;
 }
 
-export async function searchSabyCompany(inn) {
+export async function searchSabyCompany(query) {
+  const q = String(query || '').trim();
+  if (!q) return { ok: false, error: 'Запрос пуст', items: [] };
+
+  const isInn = /^\d{10}$|^\d{12}$/.test(q);
   const auth = await authenticateSaby();
   
   if (auth.ok) {
@@ -219,32 +226,48 @@ export async function searchSabyCompany(inn) {
       SABY_RPC_URL
     ];
 
-    const payloads = [
-      {
-        jsonrpc: '2.0',
-        method: 'СБИС.ИнформацияОКонтрагенте',
-        params: {
-          Фильтр: {
-            Контрагент: inn.length === 10 ? {
-              СвЮЛ: { ИНН: inn }
-            } : {
-              СвФЛ: { ИНН: inn }
+    const payloads = [];
+    if (isInn) {
+      payloads.push(
+        {
+          jsonrpc: '2.0',
+          method: 'СБИС.ИнформацияОКонтрагенте',
+          params: {
+            Фильтр: {
+              Контрагент: q.length === 10 ? { СвЮЛ: { ИНН: q } } : { СвФЛ: { ИНН: q } }
             }
-          }
+          },
+          id: 2
         },
-        id: 2
-      },
-      {
-        jsonrpc: '2.0',
-        method: 'СБИС.ИнформацияОКонтрагенте',
-        params: {
-          Реквизиты: {
-            ИНН: inn
-          }
+        {
+          jsonrpc: '2.0',
+          method: 'СБИС.ИнформацияОКонтрагенте',
+          params: { Реквизиты: { ИНН: q } },
+          id: 3
         },
-        id: 3
-      }
-    ];
+        {
+          jsonrpc: '2.0',
+          method: 'СБИС.СписокКонтрагентов',
+          params: { Фильтр: { СтрокаПоиска: q } },
+          id: 4
+        }
+      );
+    } else {
+      payloads.push(
+        {
+          jsonrpc: '2.0',
+          method: 'СБИС.СписокКонтрагентов',
+          params: { Фильтр: { СтрокаПоиска: q } },
+          id: 5
+        },
+        {
+          jsonrpc: '2.0',
+          method: 'СБИС.ИнформацияОКонтрагенте',
+          params: { Фильтр: { Название: q } },
+          id: 6
+        }
+      );
+    }
 
     for (const url of endpoints) {
       for (const payload of payloads) {
@@ -265,19 +288,48 @@ export async function searchSabyCompany(inn) {
           const json = await res.json();
           if (json.result && !json.error) {
             const r = json.result;
-            const name = r.Название || r.КраткоеНаименование || r.ПолноеНаименование;
+            // Case 1: single counterparty object
+            const name = r.Название || r.КраткоеНаименование || r.ПолноеНаименование || r.name;
             if (name) {
               return {
                 ok: true,
                 company: {
                   name,
-                  inn: r.ИНН || inn,
-                  kpp: r.КПП || '',
-                  ogrn: r.ОГРН || '',
-                  director: r.Руководитель || '',
-                  address: r.ЮридическийАдрес || r.Адрес || ''
+                  inn: r.ИНН || r.inn || (isInn ? q : ''),
+                  kpp: r.КПП || r.kpp || '',
+                  ogrn: r.ОГРН || r.ogrn || '',
+                  director: r.Руководитель || r.director || '',
+                  address: r.ЮридическийАдрес || r.Адрес || r.address || ''
                 }
               };
+            }
+
+            // Case 2: list of counterparties
+            const list = Array.isArray(r) ? r : (r.Список || r.Контрагенты || r.rows || []);
+            if (Array.isArray(list) && list.length > 0) {
+              const first = list[0];
+              const fName = first.Название || first.КраткоеНаименование || first.name;
+              if (fName) {
+                return {
+                  ok: true,
+                  company: {
+                    name: fName,
+                    inn: first.ИНН || first.inn || (isInn ? q : ''),
+                    kpp: first.КПП || first.kpp || '',
+                    ogrn: first.ОГРН || first.ogrn || '',
+                    director: first.Руководитель || first.director || '',
+                    address: first.ЮридическийАдрес || first.Адрес || ''
+                  },
+                  items: list.map(item => ({
+                    name: item.Название || item.КраткоеНаименование || item.name,
+                    inn: item.ИНН || item.inn || '',
+                    kpp: item.КПП || item.kpp || '',
+                    ogrn: item.ОГРН || item.ogrn || '',
+                    director: item.Руководитель || item.director || '',
+                    address: item.ЮридическийАдрес || item.Адрес || ''
+                  }))
+                };
+              }
             }
           }
         } catch (err) {
@@ -287,16 +339,18 @@ export async function searchSabyCompany(inn) {
     }
   }
 
-  // Fallback: public EGRUL/EGRIP registry
-  const egrul = await fetchEgrulCompany(inn);
-  if (egrul) {
-    return {
-      ok: true,
-      company: egrul
-    };
+  // Fallback if query is an INN: public EGRUL/EGRIP registry
+  if (isInn) {
+    const egrul = await fetchEgrulCompany(q);
+    if (egrul) {
+      return {
+        ok: true,
+        company: egrul
+      };
+    }
   }
 
-  return { ok: false, error: 'Организация с таким ИНН не найдена в Saby и ЕГРЮЛ', items: [] };
+  return { ok: false, error: 'Организация не найдена в Saby и реестре ЕГРЮЛ', items: [] };
 }
 
 export async function fetchSabyContracts(inn) {

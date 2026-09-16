@@ -666,6 +666,10 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
       </a>
 
       <div style="display:flex; align-items:center; gap:10px;">
+        <a href="/settings" class="btn btn-glass" title="Настройки почты, Saby и Beget">
+          <span>⚙️</span>
+          <span>Настройки</span>
+        </a>
         <a href="/portal/t/${client.active_token || ''}" target="_blank" class="btn btn-portal" title="Открыть персональный клиентский портал (как клиент)">
           <span>✨</span>
           <span>Кабинет клиента ↗</span>
@@ -2604,11 +2608,11 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
       if (c.kpp) document.getElementById('setting_kpp').value = c.kpp;
       if (c.ogrn) document.getElementById('setting_ogrn').value = c.ogrn;
       if (c.director) document.getElementById('setting_director').value = c.director;
-      if (c.address) document.getElementById('setting_address').value = c.address;
+      if (c.address && !c.address.includes('Из вашей базы')) document.getElementById('setting_address').value = c.address;
       if (c.sites) document.getElementById('setting_sites').value = c.sites;
       if (c.email) document.getElementById('setting_emails').value = c.email;
       loadContractsForInn(c.inn);
-      showToast('✓ Данные ' + c.name + ' подтянуты из Saby');
+      showToast('✓ Данные ' + c.name + ' подтянуты');
     }
 
     function loadContractsForInn(inn) {
@@ -3475,8 +3479,16 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
     }
 
     function hardDeleteClientAction(id, name, inn) {
-      const msg = 'ВНИМАНИЕ!\n\nВы действительно хотите НАВСЕГДА удалить контрагента "' + (name || 'Клиент') + '"' + (inn ? ' (ИНН: ' + inn + ')' : '') + ' из базы данных SQLite?\n\nВсе связанные данные, акты, доступы, история и логи будут стёрты без возможности восстановления, а ИНН полностью освободится.\n\nПродолжить?';
-      if (!confirm(msg)) return;
+      const promptLines = [
+        'ВНИМАНИЕ!',
+        '',
+        'Вы действительно хотите НАВСЕГДА удалить контрагента \"' + (name || 'Клиент') + '\"' + (inn ? ' (ИНН: ' + inn + ')' : '') + ' из базы данных SQLite?',
+        '',
+        'Все связанные данные, акты, доступы, история и логи будут стёрты без возможности восстановления, а ИНН полностью освободится.',
+        '',
+        'Продолжить?'
+      ];
+      if (!confirm(promptLines.join(String.fromCharCode(10)))) return;
 
       const check = prompt('Для окончательного подтверждения введите слово УДАЛИТЬ:');
       if (!check || (check.trim().toUpperCase() !== 'УДАЛИТЬ' && check.trim().toLowerCase() !== 'delete')) {
@@ -3664,9 +3676,14 @@ export function renderNewClientPage() {
 </head>
 <body>
   <div class="container">
-    <a href="/" style="display:inline-flex; align-items:center; gap:8px; color:#5b21b6; font-weight:600; text-decoration:none; margin-bottom:20px;">
-      &larr; Вернуться к списку контрагентов
-    </a>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+      <a href="/" style="display:inline-flex; align-items:center; gap:8px; color:#5b21b6; font-weight:600; text-decoration:none;">
+        &larr; Вернуться к списку контрагентов
+      </a>
+      <a href="/settings" class="btn btn-glass" style="font-size:13px; padding:7px 15px; text-decoration:none;">
+        ⚙️ Настройки Saby и Почты
+      </a>
+    </div>
 
     <div class="glass-card">
       <div style="display:flex; align-items:center; gap:14px; margin-bottom:24px;">
@@ -3688,8 +3705,16 @@ export function renderNewClientPage() {
 
         <!-- Search -->
         <div class="form-group" style="margin-bottom: 0;">
-          <label>Быстрый поиск по базе Saby/ЕГРЮЛ:</label>
-          <input type="text" id="search_input" class="form-control" placeholder="Введите ИНН или название компании..." oninput="searchCompany(this.value)" autocomplete="off">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label style="margin:0;">Быстрый поиск по базе Saby / ЕГРЮЛ / Базе клиентов:</label>
+            <span style="font-size:12px; color:#64748b;">(поиск по ИНН или названию компании)</span>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="search_input" class="form-control" placeholder="Введите ИНН (например, 7707083893) или название компании..." oninput="searchCompany(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();searchCompany(this.value, true);}" autocomplete="off">
+            <button type="button" onclick="searchCompany(document.getElementById('search_input').value, true)" class="btn btn-primary" style="white-space:nowrap; padding:0 18px;">
+              🔍 Найти
+            </button>
+          </div>
           <div id="suggest-box" class="suggest-box"></div>
         </div>
 
@@ -3760,19 +3785,20 @@ export function renderNewClientPage() {
 
   <script>
     let searchTimer = null;
-    function searchCompany(val) {
+    function searchCompany(val, immediate) {
       clearTimeout(searchTimer);
       const box = document.getElementById('suggest-box');
-      if (!val || val.length < 2) {
+      const query = (val || '').trim();
+      if (!query || query.length < 2) {
         box.style.display = 'none';
         return;
       }
       
       box.style.display = 'block';
-      box.innerHTML = '<div class="suggest-item" style="color:#94a3b8; text-align:center;">Поиск в Saby...</div>';
+      box.innerHTML = '<div class="suggest-item" style="color:#94a3b8; text-align:center;">🔍 Поиск в Saby / ЕГРЮЛ...</div>';
       
-      searchTimer = setTimeout(() => {
-        fetch('/suggest_company?q=' + encodeURIComponent(val))
+      const doFetch = () => {
+        fetch('/suggest_company?q=' + encodeURIComponent(query))
           .then(r => r.json())
           .then(items => {
             box.innerHTML = '';
@@ -3790,7 +3816,8 @@ export function renderNewClientPage() {
                   document.getElementById('kpp').value = c.kpp || '';
                   document.getElementById('ogrn').value = c.ogrn || '';
                   document.getElementById('director').value = c.director || '';
-                  document.getElementById('address').value = c.address || '';
+                  const cleanAddr = (c.address && !c.address.includes('Из вашей базы')) ? c.address : '';
+                  document.getElementById('address').value = cleanAddr;
                   
                   box.style.display = 'none';
                   loadContracts(c.inn);
@@ -3798,10 +3825,19 @@ export function renderNewClientPage() {
                 box.appendChild(div);
               });
             } else {
-              box.innerHTML = '<div class="suggest-item" style="color:#94a3b8; text-align:center;">Ничего не найдено</div>';
+              box.innerHTML = '<div class="suggest-item" style="color:#94a3b8; text-align:center;">Ничего не найдено по запросу "' + query + '"</div>';
             }
+          })
+          .catch(err => {
+            box.innerHTML = '<div class="suggest-item" style="color:#ef4444; text-align:center;">Ошибка поиска: ' + err.message + '</div>';
           });
-      }, 500);
+      };
+
+      if (immediate) {
+        doFetch();
+      } else {
+        searchTimer = setTimeout(doFetch, 400);
+      }
     }
 
     function loadContracts(inn) {
