@@ -1539,7 +1539,7 @@ async function registerPasskey() {
         '',
         'Продолжить?'
       ];
-      if (!confirm(promptLines.join('\n'))) return;
+      if (!confirm(promptLines.join(String.fromCharCode(10)))) return;
 
       const check = prompt('Для окончательного подтверждения введите слово УДАЛИТЬ:');
       if (!check || (check.trim().toUpperCase() !== 'УДАЛИТЬ' && check.trim().toLowerCase() !== 'delete')) {
