@@ -677,9 +677,35 @@ class SqliteDatabase {
     const client = this.getClientById(clientId);
     if (!client || !client.inn) throw new Error('Клиент или ИНН не найден');
     
-    const { fetchSabyContracts, fetchSabyRequests, fetchSabyWorks } = await import('../services/saby_client.js');
+    const { fetchSabyContracts, fetchSabyRequests, fetchSabyWorks, searchSabyCompany } = await import('../services/saby_client.js');
     
     let added = 0, updated = 0;
+    
+    // Attempt to enrich client data (OGRN, KPP, Director, Address)
+    try {
+      const companyRes = await searchSabyCompany(client.inn);
+      if (companyRes.ok && companyRes.company) {
+        const { kpp, ogrn, director, address } = companyRes.company;
+        this.db.prepare(`UPDATE clients SET 
+          kpp = COALESCE(kpp, NULLIF(?, '')),
+          ogrn = COALESCE(ogrn, NULLIF(?, '')),
+          director = COALESCE(director, NULLIF(?, '')),
+          address = COALESCE(address, NULLIF(?, ''))
+          WHERE id = ?`).run(kpp, ogrn, director, address, clientId);
+          
+        // Add director as a contact if not exists
+        if (director) {
+          const existingContact = this.db.prepare('SELECT id FROM client_contacts WHERE client_id = ? AND name = ?').get(clientId, director);
+          if (!existingContact) {
+            this.db.prepare('INSERT INTO client_contacts (client_id, name, position, email, phone, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+              .run(clientId, director, 'Руководитель', '', '', 'staff', new Date().toISOString());
+            added++;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error enriching client details:', e);
+    }
     
     const resContracts = await fetchSabyContracts(client.inn);
     if (resContracts.ok && resContracts.contracts) {

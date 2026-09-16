@@ -289,7 +289,7 @@ function parseCounterpartyItem(r, defaultInn = '') {
   const kpp = r.КПП || ul.КПП || r.kpp || '';
   const ogrn = r.ОГРН || ul.ОГРН || fl.ОГРНИП || r.ogrn || '';
   const director = r.Руководитель || ul.Руководитель || fl.ФИО || r.director || '';
-  const address = r.ЮридическийАдрес || r.Адрес || ul.АдресРФ || ul.Адрес || r.address || '';
+  const address = ul.АдресЮридический || r.ЮридическийАдрес || r.Адрес || ul.АдресРФ || ul.Адрес || r.address || '';
 
   return {
     name,
@@ -319,9 +319,7 @@ export async function searchSabyCompany(query) {
           jsonrpc: '2.0',
           method: 'СБИС.ИнформацияОКонтрагенте',
           params: {
-            Фильтр: {
-              Контрагент: q.length === 10 ? { СвЮЛ: { ИНН: q } } : { СвФЛ: { ИНН: q } }
-            }
+            Участник: q.length === 10 ? { СвЮЛ: { ИНН: q } } : { СвФЛ: { ИНН: q } }
           },
           id: 10
         },
@@ -445,7 +443,7 @@ export async function searchSabyCompany(query) {
     const isIp = q.length === 12;
 
     const smartFallback = {
-      name: isIp ? `ИП (ИНН ${q})` : `Организация (ИНН ${q})`,
+      name: isIp ? `Индивидуальный предприниматель` : `Организация`,
       inn: q,
       kpp: isIp ? '' : `${q.slice(0, 4)}01001`,
       ogrn: '',
@@ -488,10 +486,10 @@ export async function fetchSabyContracts(inn) {
 
   const endpoints = [SABY_DIRECT_URL, SABY_RPC_URL];
   const filterVariants = [
+    { Тип: 'ДоговорДок', КонтрагентИНН: inn },
+    { Тип: 'ДоговорДок', Навигация: { РазмерСтраницы: 20 } },
     { КонтрагентИНН: inn, ВидДокумента: 'Договор' },
-    { КонтрагентИНН: inn },
-    { Контрагент: inn.length === 10 ? { СвЮЛ: { ИНН: inn } } : { СвФЛ: { ИНН: inn } } },
-    { Регламент: 'Оказания услуг (Аутсорсинг) с кабинетом', КонтрагентИНН: inn }
+    { КонтрагентИНН: inn }
   ];
 
   for (const url of endpoints) {
@@ -517,22 +515,26 @@ export async function fetchSabyContracts(inn) {
 
         const rawList = Array.isArray(json.result)
           ? json.result
-          : (json.result.Документы || json.result.rows || []);
+          : (json.result.Документ || json.result.Документы || json.result.rows || []);
 
         if (Array.isArray(rawList) && rawList.length > 0) {
           const contracts = rawList
             .filter(d => {
+              // Filter by INN if not applied by Saby
+              const cInn = d.Контрагент?.СвЮЛ?.ИНН || d.Контрагент?.СвФЛ?.ИНН || d.КонтрагентИНН || '';
+              if (cInn && cInn !== inn) return false;
+              
               const t = (d.Тип || d.ВидДокумента || d.Название || '').toLowerCase();
-              return t.includes('договор') || t.includes('соглаш') || t.includes('аутсорсинг') || t.includes('сопровожд') || !d.Тип;
+              return t.includes('договор') || t.includes('соглаш') || t.includes('аутсорсинг') || t.includes('сопровожд') || d.Тип === 'ДоговорДок' || !d.Тип;
             })
             .map((d, i) => ({
               id: d.Идентификатор || `saby-cnt-${i + 1}`,
               number: d.Номер || `№ ${i + 1}`,
-              title: d.Название || d.Примечание || 'Договор технического сопровождения (Saby)',
+              title: d.Название || d.Примечание || 'Договор (Saby)',
               date: d.Дата || new Date().toISOString().slice(0, 10),
               plan_hours: parseInt(d.Часы || d.plan_hours, 10) || 15,
               tariff: d.Сумма ? `${d.Сумма} ₽ / мес` : '40 000 ₽ / мес',
-              status: d.Статус || 'Действует',
+              status: d.Состояние?.Название || d.Статус || 'Действует',
               sla: '99.5%'
             }));
 
@@ -558,6 +560,57 @@ export async function fetchSabyContracts(inn) {
     message: 'В Saby по данному контрагенту пока нет активных договоров.',
     contracts: []
   };
+}
+
+export async function fetchSabyWorks(inn) {
+  const auth = await authenticateSaby();
+  if (!auth.ok) return { ok: false, error: auth.message, works: [] };
+  if (!inn) return { ok: true, works: [] };
+
+  try {
+    const payload = {
+      jsonrpc: '2.0',
+      method: 'СБИС.СписокДокументов',
+      params: {
+        Фильтр: { Тип: 'Наряд', Навигация: { РазмерСтраницы: 50 } }
+      },
+      id: 31
+    };
+
+    const res = await fetch(SABY_DIRECT_URL, {
+      method: 'POST',
+      headers: getSabyHeaders(auth.token),
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(6000)
+    });
+
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, works: [] };
+    const json = await res.json().catch(() => null);
+    if (!json || json.error) return { ok: false, error: json?.error?.message || 'Ошибка RPC', works: [] };
+
+    const rawList = json.result?.Документ || json.result?.Документы || json.result || [];
+    const works = (Array.isArray(rawList) ? rawList : [])
+      .filter(d => {
+        const cInn = d.Контрагент?.СвЮЛ?.ИНН || d.Контрагент?.СвФЛ?.ИНН || '';
+        return !cInn || cInn === inn;
+      })
+      .map((d, i) => {
+        return {
+          id: d.Идентификатор || `saby-work-${i}`,
+          document_number: d.Номер || `№ ${i + 1}`,
+          work_name: d.Название || d.Примечание || 'Наряд из Saby',
+          date: d.Дата || new Date().toISOString().slice(0, 10),
+          quantity: 1,
+          unit: 'шт',
+          price: parseFloat(d.Сумма || 0),
+          sum: parseFloat(d.Сумма || 0)
+        };
+      });
+
+    return { ok: true, works };
+  } catch (err) {
+    return { ok: false, error: err.message, works: [] };
+  }
 }
 
 export async function fetchSabyRequests(inn) {
@@ -601,51 +654,5 @@ export async function fetchSabyRequests(inn) {
     return { ok: true, requests };
   } catch (err) {
     return { ok: false, error: err.message, requests: [] };
-  }
-}
-
-export async function fetchSabyWorks(inn) {
-  const auth = await authenticateSaby();
-  if (!auth.ok) return { ok: false, error: auth.message, works: [] };
-
-  try {
-    const payload = {
-      jsonrpc: '2.0',
-      method: 'СБИС.СписокДокументов',
-      params: {
-        Фильтр: {
-          Регламент: 'Акт выполненных работ',
-          КонтрагентИНН: inn
-        }
-      },
-      id: 50
-    };
-
-    const res = await fetch(SABY_DIRECT_URL, {
-      method: 'POST',
-      headers: getSabyHeaders(auth.token),
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(6000)
-    });
-
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, works: [] };
-    const json = await res.json().catch(() => null);
-    if (!json || json.error) return { ok: false, error: json?.error?.message || 'Ошибка RPC', works: [] };
-
-    const rawList = json.result?.Документы || json.result || [];
-    const works = (Array.isArray(rawList) ? rawList : []).map((d, i) => ({
-      id: d.Идентификатор || `saby-work-${i}`,
-      document_number: d.Номер || `№ ${i + 1}`,
-      date: d.Дата || new Date().toISOString().slice(0, 10),
-      work_name: d.Название || 'Услуги по договору',
-      quantity: d.Количество || 1,
-      unit: d.ЕдИзмерения || 'шт',
-      price: d.Цена || (d.Сумма || 0),
-      sum: d.Сумма || 0
-    }));
-
-    return { ok: true, works };
-  } catch (err) {
-    return { ok: false, error: err.message, works: [] };
   }
 }
