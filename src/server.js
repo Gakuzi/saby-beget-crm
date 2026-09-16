@@ -9,7 +9,7 @@ import { renderPortalPage, renderPortalLoginPage, renderPortalVerifyPage } from 
 import { mailer } from './services/mailer.js';
 import { renderAdminClientPage, renderNewClientPage } from './views/admin_view.js';
 import { getGitStatus, getGitHubConfig, testGitHubApi, syncToGitHub, pullFromGitHub } from './services/github_sync.js';
-import { testSabyConnection, authenticateSaby, searchSabyCompany, fetchSabyContracts } from './services/saby_client.js';
+import { testSabyConnection, authenticateSaby, searchSabyCompany, fetchSabyContracts, getSabyStatus } from './services/saby_client.js';
 import { testBegetConnection, pullBegetSnapshot } from './services/beget_client.js';
 import { sshService } from './services/ssh_service.js';
 import { generatePhpBackupAgent, generateBashInstaller } from './utils/backup_agent_generator.js';
@@ -882,34 +882,62 @@ async function registerPasskey() {
         <div id="cfg-pane-saby" class="cfg-tab-pane">
           <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 12.5px; color: #166534; line-height: 1.5;">
             🔑 <strong>Интеграция с Saby API (СБИС):</strong><br>
-            Для синхронизации договоров, актов и заявок Saby использует OAuth по сервисному ключу. Укажите <strong>ID подключения</strong>, <strong>Секрет приложения</strong> и вставьте <strong>текст сервисного ключа</strong> из файла <code>.key</code> (или выберите файл для авто-вставки).
+            Для синхронизации договоров, актов, нарядов и автозаполнения реквизитов укажите данные от вашего аккаунта СБИС. Поддерживается как <strong>прямой вход по логину и паролю</strong>, так и <strong>сервисный ключ приложения (OAuth)</strong>.
           </div>
-          <div class="modal-grid-2" style="margin-bottom: 14px;">
-            <div>
-              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">ID подключения (app_client_id):</label>
-              <input type="text" id="cfg-saby-client-id" placeholder="Например: 1234abcd-5678-..." style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+
+          <!-- OPTION 1: LOGIN & PASSWORD -->
+          <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 14px;">
+            <div style="font-size: 12.5px; font-weight: 700; color: #1e293b; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+              <span>👤</span> Способ 1: Прямой вход по логину и паролю СБИС (online.sbis.ru)
             </div>
-            <div>
-              <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">Секрет приложения (app_secret):</label>
-              <input type="password" id="cfg-saby-app-secret" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            <div class="modal-grid-2">
+              <div>
+                <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">Логин Saby (email / телефон / логин):</label>
+                <input type="text" id="cfg-saby-login" placeholder="admin@e-klimov.ru или логин" style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+              </div>
+              <div>
+                <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">Пароль от аккаунта Saby:</label>
+                <div style="display: flex; gap: 6px;">
+                  <input type="password" id="cfg-saby-password" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+                  <button type="button" onclick="const p=document.getElementById('cfg-saby-password'); p.type=p.type==='password'?'text':'password';" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:0 10px; border-radius:6px; cursor:pointer;" title="Показать/скрыть">👁️</button>
+                </div>
+                <div id="cfg-saby-password-status" style="font-size: 11px; margin-top: 4px; color: #059669; font-weight: 500;"></div>
+              </div>
             </div>
           </div>
 
-          <div style="margin-bottom: 16px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label style="font-size: 12px; font-weight: 600; color: #475569;">Текст сервисного ключа (содержимое файла .key):</label>
-              <label style="cursor: pointer; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 6px; font-size: 11.5px; color: #334155; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
-                📂 Вставить из файла .key / .txt
-                <input type="file" id="cfg-saby-key-file" accept=".key,.txt,.pem" style="display: none;" onchange="loadKeyFileToText(this)">
-              </label>
+          <!-- OPTION 2: OAUTH SERVICE KEY -->
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+            <div style="font-size: 12.5px; font-weight: 700; color: #1e293b; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+              <span>⚙️</span> Способ 2: Корпоративный шлюз по сервисному ключу (OAuth Saby API)
             </div>
-            <textarea id="cfg-saby-secret-key" placeholder="Вставьте сюда текстовое содержимое файла ключа (.key / .txt / PEM)..." style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-family: monospace; min-height: 90px; resize: vertical; line-height: 1.4;"></textarea>
-            <div id="cfg-saby-key-status" style="font-size: 11.5px; margin-top: 5px; color: #64748b;"></div>
+            <div class="modal-grid-2" style="margin-bottom: 14px;">
+              <div>
+                <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">ID подключения (app_client_id):</label>
+                <input type="text" id="cfg-saby-client-id" placeholder="Например: 1234abcd-5678-..." style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+              </div>
+              <div>
+                <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 5px;">Секрет приложения (app_secret):</label>
+                <input type="password" id="cfg-saby-app-secret" placeholder="Оставьте пустым, если не меняете" style="width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+              </div>
+            </div>
+
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="font-size: 12px; font-weight: 600; color: #475569;">Текст сервисного ключа (содержимое файла .key):</label>
+                <label style="cursor: pointer; background: #ffffff; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 6px; font-size: 11.5px; color: #334155; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                  📂 Вставить из файла .key / .txt
+                  <input type="file" id="cfg-saby-key-file" accept=".key,.txt,.pem" style="display: none;" onchange="loadKeyFileToText(this)">
+                </label>
+              </div>
+              <textarea id="cfg-saby-secret-key" placeholder="Вставьте сюда текстовое содержимое файла ключа (.key / .txt / PEM)..." style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-family: monospace; min-height: 70px; resize: vertical; line-height: 1.4;"></textarea>
+              <div id="cfg-saby-key-status" style="font-size: 11.5px; margin-top: 5px; color: #64748b;"></div>
+            </div>
           </div>
 
           <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
             <button type="button" id="cfg-test-saby-btn" onclick="testSabyFromModal()" style="background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;">⚡ Проверить связь с Saby</button>
-            <span style="font-size: 12px; color: #64748b;">Шлюзы: online.sbis.ru / online.saby.ru</span>
+            <span style="font-size: 12px; color: #64748b;">Шлюзы: online.sbis.ru / api.saby.ru</span>
           </div>
         </div>
 
@@ -1236,6 +1264,19 @@ async function registerPasskey() {
           const safeText = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
           
           // Saby
+          safeSet('cfg-saby-login', s.saby_login || '');
+          safeSet('cfg-saby-password', '');
+          const sabyPassStatus = document.getElementById('cfg-saby-password-status');
+          if (sabyPassStatus) {
+            const sp = document.getElementById('cfg-saby-password');
+            if (s.has_saby_password) {
+              sabyPassStatus.textContent = '✓ Пароль сохранен в системе';
+              if (sp) sp.placeholder = 'Оставьте пустым, если не меняете';
+            } else {
+              sabyPassStatus.textContent = '⚠️ Пароль не установлен';
+              if (sp) sp.placeholder = 'Введите пароль от Saby';
+            }
+          }
           safeSet('cfg-saby-client-id', s.saby_app_client_id || '');
           safeSet('cfg-saby-app-secret', s.has_saby_secret ? '••••••••' : '');
           safeSet('cfg-saby-secret-key', '');
@@ -1244,7 +1285,7 @@ async function registerPasskey() {
             if (s.has_saby_key) {
               sabyKeyStatus.innerHTML = '<span style="color:#15803d; font-weight:600;">✓ Сервисный ключ сохранен в системе</span> (оставьте поле пустым, если не требуется замена).';
             } else {
-              sabyKeyStatus.innerHTML = '<span style="color:#b45309; font-weight:600;">⚠️ Сервисный ключ еще не добавлен.</span> Вставьте текст ключа или выберите файл .key.';
+              sabyKeyStatus.innerHTML = '<span style="color:#64748b;">Сервисный ключ не добавлен (заполняется только при использовании Способа 2).</span>';
             }
           }
           
@@ -1346,6 +1387,9 @@ async function registerPasskey() {
       const safeGet = (id) => { const e = document.getElementById(id); return e ? e.value : ''; };
       const secretKeyVal = safeGet('cfg-saby-secret-key');
       const payload = {
+        saby_app_client_id: safeGet('cfg-saby-client-id'),
+        saby_login: safeGet('cfg-saby-login'),
+        saby_password: safeGet('cfg-saby-password'),
         saby_app_client_id: safeGet('cfg-saby-client-id'),
         saby_app_secret: safeGet('cfg-saby-app-secret'),
         saby_secret_key: secretKeyVal,
@@ -1472,6 +1516,8 @@ async function registerPasskey() {
       box.textContent = 'Отправка проверочного запроса к Saby RPC API (online.sbis.ru)...';
 
       const payload = {
+        saby_login: safeGet('cfg-saby-login'),
+        saby_password: safeGet('cfg-saby-password'),
         saby_app_client_id: safeGet('cfg-saby-client-id'),
         saby_app_secret: safeGet('cfg-saby-app-secret'),
         saby_secret_key: safeGet('cfg-saby-secret-key')
@@ -1601,8 +1647,17 @@ app.get('/suggest_company', async (req, res) => {
 // Contracts endpoint
 app.get('/get_contracts', async (req, res) => {
   const inn = req.query.inn || '';
-  const contracts = await getContracts(inn);
-  res.json({ contracts });
+  const result = await getContracts(inn);
+  if (Array.isArray(result)) {
+    return res.json({ ok: true, contracts: result, sabyConnected: true, sabyConfigured: true });
+  }
+  res.json(result);
+});
+
+// Saby Status endpoint
+app.get('/api/saby/status', async (req, res) => {
+  const status = await getSabyStatus();
+  res.json(status);
 });
 
 // Add client POST
@@ -1672,14 +1727,17 @@ app.post('/add_client', (req, res) => {
 });
 
 // Client card (Apple Liquid Glass)
-app.get('/client/:id', (req, res) => {
+app.get('/client/:id', async (req, res) => {
   const client = db.getClientById(req.params.id);
   if (!client) {
     return res.status(404).send('Клиент не найден. <a href="/">Вернуться</a>');
   }
 
+  const sabyStatus = await getSabyStatus();
+
   res.send(renderAdminClientPage({
     client,
+    sabyStatus,
     activeTab: req.query.tab || 'works',
     flashMessage: res.locals.flash || req.query.msg,
     reqQuery: req.query,
@@ -2078,9 +2136,9 @@ app.post('/api/settings/beget/test', async (req, res) => {
 
 app.post('/api/settings/saby/test', async (req, res) => {
   try {
-    const { saby_app_client_id, saby_app_secret, saby_secret_key } = req.body || {};
-    if (saby_app_client_id || saby_app_secret || saby_secret_key) {
-      settingsManager.saveSettings({ saby_app_client_id, saby_app_secret, saby_secret_key });
+    const { saby_app_client_id, saby_app_secret, saby_secret_key, saby_login, saby_password } = req.body || {};
+    if (saby_app_client_id || saby_app_secret || saby_secret_key || saby_login || saby_password) {
+      settingsManager.saveSettings({ saby_app_client_id, saby_app_secret, saby_secret_key, saby_login, saby_password });
     }
     const testRes = await testSabyConnection();
     res.json(testRes);

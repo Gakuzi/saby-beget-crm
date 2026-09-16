@@ -80,11 +80,7 @@ export async function suggestCompany(query) {
 }
 
 export async function getContracts(inn) {
-  if (!inn) return [];
+  if (!inn) return { ok: false, contracts: [], sabyConnected: false, error: 'ИНН не указан' };
   const { fetchSabyContracts } = await import('../services/saby_client.js');
-  const result = await fetchSabyContracts(inn);
-  if (result.ok && result.contracts) {
-    return result.contracts;
-  }
-  return [];
+  return await fetchSabyContracts(inn);
 }

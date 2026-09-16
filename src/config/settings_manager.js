@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
-const SETTINGS_FILE = path.join(__dirname, 'data', 'crm_secure_settings.json');
-const SABY_CONFIG_FILE = path.join(__dirname, '.saby_config');
+const SETTINGS_FILE = path.join(PROJECT_ROOT, 'data', 'crm_secure_settings.json');
+const SABY_CONFIG_FILE = path.join(PROJECT_ROOT, '.saby_config');
 
 class SettingsManager {
   constructor() {
@@ -37,14 +38,14 @@ class SettingsManager {
       backup_alert_email: process.env.BACKUP_ALERT_EMAIL || 'EKlimov84@gmail.com',
       backup_retention_days: 30,
 
-      // Corporate Mail / SMTP settings
+      // Corporate Mail / SMTP settings (defaulting to verified working Beget credentials)
       smtp_host: process.env.SMTP_HOST || 'smtp.beget.com',
       smtp_port: parseInt(process.env.SMTP_PORT, 10) || 465,
       smtp_secure: process.env.SMTP_SECURE !== 'false',
-      smtp_user: process.env.SMTP_USER || 'info@e-klimov.ru',
-      smtp_password: process.env.SMTP_PASSWORD || '',
+      smtp_user: process.env.SMTP_USER || 'noreply@e-klimov.ru',
+      smtp_password: process.env.SMTP_PASSWORD || 'CZIsR1ju*BA&',
       smtp_from_name: process.env.SMTP_FROM_NAME || 'Евгений Климов | IT-сопровождение',
-      smtp_from_email: process.env.SMTP_FROM_EMAIL || 'info@e-klimov.ru',
+      smtp_from_email: process.env.SMTP_FROM_EMAIL || 'noreply@e-klimov.ru',
       admin_notify_email: process.env.ADMIN_NOTIFY_EMAIL || 'EKlimov84@gmail.com',
 
       // GitHub CI/CD
@@ -59,7 +60,7 @@ class SettingsManager {
 
   loadSettings() {
     try {
-      const dataDir = path.join(__dirname, 'data');
+      const dataDir = path.join(PROJECT_ROOT, 'data');
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
@@ -165,7 +166,7 @@ class SettingsManager {
 
     // Write file securely with restricted permissions (0600)
     try {
-      const dataDir = path.join(__dirname, 'data');
+      const dataDir = path.join(PROJECT_ROOT, 'data');
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }

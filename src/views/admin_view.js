@@ -25,7 +25,7 @@ function formatDateOnly(isoStr) {
   });
 }
 
-export function renderAdminClientPage({ client, activeTab = 'works', flashMessage = null, reqQuery = {}, reqHost = '', hostingAccounts = [], clientSites = [] }) {
+export function renderAdminClientPage({ client, sabyStatus = null, activeTab = 'works', flashMessage = null, reqQuery = {}, reqHost = '', hostingAccounts = [], clientSites = [] }) {
   const cId = client.id;
   const logs = db.getWorkLogs(cId);
   const contacts = db.getContacts(cId);
@@ -820,10 +820,22 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
           </div>
         </div>
         <div>
-          <div class="kpi-val" style="color:#0284c7; font-size:24px;">Связь активна</div>
-          <div class="kpi-sub">
-            <span>Договор: <strong>${client.saby_contract_number || 'АС-2024/05'}</strong></span>
-          </div>
+          ${sabyStatus?.authenticated ? `
+            <div class="kpi-val" style="color:#15803d; font-size:24px;">✓ Связь активна</div>
+            <div class="kpi-sub">
+              <span>Договор: <strong>${client.saby_contract_number || 'Не привязан'}</strong></span>
+            </div>
+          ` : sabyStatus?.configured ? `
+            <div class="kpi-val" style="color:#b91c1c; font-size:20px;">⚠️ Требует входа</div>
+            <div class="kpi-sub" style="color:#b91c1c;">
+              <span>Проверьте логин/ключ</span>
+            </div>
+          ` : `
+            <div class="kpi-val" style="color:#b45309; font-size:20px;">⚠️ Не настроен</div>
+            <div class="kpi-sub">
+              <span>Укажите логин/ключ</span>
+            </div>
+          `}
         </div>
       </div>
 
@@ -846,23 +858,51 @@ export function renderAdminClientPage({ client, activeTab = 'works', flashMessag
     </div>
 
     <!-- 2-Way Saby Synchronization Banner -->
-    <div class="sync-banner">
-      <div class="sync-banner-info">
-        <div class="sync-status-dot"></div>
-        <div>
-          <div class="sync-banner-title">Двусторонний обмен данными с Saby (СБИС) подключен</div>
-          <div class="sync-banner-sub">
-            Синхронизировано в Saby: <strong>${syncedCount}</strong> нарядов &bull; Обращений из Saby в CRM: <strong>${incomingSabyCount}</strong> &bull; Все выполненные работы фиксируются с обеих сторон.
+    ${sabyStatus?.authenticated ? `
+      <div class="sync-banner">
+        <div class="sync-banner-info">
+          <div class="sync-status-dot"></div>
+          <div>
+            <div class="sync-banner-title">Двусторонний обмен данными с Saby (СБИС) подключен</div>
+            <div class="sync-banner-sub">
+              Синхронизировано в Saby: <strong>${syncedCount}</strong> нарядов &bull; Обращений из Saby в CRM: <strong>${incomingSabyCount}</strong> &bull; Все выполненные работы фиксируются с обеих сторон.
+            </div>
           </div>
         </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button type="button" onclick="triggerSabySync(${client.id})" class="btn btn-primary" style="padding:8px 16px; font-size:13px;">
+            <span>🔄</span>
+            <span>Синхронизировать сейчас</span>
+          </button>
+          <button type="button" onclick="openAddWorkModal()" class="btn btn-glass" style="padding:8px 16px; font-size:13px;">
+            <span>+</span>
+            <span>Добавить работу</span>
+          </button>
+        </div>
       </div>
-      <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <button type="button" onclick="triggerSabySync(${client.id})" class="btn btn-primary" style="padding:8px 16px; font-size:13px;">
-          <span>🔄</span>
-          <span>Синхронизировать сейчас</span>
-        </button>
-        <button type="button" onclick="openAddWorkModal()" class="btn btn-glass" style="padding:8px 16px; font-size:13px;">
-          <span>+</span>
+    ` : `
+      <div class="sync-banner" style="background: linear-gradient(135deg, rgba(254, 243, 199, 0.7) 0%, rgba(254, 215, 170, 0.5) 100%); border-color: #fed7aa;">
+        <div class="sync-banner-info">
+          <div class="sync-status-dot" style="background: #f59e0b; box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);"></div>
+          <div>
+            <div class="sync-banner-title" style="color: #92400e;">Шлюз Saby (СБИС) ожидает подключения</div>
+            <div class="sync-banner-sub" style="color: #b45309;">
+              ${sabyStatus?.configured ? (sabyStatus.message || 'Ошибка входа в СБИС: проверьте учетные данные.') : 'Для автоподгрузки договоров и синхронизации нарядов укажите логин/пароль или сервисный ключ в Настройках CRM.'}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <a href="/settings" class="btn btn-primary" style="background: #d97706; padding:8px 16px; font-size:13px; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+            <span>⚙️</span>
+            <span>Настроить Saby</span>
+          </a>
+          <button type="button" onclick="openAddWorkModal()" class="btn btn-glass" style="padding:8px 16px; font-size:13px;">
+            <span>+</span>
+            <span>Добавить работу в CRM</span>
+          </button>
+        </div>
+      </div>
+    `}
           <span>Зафиксировать работу</span>
         </button>
       </div>
@@ -3726,7 +3766,8 @@ export function renderNewClientPage() {
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label>ИНН:</label>
-            <input type="text" id="inn" name="inn" class="form-control" required>
+            <input type="text" id="inn" name="inn" class="form-control" placeholder="10 или 12 цифр" required oninput="onInnFieldChange(this.value)" onblur="onInnFieldChange(this.value, true)">
+            <div id="inn-status-hint" style="font-size:12px; margin-top:5px; display:none;"></div>
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label>КПП:</label>
@@ -3750,8 +3791,9 @@ export function renderNewClientPage() {
         <div class="form-group">
           <label>Привязка договора:</label>
           <select id="contract_select" class="form-control" onchange="onContractChange()">
-            <option value="">Укажите контрагента для загрузки договоров...</option>
+            <option value="">Укажите ИНН или организацию для загрузки договоров из Saby...</option>
           </select>
+          <div id="contract-hint" style="display:none; font-size:12.5px; margin-top:8px; padding:10px 14px; border-radius:8px; line-height:1.45;"></div>
         </div>
 
         <div class="section-title">Обслуживаемые сайты</div>
@@ -3785,6 +3827,73 @@ export function renderNewClientPage() {
 
   <script>
     let searchTimer = null;
+    let innTimer = null;
+
+    function onInnFieldChange(val, immediate) {
+      clearTimeout(innTimer);
+      const clean = (val || '').trim().replace(/\D/g, '');
+      const hint = document.getElementById('inn-status-hint');
+      if (clean.length < 10) {
+        if (hint) hint.style.display = 'none';
+        return;
+      }
+
+      const doLookup = () => {
+        if (hint) {
+          hint.style.display = 'block';
+          hint.style.color = '#6366f1';
+          hint.innerHTML = '🔍 Поиск реквизитов и договоров по ИНН ' + clean + '...';
+        }
+
+        fetch('/suggest_company?q=' + encodeURIComponent(clean))
+          .then(r => r.json())
+          .then(items => {
+            if (items && items.length > 0) {
+              const c = items[0];
+              const compInput = document.getElementById('company_name');
+              if (!compInput.value || compInput.value.includes('ИНН') || compInput.value === c.name) {
+                compInput.value = c.name || '';
+              }
+              if (c.kpp && !document.getElementById('kpp').value) document.getElementById('kpp').value = c.kpp;
+              if (c.ogrn && !document.getElementById('ogrn').value) document.getElementById('ogrn').value = c.ogrn;
+              if (c.director && !document.getElementById('director').value) document.getElementById('director').value = c.director;
+              if (c.address && !document.getElementById('address').value && !c.address.includes('Из вашей базы')) {
+                document.getElementById('address').value = c.address;
+              }
+
+              if (hint) {
+                hint.style.display = 'block';
+                hint.style.color = '#059669';
+                hint.innerHTML = '✓ Организация определена: <strong>' + (c.name || 'Найдена') + '</strong>' + (c.address ? (' &bull; ' + c.address) : '');
+              }
+
+              loadContracts(clean);
+            } else {
+              if (hint) {
+                hint.style.display = 'block';
+                hint.style.color = '#b45309';
+                hint.innerHTML = 'Реквизиты по ИНН ' + clean + ' не найдены в Saby. Введите наименование вручную.';
+              }
+              loadContracts(clean);
+            }
+          })
+          .catch(e => {
+            if (hint) {
+              hint.style.display = 'block';
+              hint.style.color = '#ef4444';
+              hint.innerHTML = 'Ошибка запроса: ' + e.message;
+            }
+            loadContracts(clean);
+          });
+      };
+
+      if (immediate || clean.length === 10 || clean.length === 12) {
+        doLookup();
+      } else {
+        innTimer = setTimeout(doLookup, 400);
+      }
+    }
+
     function searchCompany(val, immediate) {
       clearTimeout(searchTimer);
       const box = document.getElementById('suggest-box');
@@ -3819,6 +3928,13 @@ export function renderNewClientPage() {
                   const cleanAddr = (c.address && !c.address.includes('Из вашей базы')) ? c.address : '';
                   document.getElementById('address').value = cleanAddr;
                   
+                  const hint = document.getElementById('inn-status-hint');
+                  if (hint) {
+                    hint.style.display = 'block';
+                    hint.style.color = '#059669';
+                    hint.innerHTML = '✓ Выбрана организация: <strong>' + c.name + '</strong>';
+                  }
+
                   box.style.display = 'none';
                   loadContracts(c.inn);
                 };
@@ -3842,13 +3958,24 @@ export function renderNewClientPage() {
 
     function loadContracts(inn) {
       const sel = document.getElementById('contract_select');
-      sel.innerHTML = '<option value="">Загрузка договоров...</option>';
+      const hint = document.getElementById('contract-hint');
+      sel.innerHTML = '<option value="">⏳ Загрузка договоров из Saby...</option>';
+      if (hint) {
+        hint.style.display = 'block';
+        hint.style.background = '#eff6ff';
+        hint.style.border = '1px solid #bfdbfe';
+        hint.style.color = '#1e40af';
+        hint.innerHTML = 'Запрос договоров контрагента в шлюзе Saby (СБИС)...';
+      }
+
       fetch('/get_contracts?inn=' + encodeURIComponent(inn))
         .then(r => r.json())
         .then(data => {
-          sel.innerHTML = '<option value="">Не выбран (Создать без привязки)</option>';
-          if (data.contracts && data.contracts.length > 0) {
-            data.contracts.forEach(cnt => {
+          sel.innerHTML = '';
+          const contracts = data.contracts || [];
+          if (contracts.length > 0) {
+            sel.innerHTML = '<option value="">-- Выберите договор из Saby --</option>';
+            contracts.forEach(cnt => {
               const opt = document.createElement('option');
               opt.value = cnt.id + '|||' + cnt.number + '|||' + cnt.title;
               opt.textContent = '№ ' + cnt.number + ' — ' + cnt.title + ' (' + (cnt.plan_hours || 15) + ' ч/мес)';
@@ -3856,9 +3983,38 @@ export function renderNewClientPage() {
             });
             sel.selectedIndex = 1;
             onContractChange();
+            if (hint) {
+              hint.style.background = '#ecfdf5';
+              hint.style.border = '1px solid #a7f3d0';
+              hint.style.color = '#065f46';
+              hint.innerHTML = '✓ Загружено договоров из Saby: <strong>' + contracts.length + '</strong>. Договор выбран и привязан.';
+            }
           } else {
-            sel.innerHTML = '<option value="cnt-auto|||№ б/н|||Договор комплексного сопровождения">№ б/н — Новый договор (Saby не вернул список)</option>';
+            sel.innerHTML = '<option value="cnt-auto|||№ б/н|||Договор комплексного сопровождения">№ б/н — Новый договор (сохранить в CRM)</option><option value="">Без привязки договора</option>';
             onContractChange();
+            if (hint) {
+              if (data.sabyConnected) {
+                hint.style.background = '#f8fafc';
+                hint.style.border = '1px solid #cbd5e1';
+                hint.style.color = '#334155';
+                hint.innerHTML = 'ℹ️ В аккаунте Saby по данному ИНН нет зарегистрированных договоров. Создается локальный договор CRM.';
+              } else {
+                hint.style.background = '#fffbeb';
+                hint.style.border = '1px solid #fde68a';
+                hint.style.color = '#92400e';
+                hint.innerHTML = '⚠️ Шлюз Saby не подключен: договор создан локально в CRM. Для синхронизации укажите логин или ключ в <a href="/settings" style="color:#b45309; text-decoration:underline; font-weight:700;">Настройках CRM</a>.';
+              }
+            }
+          }
+        })
+        .catch(err => {
+          sel.innerHTML = '<option value="cnt-auto|||№ б/н|||Договор комплексного сопровождения">№ б/н — Новый договор</option>';
+          onContractChange();
+          if (hint) {
+            hint.style.background = '#fef2f2';
+            hint.style.border = '1px solid #fecaca';
+            hint.style.color = '#991b1b';
+            hint.innerHTML = '⚠️ Ошибка запроса договоров: ' + err.message;
           }
         });
     }
