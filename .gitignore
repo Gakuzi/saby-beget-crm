@@ -20,3 +20,16 @@ backups.db
 Thumbs.db
 __pycache__/
 *.pyc
+
+# Temporary scripts
+tmp/
+cookies.txt
+output.html
+portal.html
+test_*.js
+fix_*.js
+parse_*.js
+update_db.js
+get_html.js
+add_saby_getters.js
+

@@ -24,26 +24,48 @@ export async function suggestCompany(query) {
   query = (query || '').trim();
   if (!query || query.length < 2) return [];
 
-  const { searchSabyCompany } = await import('../services/saby_client.js');
-  
-  // If query looks like INN (10 or 12 digits), use searchSabyCompany directly
-  if (query.match(/^\d{10}$|^\d{12}$/)) {
+  const isInn = /^\d{10}$|^\d{12}$/.test(query);
+
+  // If query is an INN (10 or 12 digits)
+  if (isInn) {
+    const { searchSabyCompany } = await import('../services/saby_client.js');
     const sabyRes = await searchSabyCompany(query);
-    if (sabyRes.ok && sabyRes.company) {
+    if (sabyRes && sabyRes.ok && sabyRes.company) {
       return [sabyRes.company];
     }
+
+    // Check local database for EXACT INN match ONLY
+    const { db } = await import('../db/crm_store.js');
+    const allClients = db.getClients('all');
+    const exact = allClients.find(c => c.inn === query);
+    if (exact) {
+      return [{
+        name: exact.company_name,
+        inn: exact.inn,
+        kpp: exact.kpp || '',
+        ogrn: exact.ogrn || '',
+        director: exact.director || '',
+        address: exact.address || '⚠️ (Уже сохранен в вашей базе данных)'
+      }];
+    }
+
+    // Never return random unrelated companies when searching by INN!
+    return [];
   }
 
-  // Local fallback lookup
+  // Text search (by company name) in local database
   const { db } = await import('../db/crm_store.js');
   const qLower = query.toLowerCase();
   const allClients = db.getClients('all');
-  const matched = allClients.filter(c => c.company_name.toLowerCase().includes(qLower) || (c.inn && c.inn.includes(qLower)));
+  const matched = allClients.filter(c => c.company_name && c.company_name.toLowerCase().includes(qLower));
   
   return matched.slice(0, 5).map(c => ({
     name: c.company_name,
     inn: c.inn,
-    address: '⚠️ (Из локальной базы)'
+    kpp: c.kpp,
+    ogrn: c.ogrn,
+    director: c.director,
+    address: '📁 (Из вашей базы клиентов)'
   }));
 }
 

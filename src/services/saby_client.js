@@ -151,57 +151,152 @@ export async function testSabyConnection() {
   return auth;
 }
 
+export async function fetchEgrulCompany(inn) {
+  try {
+    const res = await fetch(`https://egrul.itsoft.ru/${inn}.json`, {
+      headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(5000),
+      redirect: 'follow'
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const ul = data.СвЮЛ || data.СвИП || data;
+    if (!ul) return null;
+
+    let name = '';
+    if (ul.СвНаимЮЛ) {
+      name = ul.СвНаимЮЛ['@attributes']?.НаимЮЛСокр || ul.СвНаимЮЛ['@attributes']?.НаимЮЛПолн || '';
+    } else if (ul.СвФЛ) {
+      const f = ul.СвФЛ['@attributes'] || ul.СвФЛ;
+      name = `ИП ${[f.Фамилия, f.Имя, f.Отчество].filter(Boolean).join(' ')}`.trim();
+    } else if (ul.ФИОИП) {
+      name = `ИП ${ul.ФИОИП}`;
+    }
+
+    const attrs = ul['@attributes'] || {};
+    const kpp = attrs.КПП || (ul.СвУчетНО ? ul.СвУчетНО['@attributes']?.КПП : '') || '';
+    const ogrn = attrs.ОГРН || attrs.ОГРНИП || '';
+
+    let director = '';
+    if (ul.СведДолжн) {
+      const dolzh = Array.isArray(ul.СведДолжн) ? ul.СведДолжн[0] : ul.СведДолжн;
+      const fio = dolzh?.СвФЛ?.['@attributes'] || {};
+      director = `${fio.Фамилия || ''} ${fio.Имя || ''} ${fio.Отчество || ''}`.trim();
+    }
+
+    let address = '';
+    if (ul.СвАдресЮЛ) {
+      const adr = ul.СвАдресЮЛ.АдресРФ || ul.СвАдресЮЛ;
+      if (typeof adr === 'string') address = adr;
+      else if (adr && adr['@attributes']) {
+        const a = adr['@attributes'];
+        address = [a.Индекс, a.Регион, a.Город, a.Улица, a.Дом].filter(Boolean).join(', ');
+      }
+    }
+
+    if (name) {
+      return {
+        name,
+        inn,
+        kpp,
+        ogrn,
+        director,
+        address: address || 'Данные из реестра ЕГРЮЛ'
+      };
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
+}
+
 export async function searchSabyCompany(inn) {
   const auth = await authenticateSaby();
-  if (!auth.ok) {
-    return { ok: false, error: auth.message, items: [] };
+  
+  if (auth.ok) {
+    const endpoints = [
+      'https://online.sbis.ru/service/?srv=1',
+      SABY_RPC_URL
+    ];
+
+    const payloads = [
+      {
+        jsonrpc: '2.0',
+        method: 'СБИС.ИнформацияОКонтрагенте',
+        params: {
+          Фильтр: {
+            Контрагент: inn.length === 10 ? {
+              СвЮЛ: { ИНН: inn }
+            } : {
+              СвФЛ: { ИНН: inn }
+            }
+          }
+        },
+        id: 2
+      },
+      {
+        jsonrpc: '2.0',
+        method: 'СБИС.ИнформацияОКонтрагенте',
+        params: {
+          Реквизиты: {
+            ИНН: inn
+          }
+        },
+        id: 3
+      }
+    ];
+
+    for (const url of endpoints) {
+      for (const payload of payloads) {
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json-rpc; charset=utf-8',
+              'X-SBISAccessToken': auth.token || '',
+              'X-SBISSessionID': auth.token || ''
+            },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(6000)
+          });
+
+          if (!res.ok) continue;
+
+          const json = await res.json();
+          if (json.result && !json.error) {
+            const r = json.result;
+            const name = r.Название || r.КраткоеНаименование || r.ПолноеНаименование;
+            if (name) {
+              return {
+                ok: true,
+                company: {
+                  name,
+                  inn: r.ИНН || inn,
+                  kpp: r.КПП || '',
+                  ogrn: r.ОГРН || '',
+                  director: r.Руководитель || '',
+                  address: r.ЮридическийАдрес || r.Адрес || ''
+                }
+              };
+            }
+          }
+        } catch (err) {
+          // try next
+        }
+      }
+    }
   }
 
-  try {
-    const payload = {
-      jsonrpc: '2.0',
-      method: 'СБИС.ИнформацияОКонтрагенте',
-      params: {
-        Реквизиты: {
-          ИНН: inn
-        }
-      },
-      id: 2
-    };
-
-    const res = await fetch(SABY_RPC_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json-rpc; charset=utf-8',
-        'X-SBISAccessToken': auth.token || ''
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(6000)
-    });
-
-    if (!res.ok) {
-      return { ok: false, error: `HTTP ${res.status}`, items: [] };
-    }
-
-    const json = await res.json();
-    if (json.error || !json.result) {
-      return { ok: false, error: json.error?.message || 'Организация не найдена в Saby', items: [] };
-    }
-
+  // Fallback: public EGRUL/EGRIP registry
+  const egrul = await fetchEgrulCompany(inn);
+  if (egrul) {
     return {
       ok: true,
-      company: {
-        name: json.result.Название || json.result.КраткоеНаименование,
-        inn: json.result.ИНН || inn,
-        kpp: json.result.КПП,
-        ogrn: json.result.ОГРН,
-        director: json.result.Руководитель,
-        address: json.result.ЮридическийАдрес || json.result.Адрес
-      }
+      company: egrul
     };
-  } catch (err) {
-    return { ok: false, error: err.message, items: [] };
   }
+
+  return { ok: false, error: 'Организация с таким ИНН не найдена в Saby и ЕГРЮЛ', items: [] };
 }
 
 export async function fetchSabyContracts(inn) {

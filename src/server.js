@@ -877,7 +877,7 @@ async function registerPasskey() {
               <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
                 <a href="/client/${c.id}" class="card-link" style="background: #f1f5f9; color: #475569; font-size: 13px; padding: 6px 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; border-radius: 8px;">⚙️ Карточка</a>
                 ${filter === 'archived' ? `
-                  <button type="button" onclick="hardDeleteFromDashboard(${c.id}, '${(c.company_name || '').replace(/'/g, "\\'")}', '${c.inn || ''}')" style="background: #fee2e2; color: #b91c1c; border: 1px solid #fecdd3; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">🗑️ Удалить из базы</button>
+                  <button type="button" class="btn-hard-delete" data-id="${c.id}" data-name="${encodeURIComponent(c.company_name || 'Клиент')}" data-inn="${encodeURIComponent(c.inn || '')}" onclick="confirmHardDeleteBtn(this)" style="background: #fee2e2; color: #b91c1c; border: 1px solid #fecdd3; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">🗑️ Удалить из базы</button>
                 ` : `
                   <a href="/portal/${c.id}" target="_blank" class="card-link" style="background: #f8fafc; color: #6366f1; font-size: 13px; padding: 6px 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e0e7ff; border-radius: 8px;">🖥️ Портал</a>
                 `}
@@ -1591,9 +1591,26 @@ async function registerPasskey() {
         });
     }
 
+    function confirmHardDeleteBtn(btn) {
+      const id = btn.getAttribute('data-id');
+      const name = decodeURIComponent(btn.getAttribute('data-name') || 'Клиент');
+      const inn = decodeURIComponent(btn.getAttribute('data-inn') || '');
+      hardDeleteFromDashboard(id, name, inn);
+    }
+
     function hardDeleteFromDashboard(id, name, inn) {
-      const msg = 'ВНИМАНИЕ!\n\nВы действительно хотите НАВСЕГДА удалить контрагента "' + (name || 'Клиент') + '"' + (inn ? ' (ИНН: ' + inn + ')' : '') + ' из базы данных SQLite?\n\nВсе связанные данные, акты, доступы, история и логи будут стёрты без возможности восстановления, а ИНН полностью освободится.\n\nПродолжить?';
-      if (!confirm(msg)) return;
+      const targetName = name || 'Клиент';
+      const targetInn = inn ? ' (ИНН: ' + inn + ')' : '';
+      const promptLines = [
+        'ВНИМАНИЕ!',
+        '',
+        'Вы действительно хотите НАВСЕГДА удалить контрагента "' + targetName + '"' + targetInn + ' из базы данных SQLite?',
+        '',
+        'Все связанные данные, акты, доступы, история и логи будут стёрты без возможности восстановления, а ИНН полностью освободится.',
+        '',
+        'Продолжить?'
+      ];
+      if (!confirm(promptLines.join('\n'))) return;
 
       const check = prompt('Для окончательного подтверждения введите слово УДАЛИТЬ:');
       if (!check || (check.trim().toUpperCase() !== 'УДАЛИТЬ' && check.trim().toLowerCase() !== 'delete')) {
