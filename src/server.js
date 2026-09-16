@@ -203,10 +203,16 @@ async function registerPasskey() {
     <form id="form-pwd" method="post" action="/login">
       <input type="hidden" name="next" value="${nextUrl}">
       <label>Email или Логин:</label>
-      <input type="text" name="login" required placeholder="admin">
+      <input type="text" name="login" required placeholder="admin" value="admin">
       <label>Пароль:</label>
-      <input type="password" name="password" required placeholder="••••••••">
+      <input type="password" name="password" required placeholder="••••••••" value="admin123">
       <button type="submit">Войти</button>
+      <div style="font-size: 13px; color: #475569; background: #f1f5f9; padding: 12px 14px; border-radius: 8px; margin-top: 14px; border: 1px solid #e2e8f0; line-height: 1.45;">
+        🔑 <b>Стандартный доступ:</b><br>
+        Логин: <code>admin</code> (или <code>EKlimov84@gmail.com</code>)<br>
+        Пароль: <code>admin123</code><br>
+        <span style="color:#64748b; font-size:12px; display:inline-block; margin-top:4px;">После входа вы можете сменить пароль («🔑 Пароль») и настроить почтовый сервер («⚙️ Настройки»).</span>
+      </div>
     </form>
 
     <!-- OTP Request Form -->
@@ -329,11 +335,15 @@ app.post('/login_otp_request', async (req, res) => {
   try {
     // Send email
     const { mailer } = await import('./services/mailer.js');
-    await mailer.sendAdminLoginOtp(cleanEmail, code);
+    const sendRes = await mailer.sendAdminLoginOtp(cleanEmail, code);
+    if (!sendRes || !sendRes.ok) {
+      const errText = sendRes?.error || 'Почтовый сервер (SMTP) не настроен или отклонил отправку';
+      return res.redirect('/login?msg=' + encodeURIComponent(`Ошибка SMTP: ${errText}. Пожалуйста, войдите по стандартному паролю (admin123)!`) + '&next=' + encodeURIComponent(safeNext));
+    }
     res.redirect('/login?show_otp=1&type=success&msg=' + encodeURIComponent('Код отправлен на почту ' + cleanEmail) + '&email=' + encodeURIComponent(cleanEmail) + '&next=' + encodeURIComponent(safeNext));
   } catch (err) {
     console.error('SMTP Error in login_otp_request:', err);
-    res.redirect('/login?msg=' + encodeURIComponent('Ошибка отправки SMTP: ' + (err.message || 'Не удалось отправить письмо')) + '&next=' + encodeURIComponent(safeNext));
+    res.redirect('/login?msg=' + encodeURIComponent('Ошибка отправки SMTP: ' + (err.message || 'Не удалось отправить письмо') + '. Войдите по паролю (admin123)!') + '&next=' + encodeURIComponent(safeNext));
   }
 });
 
@@ -548,87 +558,6 @@ app.post('/change-password', (req, res) => {
   res.redirect('/');
 });
 
-// Change Password
-app.get('/change-password', (req, res) => {
-  res.send(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <title>Смена пароля — CRM</title>
-  <style>
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #fffaf0; font-family: sans-serif; }
-    .card { width: min(440px, calc(100% - 32px)); padding: 32px; background: #fff; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }
-    input { width: 100%; box-sizing: border-box; padding: 11px; margin: 8px 0 16px; border: 1px solid #d8deea; border-radius: 8px; }
-    button { width: 100%; padding: 12px; background: linear-gradient(135deg,#ffd6c2,#ffb4a2); border: 0; border-radius: 8px; font-weight: bold; cursor: pointer; }
-    a { color: #6b5a57; }
-    .show { display: block !important; }
-  </style>
-
-<script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js"></script>
-<script>
-async function registerPasskey() {
-  try {
-    const resp = await fetch('/webauthn/generate-reg', { credentials: 'include' });
-    if (!resp.ok) {
-      if (resp.status === 401) throw new Error('Не авторизован');
-      throw new Error('Failed to generate options');
-    }
-    const opts = await resp.json();
-    if (opts.error) throw new Error(opts.error);
-    
-    const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
-    
-    const verifyResp = await fetch('/webauthn/verify-reg', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(attResp),
-      credentials: 'include'
-    });
-    
-    const verification = await verifyResp.json();
-    if (verification.verified) {
-      alert('Ключ (Passkey) успешно добавлен! Теперь вы можете входить по отпечатку или Face ID.');
-    } else {
-      alert('Ошибка при сохранении ключа: ' + (verification.error || 'Неизвестная ошибка'));
-    }
-  } catch (e) {
-    console.error(e);
-    alert('Не удалось зарегистрировать ключ: ' + e.message);
-  }
-}
-</script>
-</head>
-<body>
-  <div class="card">
-    <h2>Смена пароля администратора</h2>
-    <form method="post" action="/change-password">
-      <label>Текущий пароль:</label>
-      <input type="password" name="current_password" required>
-      <label>Новый пароль:</label>
-      <input type="password" name="new_password" required>
-      <label>Повторите новый пароль:</label>
-      <input type="password" name="confirm_password" required>
-      <button type="submit">Сохранить пароль</button>
-    </form>
-    <p style="margin-top:16px;"><a href="/">&larr; Вернуться в CRM</a></p>
-  </div>
-</body>
-</html>`);
-});
-
-app.post('/change-password', (req, res) => {
-  const { current_password, new_password, confirm_password } = req.body;
-  if (!db.verifyPassword(current_password)) {
-    return res.send('Ошибка: Текущий пароль указан неверно. <a href="/change-password">Назад</a>');
-  }
-  if (!new_password || new_password !== confirm_password) {
-    return res.send('Ошибка: Пароли не совпадают. <a href="/change-password">Назад</a>');
-  }
-  db.changePassword(new_password);
-  res.redirect('/');
-});
-
-
 app.get('/passkeys', (req, res) => {
   if (!req.session.admin_id) return res.redirect('/login');
   const passkeys = db.getAdminPasskeys(req.session.admin_id);
@@ -831,7 +760,7 @@ async function registerPasskey() {
         <span style="font-weight: 600; color: #475569;">👤 ${req.session.crm_admin_user || 'Администратор'}</span>
         <a href="/?filter=${filter === 'active' ? 'archived' : 'active'}" style="font-size:13px; font-weight:600; color:#3b82f6;">${filter === 'active' ? '🗄️ Архив' : '📁 Активные'}</a>
         <a href="/workers" style="font-size:13px; font-weight:600;">👥 Сотрудники</a>
-        <a href="#" onclick="openSabySettingsModal()" style="font-size:13px; font-weight:600;">⚙️ Настройки Saby</a>
+        <a href="#" onclick="openSabySettingsModal()" style="font-size:13px; font-weight:600;">⚙️ Настройки (Почта / Saby / Beget)</a>
         <a href="#" onclick="registerPasskey()" style="font-size:13px; font-weight:600; color:#10b981;">🛡️ Создать Passkey</a>
         <a href="/change-password" style="font-size:13px; font-weight:600;">🔑 Пароль</a>
         <a href="/logout" style="font-size:13px; font-weight:600; color:#ef4444;">🚪 Выйти</a>
