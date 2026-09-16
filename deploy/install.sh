@@ -39,7 +39,7 @@ cat << 'DOCKER_EOF' > docker-compose.yml
 version: '3.8'
 services:
   crm:
-    image: node:20-alpine
+    image: node:22-alpine
     container_name: saby-crm
     working_dir: /app
     volumes:
